@@ -46,7 +46,7 @@ export default function CharactersPage() {
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: { preventDefault(): void }) => {
     e.preventDefault()
     if (!form.name) return
     setSubmitting(true)
@@ -272,34 +272,35 @@ function CharacterCard({
 
       {/* 부캐 ROI (기능 #8) */}
       {showROI && char.initialInvestment > 0 && (
-        <div className="mt-3 pt-3" style={{ borderTop: '1px solid #2d3748' }}>
+        <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
           {!roi ? (
             <button
               onClick={onLoadROI}
-              className="text-xs text-slate-400 hover:text-orange-400 transition-colors underline"
+              className="text-xs underline transition-colors"
+              style={{ color: 'var(--text-2)' }}
             >
               손익분기점 계산하기
             </button>
           ) : roi.alreadyProfitable ? (
             <div className="flex items-center gap-2">
-              <span className="text-green-400 text-sm font-medium">✅ 투자금 회수 완료!</span>
-              <span className="text-slate-400 text-xs">
+              <span className="text-sm font-medium" style={{ color: 'var(--green)' }}>✅ 투자금 회수 완료!</span>
+              <span className="text-xs" style={{ color: 'var(--text-2)' }}>
                 순수익: {formatMeso(roi.totalBossRevenue - roi.initialInvestment)}
               </span>
             </div>
           ) : (
             <div className="grid grid-cols-3 gap-2">
-              <div className="rounded-lg p-2" style={{ backgroundColor: '#0f1729' }}>
-                <p className="text-slate-400 text-xs">초기 투자</p>
-                <p className="text-red-400 text-sm font-medium">{formatMeso(roi.initialInvestment)}</p>
+              <div className="info-box">
+                <p className="text-xs" style={{ color: 'var(--text-2)' }}>초기 투자</p>
+                <p className="text-sm font-medium" style={{ color: 'var(--red)' }}>{formatMeso(roi.initialInvestment)}</p>
               </div>
-              <div className="rounded-lg p-2" style={{ backgroundColor: '#0f1729' }}>
-                <p className="text-slate-400 text-xs">주간 보스 수익</p>
-                <p className="text-green-400 text-sm font-medium">{formatMeso(roi.weeklyBossRevenue)}</p>
+              <div className="info-box">
+                <p className="text-xs" style={{ color: 'var(--text-2)' }}>주간 보스 수익</p>
+                <p className="text-sm font-medium" style={{ color: 'var(--green)' }}>{formatMeso(roi.weeklyBossRevenue)}</p>
               </div>
-              <div className="rounded-lg p-2" style={{ backgroundColor: '#0f1729' }}>
-                <p className="text-slate-400 text-xs">회수까지</p>
-                <p className="text-orange-400 text-sm font-medium">약 {roi.weeksUntilBreakEven}주</p>
+              <div className="info-box">
+                <p className="text-xs" style={{ color: 'var(--text-2)' }}>회수까지</p>
+                <p className="text-sm font-medium" style={{ color: 'var(--orange-light)' }}>약 {roi.weeksUntilBreakEven}주</p>
               </div>
             </div>
           )}

@@ -56,7 +56,7 @@ export default function HuntingPage() {
     if (user) setErdaPrice(String(user.solErdaFragmentPrice ?? 0))
   }, [fetchData, user])
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: { preventDefault(): void }) => {
     e.preventDefault()
     if (!form.mapName || !form.durationMinutes || !form.income) return
     setSubmitting(true)
@@ -129,17 +129,17 @@ export default function HuntingPage() {
       {/* 주간 요약 */}
       <Card className="flex items-center justify-between">
         <div>
-          <p className="text-slate-400 text-sm">이번 주 사냥 수익</p>
-          <p className="text-orange-400 font-bold text-2xl mt-0.5">{formatMeso(totalWeeklyIncome)}</p>
+          <p className="text-sm" style={{ color: 'var(--text-2)' }}>이번 주 사냥 수익</p>
+          <p className="font-bold text-2xl mt-0.5" style={{ color: 'var(--orange-light)' }}>{formatMeso(totalWeeklyIncome)}</p>
         </div>
         <div className="text-right">
-          <p className="text-slate-400 text-sm">사냥 횟수</p>
-          <p className="text-white font-bold text-2xl mt-0.5">{sessions.length}회</p>
+          <p className="text-sm" style={{ color: 'var(--text-2)' }}>사냥 횟수</p>
+          <p className="font-bold text-2xl mt-0.5" style={{ color: 'var(--text)' }}>{sessions.length}회</p>
         </div>
       </Card>
 
       {/* 탭 */}
-      <div className="flex gap-2 border-b" style={{ borderColor: '#2d3748' }}>
+      <div className="flex gap-2 border-b" style={{ borderColor: 'var(--border)' }}>
         {[
           { key: 'record', label: '이번 주 기록' },
           { key: 'stats', label: '효율 통계 📈' },
@@ -147,11 +147,7 @@ export default function HuntingPage() {
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key as 'record' | 'stats')}
-            className={`pb-2 px-1 text-sm font-medium transition-colors border-b-2 ${
-              activeTab === tab.key
-                ? 'border-orange-400 text-orange-400'
-                : 'border-transparent text-slate-400 hover:text-white'
-            }`}
+            className={`tab-btn ${activeTab === tab.key ? 'tab-btn-active' : ''}`}
           >
             {tab.label}
           </button>
@@ -197,7 +193,10 @@ export default function HuntingPage() {
               />
             </div>
             {form.solErdaFragments && user && user.solErdaFragmentPrice > 0 && (
-              <div className="text-orange-400 text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: '#1c1400' }}>
+              <div
+                className="text-xs px-3 py-2 rounded-xl"
+                style={{ backgroundColor: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.2)', color: 'var(--orange-light)' }}
+              >
                 솔 에르다 조각 환산: {(Number(form.solErdaFragments) * user.solErdaFragmentPrice).toLocaleString()} 메소
                 → 합산 총수익: {(Number(form.income) + Number(form.solErdaFragments) * user.solErdaFragmentPrice).toLocaleString()} 메소
               </div>
@@ -232,21 +231,17 @@ export default function HuntingPage() {
       {activeTab === 'record' && (
         <Card title="이번 주 사냥 기록" icon="📋">
           {sessions.length === 0 ? (
-            <p className="text-slate-500 text-sm text-center py-6">이번 주 사냥 기록이 없습니다.</p>
+            <p className="text-sm text-center py-6" style={{ color: 'var(--text-3)' }}>이번 주 사냥 기록이 없습니다.</p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {sessions.map((sess: HuntingSession) => (
-                <div
-                  key={sess.id}
-                  className="flex items-center justify-between py-3 px-3 rounded-lg"
-                  style={{ backgroundColor: '#0f1729' }}
-                >
+                <div key={sess.id} className="list-row">
                   <div>
-                    <p className="text-white text-sm font-medium">{sess.mapName}</p>
-                    <p className="text-slate-500 text-xs">
+                    <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>{sess.mapName}</p>
+                    <p className="text-xs" style={{ color: 'var(--text-3)' }}>
                       {sess.durationMinutes}분
                       {sess.solErdaFragments > 0 && (
-                        <span className="text-purple-400 ml-1">
+                        <span style={{ color: '#a78bfa' }} className="ml-1">
                           · 솔에르다 {sess.solErdaFragments}개
                         </span>
                       )}
@@ -254,8 +249,8 @@ export default function HuntingPage() {
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-green-400 font-semibold text-sm">+{formatMeso(sess.totalIncome)}</p>
-                    <p className="text-slate-500 text-xs">{formatDate(sess.sessionDate)}</p>
+                    <p className="font-semibold text-sm" style={{ color: 'var(--green)' }}>+{formatMeso(sess.totalIncome)}</p>
+                    <p className="text-xs" style={{ color: 'var(--text-3)' }}>{formatDate(sess.sessionDate)}</p>
                   </div>
                 </div>
               ))}
@@ -267,7 +262,7 @@ export default function HuntingPage() {
       {activeTab === 'stats' && (
         <Card title="사냥터별 시간당 수익 효율 (기능 #3)" icon="📊">
           {huntingStats.length === 0 ? (
-            <p className="text-slate-500 text-sm text-center py-6">통계를 표시할 데이터가 부족합니다.</p>
+            <p className="text-sm text-center py-6" style={{ color: 'var(--text-3)' }}>통계를 표시할 데이터가 부족합니다.</p>
           ) : (
             <>
               <ResponsiveContainer width="100%" height={240}>
@@ -276,45 +271,41 @@ export default function HuntingPage() {
                   layout="vertical"
                   margin={{ top: 4, right: 40, left: 80, bottom: 4 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#2d3748" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis
                     type="number"
-                    tick={{ fill: '#94a3b8', fontSize: 10 }}
+                    tick={{ fill: '#7b8faa', fontSize: 10 }}
                     tickFormatter={(v) => formatMeso(v)}
                   />
-                  <YAxis dataKey="mapName" type="category" tick={{ fill: '#94a3b8', fontSize: 11 }} width={80} />
+                  <YAxis dataKey="mapName" type="category" tick={{ fill: '#7b8faa', fontSize: 11 }} width={80} />
                   <Tooltip
-                    contentStyle={{ backgroundColor: '#1a1a2e', border: '1px solid #4a5568', borderRadius: 8 }}
+                    contentStyle={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border-2)', borderRadius: 10 }}
                     formatter={(v) => [(v as number).toLocaleString() + ' 메소/시', '시간당 수익']}
                   />
                   <Bar dataKey="incomePerHour" radius={[0, 4, 4, 0]}>
                     {huntingStats.map((_, i) => (
-                      <Cell key={i} fill={i === 0 ? '#f97316' : '#64748b'} />
+                      <Cell key={i} fill={i === 0 ? '#f97316' : '#253650'} />
                     ))}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
 
-              <div className="mt-3 space-y-2">
+              <div className="mt-3 space-y-1.5">
                 {huntingStats
                   .sort((a, b) => b.incomePerHour - a.incomePerHour)
                   .map((stat, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center justify-between py-2 px-3 rounded-lg"
-                      style={{ backgroundColor: '#0f1729' }}
-                    >
+                    <div key={i} className="list-row">
                       <div className="flex items-center gap-2">
-                        <span className={`text-sm font-bold w-5 ${i === 0 ? 'text-orange-400' : 'text-slate-400'}`}>
+                        <span className="text-sm font-bold w-5" style={{ color: i === 0 ? 'var(--orange-light)' : 'var(--text-2)' }}>
                           #{i + 1}
                         </span>
-                        <span className="text-white text-sm">{stat.mapName}</span>
+                        <span className="text-sm" style={{ color: 'var(--text)' }}>{stat.mapName}</span>
                       </div>
                       <div className="text-right">
-                        <p className={`font-semibold text-sm ${i === 0 ? 'text-orange-400' : 'text-white'}`}>
+                        <p className="font-semibold text-sm" style={{ color: i === 0 ? 'var(--orange-light)' : 'var(--text)' }}>
                           {formatMeso(stat.incomePerHour)}/시
                         </p>
-                        <p className="text-slate-500 text-xs">{stat.sessionCount}회 · {Math.floor(stat.totalDurationMinutes / 60)}시간</p>
+                        <p className="text-xs" style={{ color: 'var(--text-3)' }}>{stat.sessionCount}회 · {Math.floor(stat.totalDurationMinutes / 60)}시간</p>
                       </div>
                     </div>
                   ))}

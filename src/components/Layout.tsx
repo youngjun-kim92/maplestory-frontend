@@ -20,21 +20,60 @@ export default function Layout() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#0f1729' }}>
-      {/* 상단 헤더 */}
-      <header style={{ backgroundColor: '#1a1a2e', borderBottom: '1px solid #2d3748' }} className="sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: 'var(--bg)' }}>
+      {/* Header */}
+      <header
+        className="sticky top-0 z-50"
+        style={{
+          backgroundColor: 'var(--surface)',
+          borderBottom: '1px solid var(--border)',
+          boxShadow: '0 1px 24px rgba(0,0,0,0.5)',
+        }}
+      >
+        <div className="max-w-7xl mx-auto px-5 h-16 flex items-center justify-between">
+          {/* Logo */}
           <div className="flex items-center gap-3">
-            <span className="text-2xl">🍁</span>
-            <span className="font-bold text-orange-400 text-lg hidden sm:block">메이플 가계부</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-slate-400 text-sm hidden sm:block">
-              <span className="text-orange-300 font-medium">{user?.nickname}</span> 님
+            <div
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-xl shrink-0"
+              style={{
+                background: 'linear-gradient(135deg, rgba(249,115,22,0.22) 0%, rgba(249,115,22,0.06) 100%)',
+                border: '1px solid rgba(249,115,22,0.3)',
+              }}
+            >
+              🍁
+            </div>
+            <span className="hidden sm:block font-bold text-lg tracking-tight" style={{ color: 'var(--text)' }}>
+              메이플<span style={{ color: 'var(--orange-light)' }}> 가계부</span>
             </span>
+          </div>
+
+          {/* Right side */}
+          <div className="flex items-center gap-3">
+            {user && (
+              <div
+                className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm"
+                style={{
+                  backgroundColor: 'rgba(249,115,22,0.08)',
+                  border: '1px solid rgba(249,115,22,0.2)',
+                }}
+              >
+                <span
+                  className="w-1.5 h-1.5 rounded-full shrink-0"
+                  style={{ backgroundColor: 'var(--green)' }}
+                />
+                <span className="font-semibold" style={{ color: 'var(--orange-light)' }}>
+                  {user.nickname}
+                </span>
+              </div>
+            )}
             <button
               onClick={handleLogout}
-              className="text-slate-400 hover:text-red-400 text-sm transition-colors px-3 py-1 rounded border border-slate-600 hover:border-red-400"
+              className="text-sm px-3 py-1.5 rounded-xl transition-all hover:brightness-110"
+              style={{
+                color: 'var(--text-2)',
+                backgroundColor: 'var(--surface-2)',
+                border: '1px solid var(--border)',
+              }}
             >
               로그아웃
             </button>
@@ -43,56 +82,53 @@ export default function Layout() {
       </header>
 
       <div className="flex flex-1">
-        {/* 사이드바 (데스크탑) */}
+        {/* Sidebar (desktop) */}
         <nav
-          className="hidden md:flex flex-col w-20 lg:w-52 py-4 gap-1 sticky top-14 h-[calc(100vh-3.5rem)]"
-          style={{ backgroundColor: '#1a1a2e', borderRight: '1px solid #2d3748' }}
+          className="hidden md:flex flex-col w-16 lg:w-56 py-4 gap-0.5 sticky top-16 h-[calc(100vh-4rem)] overflow-y-auto"
+          style={{ backgroundColor: 'var(--surface)', borderRight: '1px solid var(--border)' }}
         >
           {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.exact}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-4 py-3 mx-2 rounded-lg transition-all text-sm font-medium ${
-                  isActive
-                    ? 'bg-orange-500 text-white shadow-lg'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-700'
-                }`
-              }
-            >
-              <span className="text-xl">{item.icon}</span>
-              <span className="hidden lg:block">{item.label}</span>
-            </NavLink>
+            <div key={item.to} className="px-2">
+              <NavLink
+                to={item.to}
+                end={item.exact}
+                className={({ isActive }) =>
+                  `nav-sidebar ${isActive ? 'nav-sidebar-active' : ''}`
+                }
+              >
+                <span className="text-xl w-6 text-center shrink-0 leading-none">{item.icon}</span>
+                <span className="hidden lg:block">{item.label}</span>
+              </NavLink>
+            </div>
           ))}
         </nav>
 
-        {/* 메인 콘텐츠 */}
-        <main className="flex-1 p-4 md:p-6 overflow-auto">
-          <div className="max-w-5xl mx-auto">
+        {/* Main content */}
+        <main className="flex-1 p-4 md:p-6 pb-24 md:pb-6 overflow-auto">
+          <div className="max-w-5xl mx-auto fade-in">
             <Outlet />
           </div>
         </main>
       </div>
 
-      {/* 하단 네비게이션 바 (모바일) */}
+      {/* Bottom nav (mobile) */}
       <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex justify-around items-center h-16 px-2"
-        style={{ backgroundColor: '#1a1a2e', borderTop: '1px solid #2d3748' }}
+        className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex justify-around items-center h-16 px-1"
+        style={{
+          backgroundColor: 'var(--surface)',
+          borderTop: '1px solid var(--border)',
+          boxShadow: '0 -4px 24px rgba(0,0,0,0.5)',
+        }}
       >
         {navItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
             end={item.exact}
-            className={({ isActive }) =>
-              `flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg transition-all ${
-                isActive ? 'text-orange-400' : 'text-slate-500'
-              }`
-            }
+            className={({ isActive }) => `nav-mobile ${isActive ? 'nav-mobile-active' : ''}`}
           >
-            <span className="text-xl">{item.icon}</span>
-            <span className="text-xs">{item.label}</span>
+            <span className="text-xl leading-none">{item.icon}</span>
+            <span>{item.label}</span>
           </NavLink>
         ))}
       </nav>

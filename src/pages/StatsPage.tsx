@@ -27,7 +27,7 @@ export default function StatsPage() {
       .finally(() => setCompLoading(false))
   }, [])
 
-  const handleExpCalc = async (e: React.FormEvent) => {
+  const handleExpCalc = async (e: { preventDefault(): void }) => {
     e.preventDefault()
     if (!expForm.currentLevel || !expForm.currentExpPercent || !expForm.avgExpPerHour) return
     setExpLoading(true)
@@ -85,59 +85,59 @@ export default function StatsPage() {
                       strokeWidth={0}
                     >
                       <Cell fill={percentileColor} />
-                      <Cell fill="#2d3748" />
+                      <Cell fill="var(--border-2)" />
                     </Pie>
                   </PieChart>
                 </ResponsiveContainer>
               </div>
               <div className="flex-1">
-                <p className="text-white font-bold text-2xl" style={{ color: percentileColor }}>
+                <p className="font-bold text-2xl" style={{ color: percentileColor }}>
                   상위 {100 - comparison.percentile}%
                 </p>
-                <p className="text-slate-300 text-sm mt-1">{comparison.message}</p>
+                <p className="text-sm mt-1" style={{ color: 'var(--text-2)' }}>{comparison.message}</p>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-xl p-3" style={{ backgroundColor: '#0f1729' }}>
-                <p className="text-slate-400 text-xs mb-1">나의 주간 평균 수익</p>
-                <p className="text-orange-400 font-bold text-base">{formatMeso(comparison.myWeeklyAvg)}</p>
+              <div className="info-box rounded-xl p-3">
+                <p className="text-xs mb-1" style={{ color: 'var(--text-2)' }}>나의 주간 평균 수익</p>
+                <p className="font-bold text-base" style={{ color: 'var(--orange-light)' }}>{formatMeso(comparison.myWeeklyAvg)}</p>
               </div>
-              <div className="rounded-xl p-3" style={{ backgroundColor: '#0f1729' }}>
-                <p className="text-slate-400 text-xs mb-1">전체 유저 평균</p>
-                <p className="text-slate-300 font-bold text-base">{formatMeso(comparison.allUsersWeeklyAvg)}</p>
+              <div className="info-box rounded-xl p-3">
+                <p className="text-xs mb-1" style={{ color: 'var(--text-2)' }}>전체 유저 평균</p>
+                <p className="font-bold text-base" style={{ color: 'var(--text)' }}>{formatMeso(comparison.allUsersWeeklyAvg)}</p>
               </div>
             </div>
 
             {/* 비교 바 */}
             <div>
-              <p className="text-slate-400 text-xs mb-2">평균 대비 비율</p>
+              <p className="text-xs mb-2" style={{ color: 'var(--text-2)' }}>평균 대비 비율</p>
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2">
-                  <span className="text-orange-400 text-xs w-8">나</span>
-                  <div className="flex-1 rounded-full h-3 overflow-hidden" style={{ backgroundColor: '#2d3748' }}>
+                  <span className="text-xs w-8" style={{ color: 'var(--orange-light)' }}>나</span>
+                  <div className="flex-1 rounded-full h-2 overflow-hidden" style={{ backgroundColor: 'var(--border-2)' }}>
                     <div
-                      className="h-3 rounded-full"
+                      className="h-2 rounded-full"
                       style={{
                         width: `${Math.min(100, (comparison.myWeeklyAvg / Math.max(comparison.myWeeklyAvg, comparison.allUsersWeeklyAvg)) * 100)}%`,
-                        backgroundColor: '#f97316',
+                        background: 'linear-gradient(90deg, #f97316, #fb923c)',
                       }}
                     />
                   </div>
-                  <span className="text-orange-400 text-xs w-16 text-right">{formatMeso(comparison.myWeeklyAvg)}</span>
+                  <span className="text-xs w-16 text-right" style={{ color: 'var(--orange-light)' }}>{formatMeso(comparison.myWeeklyAvg)}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-slate-400 text-xs w-8">평균</span>
-                  <div className="flex-1 rounded-full h-3 overflow-hidden" style={{ backgroundColor: '#2d3748' }}>
+                  <span className="text-xs w-8" style={{ color: 'var(--text-2)' }}>평균</span>
+                  <div className="flex-1 rounded-full h-2 overflow-hidden" style={{ backgroundColor: 'var(--border-2)' }}>
                     <div
-                      className="h-3 rounded-full"
+                      className="h-2 rounded-full"
                       style={{
                         width: `${Math.min(100, (comparison.allUsersWeeklyAvg / Math.max(comparison.myWeeklyAvg, comparison.allUsersWeeklyAvg)) * 100)}%`,
-                        backgroundColor: '#64748b',
+                        backgroundColor: 'var(--border-2)',
                       }}
                     />
                   </div>
-                  <span className="text-slate-400 text-xs w-16 text-right">{formatMeso(comparison.allUsersWeeklyAvg)}</span>
+                  <span className="text-xs w-16 text-right" style={{ color: 'var(--text-2)' }}>{formatMeso(comparison.allUsersWeeklyAvg)}</span>
                 </div>
               </div>
             </div>
@@ -147,7 +147,7 @@ export default function StatsPage() {
 
       {/* 기능 #7: 경험치 계산기 */}
       <Card title="레벨업 경험치 계산기" icon="⬆️">
-        <p className="text-slate-400 text-xs mb-4">
+        <p className="text-xs mb-4" style={{ color: 'var(--text-2)' }}>
           현재 레벨과 시간당 경험치를 입력하면, 레벨업까지 필요한 시간을 계산해드립니다.
         </p>
         <form onSubmit={handleExpCalc} className="space-y-3">
@@ -199,19 +199,19 @@ export default function StatsPage() {
         {expResult && (
           <div
             className="mt-4 p-4 rounded-xl space-y-3"
-            style={{ backgroundColor: '#0f1729', border: '1px solid #2d3748' }}
+            style={{ backgroundColor: 'var(--bg)', border: '1px solid var(--border)' }}
           >
-            <h3 className="text-white font-semibold text-sm">
+            <h3 className="font-semibold text-sm" style={{ color: 'var(--text)' }}>
               Lv.{expResult.currentLevel} → Lv.{expResult.targetLevel} 계산 결과
             </h3>
             <div className="grid grid-cols-2 gap-3">
               <div className="text-center">
-                <p className="text-slate-400 text-xs mb-1">필요 경험치</p>
-                <p className="text-orange-400 font-bold text-sm">{expResult.requiredExp.toLocaleString()}</p>
+                <p className="text-xs mb-1" style={{ color: 'var(--text-2)' }}>필요 경험치</p>
+                <p className="font-bold text-sm" style={{ color: 'var(--orange-light)' }}>{expResult.requiredExp.toLocaleString()}</p>
               </div>
               <div className="text-center">
-                <p className="text-slate-400 text-xs mb-1">예상 소요 시간</p>
-                <p className="text-orange-400 font-bold text-sm">
+                <p className="text-xs mb-1" style={{ color: 'var(--text-2)' }}>예상 소요 시간</p>
+                <p className="font-bold text-sm" style={{ color: 'var(--orange-light)' }}>
                   {expResult.estimatedHours > 0 && `${expResult.estimatedHours}시간 `}
                   {expResult.estimatedMinutes}분
                 </p>
@@ -219,7 +219,7 @@ export default function StatsPage() {
             </div>
             {expResult.estimatedHours > 0 && (
               <div className="text-center">
-                <p className="text-slate-500 text-xs">
+                <p className="text-xs" style={{ color: 'var(--text-3)' }}>
                   하루 4시간 기준 약 {Math.ceil(expResult.estimatedHours / 4)}일 소요
                 </p>
               </div>
@@ -230,8 +230,8 @@ export default function StatsPage() {
 
       {/* 기능 #9 관련 안내 */}
       <Card title="데이터 활용 안내" icon="ℹ️">
-        <div className="space-y-2 text-slate-400 text-xs">
-          <p>• 수익 비교는 서비스에 등록된 모든 유저의 <span className="text-white">익명화된</span> 데이터를 기반으로 합니다.</p>
+        <div className="space-y-2 text-xs" style={{ color: 'var(--text-2)' }}>
+          <p>• 수익 비교는 서비스에 등록된 모든 유저의 <span style={{ color: 'var(--text)' }}>익명화된</span> 데이터를 기반으로 합니다.</p>
           <p>• 개인 정보는 공유되지 않으며, 통계 평균값만 활용됩니다.</p>
           <p>• 더 많은 가계부를 기록할수록 정확한 비교가 가능합니다.</p>
         </div>

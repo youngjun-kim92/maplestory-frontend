@@ -64,7 +64,7 @@ export default function LedgerPage() {
     setForm((p) => ({ ...p, type, category: defaultCat as EntryCategory }))
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: { preventDefault(): void }) => {
     e.preventDefault()
     if (!form.amount || Number(form.amount) < 1) return
     setSubmitting(true)
@@ -94,7 +94,7 @@ export default function LedgerPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="text-orange-400 animate-pulse">불러오는 중...</div>
+        <div className="text-sm animate-pulse" style={{ color: 'var(--orange-light)' }}>불러오는 중...</div>
       </div>
     )
   }
@@ -106,9 +106,9 @@ export default function LedgerPage() {
       {/* 헤더 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-white">주간 가계부</h1>
+          <h1 className="text-xl font-bold" style={{ color: 'var(--text)' }}>주간 가계부</h1>
           {ledger && (
-            <p className="text-slate-400 text-sm mt-0.5">
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>
               📅 {formatWeekRange(ledger.weekStart, ledger.weekEnd)} (목요일 기준)
             </p>
           )}
@@ -118,17 +118,20 @@ export default function LedgerPage() {
         </Button>
       </div>
 
-      {/* 과소비 경고 (기능 #10) */}
+      {/* 과소비 경고 */}
       {warning?.triggered && (
         <div
-          className="rounded-xl p-4 border"
-          style={{ backgroundColor: '#2d1212', borderColor: '#e94560' }}
+          className="rounded-xl p-4"
+          style={{
+            backgroundColor: 'rgba(248,113,113,0.08)',
+            border: '1px solid rgba(248,113,113,0.25)',
+          }}
         >
           <div className="flex items-start gap-3">
-            <span className="text-2xl">⚠️</span>
+            <span className="text-lg">⚠️</span>
             <div>
-              <p className="text-red-300 font-semibold text-sm">과소비 경고!</p>
-              <p className="text-red-400 text-sm mt-0.5">{warning.message}</p>
+              <p className="font-semibold text-sm" style={{ color: 'var(--red)' }}>과소비 경고!</p>
+              <p className="text-sm mt-0.5" style={{ color: 'var(--red)', opacity: 0.8 }}>{warning.message}</p>
             </div>
           </div>
         </div>
@@ -137,20 +140,33 @@ export default function LedgerPage() {
       {/* 주간 요약 카드 */}
       {ledger && (
         <div className="grid grid-cols-3 gap-3">
-          <Card className="text-center">
-            <p className="text-slate-400 text-xs mb-1">총 수입</p>
-            <p className="text-green-400 font-bold text-base">{formatMeso(ledger.totalIncome)}</p>
-          </Card>
-          <Card className="text-center">
-            <p className="text-slate-400 text-xs mb-1">총 지출</p>
-            <p className="text-red-400 font-bold text-base">{formatMeso(ledger.totalExpense)}</p>
-          </Card>
-          <Card className="text-center">
-            <p className="text-slate-400 text-xs mb-1">순수익</p>
-            <p className={`font-bold text-base ${ledger.netAmount >= 0 ? 'text-orange-400' : 'text-red-400'}`}>
+          <div className="stat-card stat-card-income">
+            <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-2)' }}>
+              총 수입
+            </p>
+            <p className="font-bold text-lg" style={{ color: 'var(--green)' }}>
+              {formatMeso(ledger.totalIncome)}
+            </p>
+          </div>
+          <div className="stat-card stat-card-expense">
+            <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-2)' }}>
+              총 지출
+            </p>
+            <p className="font-bold text-lg" style={{ color: 'var(--red)' }}>
+              {formatMeso(ledger.totalExpense)}
+            </p>
+          </div>
+          <div className={`stat-card ${ledger.netAmount >= 0 ? 'stat-card-net-pos' : 'stat-card-net-neg'}`}>
+            <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-2)' }}>
+              순수익
+            </p>
+            <p
+              className="font-bold text-lg"
+              style={{ color: ledger.netAmount >= 0 ? 'var(--orange-light)' : 'var(--red)' }}
+            >
               {ledger.netAmount >= 0 ? '+' : ''}{formatMeso(ledger.netAmount)}
             </p>
-          </Card>
+          </div>
         </div>
       )}
 
@@ -160,20 +176,23 @@ export default function LedgerPage() {
           <form onSubmit={handleSubmit} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <p className="text-slate-300 text-sm font-medium mb-1">타입</p>
+                <p className="text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-2)' }}>
+                  타입
+                </p>
                 <div className="flex gap-2">
                   {TYPE_OPTIONS.map((opt) => (
                     <button
                       key={opt.value}
                       type="button"
                       onClick={() => handleTypeChange(opt.value as EntryType)}
-                      className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
+                      className="flex-1 py-2 rounded-xl text-sm font-medium transition-all"
+                      style={
                         form.type === opt.value
                           ? opt.value === 'INCOME'
-                            ? 'bg-green-600 text-white'
-                            : 'bg-red-600 text-white'
-                          : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
-                      }`}
+                            ? { backgroundColor: 'rgba(52,211,153,0.15)', color: 'var(--green)', border: '1px solid rgba(52,211,153,0.3)' }
+                            : { backgroundColor: 'rgba(248,113,113,0.15)', color: 'var(--red)', border: '1px solid rgba(248,113,113,0.3)' }
+                          : { backgroundColor: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border-2)' }
+                      }
                     >
                       {opt.label}
                     </button>
@@ -237,45 +256,55 @@ export default function LedgerPage() {
       {/* 가계부 항목 목록 */}
       <Card title="이번 주 기록" icon="📋">
         {!ledger?.entries.length ? (
-          <p className="text-slate-500 text-sm text-center py-6">
+          <p className="text-sm text-center py-6" style={{ color: 'var(--text-3)' }}>
             이번 주 기록이 없습니다. 첫 항목을 추가해보세요!
           </p>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {ledger.entries.map((entry: LedgerEntry) => (
-              <div
-                key={entry.id}
-                className="flex items-center justify-between py-3 px-3 rounded-lg transition-colors"
-                style={{ backgroundColor: '#0f1729' }}
-              >
+              <div key={entry.id} className="list-row">
                 <div className="flex items-center gap-3 min-w-0">
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                    entry.type === 'INCOME' ? 'bg-green-900/50 text-green-400' : 'bg-red-900/50 text-red-400'
-                  }`}>
+                  <span
+                    className="text-xs font-bold px-2 py-0.5 rounded-lg shrink-0"
+                    style={
+                      entry.type === 'INCOME'
+                        ? { backgroundColor: 'rgba(52,211,153,0.12)', color: 'var(--green)' }
+                        : { backgroundColor: 'rgba(248,113,113,0.12)', color: 'var(--red)' }
+                    }
+                  >
                     {entry.type === 'INCOME' ? '수입' : '지출'}
                   </span>
-                  <span className="text-slate-300 text-xs bg-slate-700 px-2 py-0.5 rounded">
+                  <span
+                    className="text-xs px-2 py-0.5 rounded-lg shrink-0"
+                    style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-2)' }}
+                  >
                     {CATEGORY_LABELS[entry.category]}
                   </span>
                   <div className="min-w-0">
-                    <span className="text-white text-sm truncate block">
+                    <span className="text-sm truncate block" style={{ color: 'var(--text)' }}>
                       {entry.description || CATEGORY_LABELS[entry.category]}
                     </span>
                     {entry.characterName && (
-                      <span className="text-slate-500 text-xs">{entry.characterName}</span>
+                      <span className="text-xs" style={{ color: 'var(--text-3)' }}>{entry.characterName}</span>
                     )}
                   </div>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <div className="text-right">
-                    <p className={`font-semibold text-sm ${entry.type === 'INCOME' ? 'text-green-400' : 'text-red-400'}`}>
+                    <p
+                      className="font-semibold text-sm"
+                      style={{ color: entry.type === 'INCOME' ? 'var(--green)' : 'var(--red)' }}
+                    >
                       {entry.type === 'INCOME' ? '+' : '-'}{formatMeso(entry.amount)}
                     </p>
-                    <p className="text-slate-500 text-xs">{formatDate(entry.entryDate)}</p>
+                    <p className="text-xs" style={{ color: 'var(--text-3)' }}>{formatDate(entry.entryDate)}</p>
                   </div>
                   <button
                     onClick={() => handleDelete(entry.id)}
-                    className="text-slate-600 hover:text-red-400 transition-colors text-sm"
+                    className="text-sm transition-colors"
+                    style={{ color: 'var(--text-3)' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--red)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-3)')}
                   >
                     ✕
                   </button>

@@ -40,7 +40,7 @@ export default function GoalsPage() {
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: { preventDefault(): void }) => {
     e.preventDefault()
     if (!form.itemName || !form.targetAmount) return
     setSubmitting(true)
@@ -141,15 +141,15 @@ export default function GoalsPage() {
 
       {/* 진행 중인 목표 */}
       <div className="space-y-3">
-        <h2 className="text-white font-medium text-sm flex items-center gap-2">
+        <h2 className="font-semibold text-sm flex items-center gap-2" style={{ color: 'var(--text)' }}>
           <span>진행 중인 목표</span>
-          <span className="bg-orange-500/20 text-orange-400 text-xs px-2 py-0.5 rounded-full">
+          <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: 'var(--orange-dim)', color: 'var(--orange-light)' }}>
             {activeGoals.length}
           </span>
         </h2>
         {activeGoals.length === 0 ? (
           <Card>
-            <p className="text-slate-500 text-sm text-center py-4">
+            <p className="text-sm text-center py-4" style={{ color: 'var(--text-3)' }}>
               목표 아이템을 추가해보세요!
             </p>
           </Card>
@@ -160,28 +160,13 @@ export default function GoalsPage() {
               <Card key={goal.id}>
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-white font-semibold text-base">{goal.itemName}</h3>
-                    <p className="text-orange-400 text-sm mt-0.5">{formatMeso(goal.targetAmount)}</p>
+                    <h3 className="font-semibold text-base" style={{ color: 'var(--text)' }}>{goal.itemName}</h3>
+                    <p className="text-sm mt-0.5" style={{ color: 'var(--orange-light)' }}>{formatMeso(goal.targetAmount)}</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0 ml-3">
-                    <button
-                      onClick={() => handleEdit(goal)}
-                      className="text-slate-400 hover:text-white text-xs"
-                    >
-                      수정
-                    </button>
-                    <button
-                      onClick={() => handleAchieve(goal.id)}
-                      className="text-green-400 hover:text-green-300 text-xs"
-                    >
-                      달성 ✓
-                    </button>
-                    <button
-                      onClick={() => handleDelete(goal.id)}
-                      className="text-slate-600 hover:text-red-400 text-xs"
-                    >
-                      삭제
-                    </button>
+                    <button onClick={() => handleEdit(goal)} className="text-xs transition-colors" style={{ color: 'var(--text-2)' }}>수정</button>
+                    <button onClick={() => handleAchieve(goal.id)} className="text-xs transition-colors" style={{ color: 'var(--green)' }}>달성 ✓</button>
+                    <button onClick={() => handleDelete(goal.id)} className="text-xs transition-colors" style={{ color: 'var(--text-3)' }}>삭제</button>
                   </div>
                 </div>
 
@@ -189,59 +174,50 @@ export default function GoalsPage() {
                 {!est ? (
                   <button
                     onClick={() => loadEstimate(goal.id)}
-                    className="mt-3 text-xs text-slate-400 hover:text-orange-400 transition-colors underline"
+                    className="mt-3 text-xs underline transition-colors"
+                    style={{ color: 'var(--text-2)' }}
                   >
                     달성 예측 보기
                   </button>
                 ) : (
-                  <div className="mt-3 pt-3" style={{ borderTop: '1px solid #2d3748' }}>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="rounded-lg p-2.5" style={{ backgroundColor: '#0f1729' }}>
-                        <p className="text-slate-400 text-xs">현재 저축</p>
-                        <p className="text-white font-medium text-sm mt-0.5">
-                          {formatMeso(est.currentSavings)}
-                        </p>
+                  <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="info-box">
+                        <p className="text-xs" style={{ color: 'var(--text-2)' }}>현재 저축</p>
+                        <p className="font-medium text-sm mt-0.5" style={{ color: 'var(--text)' }}>{formatMeso(est.currentSavings)}</p>
                       </div>
-                      <div className="rounded-lg p-2.5" style={{ backgroundColor: '#0f1729' }}>
-                        <p className="text-slate-400 text-xs">남은 금액</p>
-                        <p className="text-orange-300 font-medium text-sm mt-0.5">
-                          {formatMeso(est.remainingAmount)}
-                        </p>
+                      <div className="info-box">
+                        <p className="text-xs" style={{ color: 'var(--text-2)' }}>남은 금액</p>
+                        <p className="font-medium text-sm mt-0.5" style={{ color: 'var(--orange-light)' }}>{formatMeso(est.remainingAmount)}</p>
                       </div>
-                      <div className="rounded-lg p-2.5" style={{ backgroundColor: '#0f1729' }}>
-                        <p className="text-slate-400 text-xs">주간 평균 수익</p>
-                        <p className="text-green-400 font-medium text-sm mt-0.5">
-                          {formatMeso(est.avgWeeklyIncome)}
-                        </p>
+                      <div className="info-box">
+                        <p className="text-xs" style={{ color: 'var(--text-2)' }}>주간 평균 수익</p>
+                        <p className="font-medium text-sm mt-0.5" style={{ color: 'var(--green)' }}>{formatMeso(est.avgWeeklyIncome)}</p>
                       </div>
-                      <div className="rounded-lg p-2.5" style={{ backgroundColor: '#0f1729' }}>
-                        <p className="text-slate-400 text-xs">예상 달성</p>
-                        <p className="text-blue-400 font-medium text-sm mt-0.5">
-                          {est.estimatedWeeks > 0
-                            ? `약 ${est.estimatedWeeks}주 후`
-                            : '이미 달성 가능!'}
+                      <div className="info-box">
+                        <p className="text-xs" style={{ color: 'var(--text-2)' }}>예상 달성</p>
+                        <p className="font-medium text-sm mt-0.5" style={{ color: '#60a5fa' }}>
+                          {est.estimatedWeeks > 0 ? `약 ${est.estimatedWeeks}주 후` : '이미 달성 가능!'}
                         </p>
                       </div>
                     </div>
                     {est.estimatedDate && (
-                      <p className="text-slate-400 text-xs mt-2 text-center">
+                      <p className="text-xs mt-2 text-center" style={{ color: 'var(--text-2)' }}>
                         예상 날짜: {est.estimatedDate}
                       </p>
                     )}
-                    {/* 진행 바 */}
                     {est.targetAmount > 0 && (
                       <div className="mt-3">
-                        <div className="flex justify-between text-xs text-slate-400 mb-1">
+                        <div className="flex justify-between text-xs mb-1" style={{ color: 'var(--text-2)' }}>
                           <span>진행률</span>
-                          <span>
-                            {Math.min(100, Math.round((est.currentSavings / est.targetAmount) * 100))}%
-                          </span>
+                          <span>{Math.min(100, Math.round((est.currentSavings / est.targetAmount) * 100))}%</span>
                         </div>
-                        <div className="w-full rounded-full h-2" style={{ backgroundColor: '#2d3748' }}>
+                        <div className="w-full rounded-full h-1.5" style={{ backgroundColor: 'var(--border-2)' }}>
                           <div
-                            className="h-2 rounded-full bg-orange-500 transition-all"
+                            className="h-1.5 rounded-full transition-all"
                             style={{
                               width: `${Math.min(100, (est.currentSavings / est.targetAmount) * 100)}%`,
+                              background: 'linear-gradient(90deg, #f97316, #fb923c)',
                             }}
                           />
                         </div>
@@ -258,18 +234,18 @@ export default function GoalsPage() {
       {/* 달성한 목표 */}
       {achievedGoals.length > 0 && (
         <div className="space-y-2">
-          <h2 className="text-slate-500 font-medium text-sm">달성한 목표 ✅</h2>
+          <h2 className="font-medium text-sm" style={{ color: 'var(--text-2)' }}>달성한 목표 ✅</h2>
           {achievedGoals.map((goal) => (
             <div
               key={goal.id}
               className="flex items-center justify-between px-4 py-3 rounded-xl opacity-60"
-              style={{ backgroundColor: '#1a1a2e', border: '1px solid #2d3748' }}
+              style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)' }}
             >
               <div>
-                <p className="text-slate-300 font-medium text-sm line-through">{goal.itemName}</p>
-                <p className="text-slate-500 text-xs">{formatMeso(goal.targetAmount)}</p>
+                <p className="font-medium text-sm line-through" style={{ color: 'var(--text-2)' }}>{goal.itemName}</p>
+                <p className="text-xs" style={{ color: 'var(--text-3)' }}>{formatMeso(goal.targetAmount)}</p>
               </div>
-              <span className="text-green-400 text-sm">✅ 달성</span>
+              <span className="text-sm" style={{ color: 'var(--green)' }}>✅ 달성</span>
             </div>
           ))}
         </div>
