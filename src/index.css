@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+:root {
+  --maple-orange: #ff6b00;
+  --maple-dark: #1a1a2e;
+  --maple-navy: #16213e;
+  --maple-blue: #0f3460;
+  --maple-accent: #e94560;
+}
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background-color: #0f1729;
+  color: #e2e8f0;
+}
+
+/* 스크롤바 스타일 */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #1a1a2e;
+}
+::-webkit-scrollbar-thumb {
+  background: #4a5568;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #718096;
+}
