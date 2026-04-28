@@ -2,273 +2,203 @@
 
 ---
 
-## 1. LoginPage (`/login`) — 기능 #1
-
-### 역할
-닉네임과 비밀번호로 로그인합니다.
+## 1. LoginPage / RegisterPage (`/login`, `/register`) — 기능 #1
 
 ### 동작 흐름
 1. 닉네임·비밀번호 입력
-2. `POST /api/auth/login` 호출
-3. 응답의 JWT 토큰을 `localStorage`에 저장
-4. `AuthContext.login(token)` 호출 → 유저 정보 자동 조회
-5. `/`(가계부 메인)으로 리다이렉트
-
-### 주요 상태
-| 상태 | 설명 |
-| :--- | :--- |
-| `form` | `{ nickname, password }` |
-| `error` | 로그인 실패 메시지 |
-| `loading` | 요청 진행 중 여부 |
-
----
-
-## 2. RegisterPage (`/register`) — 기능 #1
-
-### 역할
-닉네임과 비밀번호만으로 간편 회원가입을 합니다.
+2. `POST /api/auth/login` 또는 `POST /api/auth/register` 호출
+3. 응답의 `token`을 `localStorage`에, `user` 객체를 AuthContext에 저장
+4. `/dashboard`로 리다이렉트
 
 ### 유효성 검사
 - 닉네임: 2자 이상
-- 비밀번호: 4자 이상
-- 비밀번호 확인: 비밀번호와 일치
-
-### 동작 흐름
-1. 폼 유효성 검사
-2. `POST /api/auth/register` 호출
-3. 로그인과 동일하게 토큰 저장 후 `/`로 이동
+- 비밀번호: 6자 이상
+- 회원가입 시 비밀번호 확인 일치 여부
 
 ---
 
-## 3. LedgerPage (`/`) — 기능 #2, #10
+## 2. Dashboard (`/dashboard`) — 기능 #2, #10
 
 ### 역할
-매주 목요일 기준으로 묶인 주간 가계부를 조회하고, 수입·지출 항목을 기록합니다.
-과소비 감지 시 경고 배너를 표시합니다.
+이번 주 수입·지출 요약 + 현재 보유 메소 현황을 한눈에 보여주는 View 화면.
 
 ### 주요 UI 요소
 
 | 요소 | 설명 |
-| :--- | :--- |
-| 과소비 경고 배너 | `overspendingWarning.triggered = true`일 때 빨간 배너 표시 |
-| 주간 요약 카드 (3개) | 총 수입 / 총 지출 / 순수익 |
-| 항목 추가 폼 | 수입/지출 타입, 카테고리, 금액, 날짜, 메모, 캐릭터 선택 |
-| 항목 목록 | 이번 주 모든 기록. 항목별 삭제 가능 |
+|:---|:---|
+| 캐릭터 탭 | 등록된 캐릭터 목록 탭 (본캐 첫 번째). "+" 버튼으로 캐릭터 추가 |
+| 주간 네비게이션 | 이전 주 / 이번 주 / 다음 주 이동. `"4/24(목) ~ 4/30(수)"` 형식 표시 |
+| 요약 카드 3개 | 총수입 / 총지출 / 순수익 (`summary.totalIncome`, `totalExpense`, `netProfit`) |
+| 메소 잔액 카드 | 인벤 메소 + 창고 메소 = 합계. "수정" 버튼 → `PUT /api/auth/meso-balance` |
+| 항목 리스트 | 날짜 / 카테고리 아이콘 / 설명 / 금액. 수입 초록, 지출 빨강 |
+| 목표 지연 경고 | 지출 추가 후 `goalWarnings` 배열이 있으면 경고 토스트 또는 배너 표시 |
 
-### 카테고리 분류
+### 카테고리 아이콘 매핑 (예시)
+| category | 아이콘 | 한국어 |
+|---|---|---|
+| `boss` | ⚔️ | 보스 |
+| `hunting` | 🐾 | 사냥 |
+| `auction` | 🏷️ | 경매장 |
+| `sol_erda` | 💎 | 솔 에르다 |
+| `cube` | 🎲 | 큐브 |
+| `starforce` | ⭐ | 스타포스 |
+| `spell_trace` | 📜 | 주문서 |
+| `other` | 📦 | 기타 |
 
-**수입 카테고리**
-
-| 코드 | 한국어 |
-| :--- | :--- |
-| `BOSS` | 보스 |
-| `HUNTING` | 사냥 |
-| `TRADE` | 거래 |
-| `OTHER_INCOME` | 기타 수입 |
-
-**지출 카테고리**
-
-| 코드 | 한국어 |
-| :--- | :--- |
-| `CUBE` | 큐브 |
-| `STARFORCE` | 스타포스 |
-| `OTHER_EXPENSE` | 기타 지출 |
-
-### 과소비 경고 동작 (기능 #10)
-백엔드에서 지출 항목 저장 시 다음 로직을 실행합니다:
-- 현재 활성 목표가 있는 경우
-- 지출로 인해 목표 달성 예상 주차가 연장되는 경우
-- `overspendingWarning` 필드에 경고 내용을 담아 응답
-
-프론트엔드는 이 필드를 받아 화면 상단에 경고 배너로 표시합니다.
+### 주간 계산 로직
+- 메이플스토리 주간 초기화 기준: **매주 목요일 00:00**
+- `weekStart` = 해당 날짜가 속한 주의 목요일
+- 예: 2026-04-28(화) → weekStart = 2026-04-24(목)
+- 주간 네비게이션: ±7일 이동
 
 ---
 
-## 4. BossPage (`/boss`) — 기능 #3, #4
+## 3. InputPage (`/input`) — 기능 #2, #4, #5, #8
 
 ### 역할
-보스 처치를 기록하면 결정석 가격이 자동 계산되어 가계부에 합산됩니다.
-누적 보스 수익을 막대 차트로 비교할 수 있습니다.
+메소를 입력하는 전용 화면. 탭 3개로 구성.
 
-### 탭 구성
+### 탭 1: 보스 수익 입력
+1. 캐릭터 선택 (선택사항)
+2. 날짜 선택 (기본값: 오늘)
+3. `resetType` 기준 일간/주간/월간 탭으로 보스 목록 분류
+4. 보스 선택 → 난이도 선택 → 결정석 가격 자동 미리보기
+5. "기록하기" → `POST /api/boss/kill`
+6. 성공 시 결정석 가격이 다이어리에 자동 합산됨 안내
 
-#### 이번 주 기록 탭
-- 이번 주 처치한 보스 목록
-- 각 항목: 보스명, 난이도, 결정석 가격, 날짜, 캐릭터
+### 탭 2: 수익/지출 직접 입력
+- 캐릭터 선택, 날짜, 수입/지출 토글, 카테고리, 금액, 메모
+- **수입 카테고리**: `hunting`(사냥), `auction`(경매장), `sol_erda`(솔 에르다), `other`(기타)
+- **지출 카테고리**: `cube`(큐브), `starforce`(스타포스), `spell_trace`(주문서), `other`(기타)
+- `sol_erda` 선택 시: 조각 개수 입력 → `개수 × user.solErdaFragmentPrice` 자동 환산 미리보기
+  - 개당 가격 미설정 시: 설정 페이지 안내 링크 표시
+- 제출 → `POST /api/ledger`
+- 응답 `goalWarnings` 배열이 비어있지 않으면 경고 토스트 표시
 
-#### 수익 효율 통계 탭 (기능 #3)
-- **가로 막대 차트**: 보스별 누적 총 수익 비교
-- **순위 리스트**: 상위 5개 보스, 처치 횟수 포함
-
-### 보스 처치 기록 폼 (기능 #4)
-1. 보스 선택 → 해당 보스의 난이도 목록 자동 필터링
-2. 난이도 선택 → 결정석 가격 미리보기 표시
-3. 날짜, 캐릭터(선택) 입력
-4. 제출 시 `POST /api/boss/kill` → 가계부에도 자동 합산
+### 탭 3: 경험치 계산기
+- 현재 레벨, 현재 경험치(%), 시간당 평균 경험치(%), 목표 레벨(선택) 입력
+- `POST /api/stats/exp-calculator`
+- 결과: `hoursToTarget`(시간), `daysToTarget`(일)
 
 ---
 
-## 5. HuntingPage (`/hunting`) — 기능 #3, #5
+## 4. StatsPage (`/stats`) — 기능 #3, #7, #9
 
-### 역할
-사냥 세션을 기록하고, 솔 에르다 조각 개수를 입력하면 설정된 가격으로 메소 가치를 자동 환산합니다.
-사냥터별 시간당 수익 효율을 차트로 비교합니다.
+### 사냥 vs 보스 수익 추이 차트
+- `GET /api/ledger/income-trend?weeks=8`
+- 반환: `[{ weekStart, bossIncome, huntingIncome, auctionIncome, totalIncome }]`
+- **라인 차트 (Recharts)**: 주별 보스(파랑) / 사냥(초록) / 경매장(주황) 수익 추이
+- **파이 차트**: 최근 4주 합산 기준 비율
 
-### 솔 에르다 조각 설정 카드 (기능 #5)
-- 페이지 상단에 항상 표시
-- 조각 1개당 메소 가격 입력 → `PUT /api/auth/sol-erda-price`에 저장
-- 사냥 세션 기록 시 `solErdaFragments × 설정가격` 이 수익에 자동 합산
+### 카테고리별 상세 통계
+- `GET /api/ledger/stats?weeks=4`
+- 반환: `[{ category, type, total, count, average }]`
+- 수입/지출 각각 카테고리별 바 차트
 
-### 사냥 세션 기록 폼
-| 필드 | 설명 |
-| :--- | :--- |
-| 사냥터 이름 | 자유 입력 (예: 헤이스트 B2) |
-| 사냥 시간 (분) | 분 단위 입력 |
-| 순수익 (메소) | 드랍 메소 수익 |
-| 솔 에르다 조각 수 | 선택 입력. 설정된 단가로 자동 환산 미리보기 표시 |
-| 날짜 | 날짜 선택 |
-| 캐릭터 | 선택 |
+### 익명 수익 비교
+- `GET /api/stats/comparison`
+- 반환: `{ userAvgWeeklyIncome, globalAvgWeeklyIncome, totalUsers, percentile, message }`
+- `message` 필드 그대로 표시
+- `totalUsers < 2`이면 "비교할 데이터가 충분하지 않습니다." 안내
 
-### 효율 통계 탭 (기능 #3)
-- **가로형 막대 차트**: 사냥터별 시간당 수익 (`incomePerHour`) 내림차순
-- **순위 리스트**: 1위는 주황색 강조
+### 경험치 계산기
+- InputPage 탭 3과 동일한 UI를 이 페이지에도 별도 섹션으로 제공 가능
 
 ---
 
-## 6. GoalsPage (`/goals`) — 기능 #6
-
-### 역할
-구매하고 싶은 목표 아이템을 등록하고, 평균 주간 수익 데이터를 기반으로 달성 예상 기간을 계산합니다.
+## 5. GoalsPage (`/goals`) — 기능 #4, #10
 
 ### 목표 카드 구성
+- 목표 이름, 목표 금액 표시
+- "예측 보기" 클릭 → `GET /api/goals/{id}/estimate`
 
-**기본 상태**
-- 아이템 이름, 목표 금액 표시
-- "달성 예측 보기" 버튼 (클릭 시 API 호출)
+**예측 응답 필드**
+| 필드 | 설명 |
+|:---|:---|
+| `currentSavings` | 현재 누적 순수익 |
+| `remaining` | 남은 금액 (targetAmount - currentSavings) |
+| `progressPercent` | 0~100 진행률 |
+| `avgWeeklyNet` | 최근 4주 주간 순수익 평균 |
+| `weeksRemaining` | 예상 남은 주수 (null이면 데이터 부족) |
+| `estimatedDate` | 예상 달성일 |
 
-**예측 로드 후**
-| 항목 | 설명 |
-| :--- | :--- |
-| 현재 저축 | 현재까지 누적된 순수익 |
-| 남은 금액 | 목표 금액 - 현재 저축 |
-| 주간 평균 수익 | 최근 기록 기반 평균 |
-| 예상 달성 | "약 N주 후" 또는 "이미 달성 가능!" |
-| 진행률 바 | 현재 저축 / 목표 금액 시각화 |
+- 진행률 바 표시
+- `weeksRemaining`이 null이면 "수익 데이터가 부족합니다. 먼저 기록을 추가해주세요."
 
-### 목표 상태 관리
+### 목표 관리
 | 버튼 | 동작 |
-| :--- | :--- |
-| 수정 | 아이템명, 금액 수정 폼 열기 |
-| 달성 ✓ | `PATCH /api/goals/{id}/achieve` → 달성 목록으로 이동 |
-| 삭제 | 목표 삭제 |
+|:---|:---|
+| 추가 | POST /api/goals |
+| 수정 | PUT /api/goals/{id} |
+| 달성 | PATCH /api/goals/{id}/achieve |
+| 삭제 | DELETE /api/goals/{id} |
 
 ---
 
-## 7. CharactersPage (`/characters`) — 기능 #8
+## 6. CharactersPage (`/characters`) — 기능 #5, #6
 
-### 역할
-메인/부캐릭터를 관리합니다.
-부캐릭터에 초기 투자 비용이 입력된 경우, 보스 수익 데이터를 기반으로 손익분기점(ROI)을 계산합니다.
+### 캐릭터 목록 및 관리
+- `GET /api/characters` → 본캐 먼저, 이후 등록순
+- 등록 폼: name(필수), jobClass, level, isMain, initialInvestment
 
-### 캐릭터 등록 필드
-
-| 필드 | 필수 | 설명 |
-| :--- | :-: | :--- |
-| 캐릭터 이름 | ✅ | 닉네임 |
-| 직업 | ❌ | 직업명 |
-| 레벨 | ❌ | 현재 레벨 (1~300) |
-| 초기 투자 비용 | ❌ | 부캐 육성에 지출한 총 비용 |
-| 메인 캐릭터 여부 | ❌ | 체크박스 |
-
-### 손익분기점 계산 (기능 #8)
-- **조건**: 부캐릭터(`isMain=false`)이고 `initialInvestment > 0`인 경우
-- **"손익분기점 계산하기"** 버튼 클릭 시 `GET /api/characters/{id}/roi` 호출
-- **결과 표시**:
-
-| 상태 | 표시 내용 |
-| :--- | :--- |
-| 회수 완료 | "✅ 투자금 회수 완료! 순수익: X" |
-| 진행 중 | 초기 투자 / 주간 보스 수익 / 회수까지 남은 주수 |
-
----
-
-## 8. StatsPage (`/stats`) — 기능 #7, #9
-
-### 익명 수익 비교 섹션 (기능 #9)
-
-`GET /api/stats/comparison` 호출 결과를 시각화합니다.
-
-| UI 요소 | 설명 |
-| :--- | :--- |
-| 원형 차트 | 백분위를 도넛 차트로 표시 |
-| 상위 N% 텍스트 | 80% 이상이면 주황, 50% 이상이면 초록, 그 외 회색 |
-| 비교 바 | 나의 주간 평균과 전체 유저 평균을 가로 바로 비교 |
-
-> 데이터가 부족할 경우 (가계부 기록이 없을 때) "데이터 부족" 안내 메시지 표시
-
-### 경험치 계산기 섹션 (기능 #7)
-
-`POST /api/stats/exp-calculator` 호출
-
-**입력 필드**
-| 필드 | 설명 | 범위 |
-| :--- | :--- | :--- |
-| 현재 레벨 | 캐릭터 현재 레벨 | 1~300 |
-| 현재 경험치 (%) | 현재 레벨의 경험치 진행률 | 0~99.99 |
-| 시간당 평균 획득 경험치 | 1시간 동안 얻는 경험치량 | 1 이상 |
-| 목표 레벨 (선택) | 비우면 다음 레벨로 자동 설정 | 1~300 |
+### 손익분기점 (기능 #5)
+- `isMain=false` && `initialInvestment > 0` 인 캐릭터에 "ROI 계산" 버튼 표시
+- `GET /api/characters/{id}/roi`
 
 **결과 표시**
-- 필요 경험치 (정수)
-- 예상 소요 시간 (N시간 N분)
-- 하루 4시간 기준 예상 일수
+| 상태 | UI |
+|:---|:---|
+| `isBreakEvenReached = true` | "✅ 투자금 회수 완료!" + 순수익 표시 |
+| `isBreakEvenReached = false` | 초기투자 / 누적 보스수익 / 주간 평균 / 남은 주수 프로그레스 바 |
+| `weeksToBreakEven = null` | "보스 수익 기록이 없습니다." |
+
+**ROI 응답 필드**
+```
+characterId, characterName, initialInvestment,
+cumulativeBossIncome, weeklyAvgBossIncome,
+weeksToBreakEven, isBreakEvenReached, remainingToBreakEven
+```
+
+### 익명 수익 비교 (기능 #6)
+- `GET /api/stats/comparison`
+- 내 주간 평균(`userAvgWeeklyIncome`) vs 전체 평균(`globalAvgWeeklyIncome`) 비교 바
+- `percentile`, `message` 표시
+
+---
+
+## 7. SettingsPage (`/settings`)
+
+| 기능 | API |
+|:---|:---|
+| 솔 에르다 조각 낱개 가격 설정 | `PUT /api/auth/sol-erda-price?price={금액}` |
+| 현재 보유 메소 기록 (인벤 + 창고) | `PUT /api/auth/meso-balance` |
 
 ---
 
 ## 공통 컴포넌트
 
+### 메소 포맷 유틸 (필수 구현)
+
+```ts
+function formatMeso(amount: number): string {
+  if (amount >= 100_000_000) {
+    const uk = Math.floor(amount / 100_000_000);
+    const man = Math.floor((amount % 100_000_000) / 10_000);
+    return man > 0 ? `${uk}억 ${man.toLocaleString()}만` : `${uk}억`;
+  }
+  if (amount >= 10_000) {
+    return `${Math.floor(amount / 10_000).toLocaleString()}만`;
+  }
+  return amount.toLocaleString();
+}
+```
+
 ### Layout
 - **데스크탑**: 좌측 사이드바 (아이콘 + 텍스트)
-- **모바일**: 하단 고정 탭바 (아이콘 + 텍스트)
-- 상단 헤더: 로고, 현재 닉네임, 로그아웃 버튼
+- **모바일**: 하단 고정 탭바
+- 상단 헤더: 로고, 닉네임, 로그아웃
 
-### Card
-```tsx
-<Card title="제목" icon="📊">
-  {/* 내용 */}
-</Card>
-```
-- `title`, `icon` 생략 가능
-- 어두운 배경(`#1a1a2e`) + 테두리
-
-### Button
-```tsx
-<Button variant="primary" size="md" loading={false}>
-  텍스트
-</Button>
-```
-| variant | 색상 |
-| :--- | :--- |
-| `primary` | 주황색 (기본) |
-| `secondary` | 회색 |
-| `danger` | 빨간색 |
-| `ghost` | 투명 |
-
-### Input / Select
-- `label`: 위에 표시되는 라벨
-- `error`: 빨간색 에러 메시지
-
----
-
-## 상태 관리 패턴
-
-이 프로젝트는 **전역 상태 관리 라이브러리(Redux 등)를 사용하지 않습니다.**
-
-| 상태 종류 | 관리 방법 |
-| :--- | :--- |
-| 로그인 상태, 유저 정보 | `AuthContext` (React Context) |
-| 페이지별 데이터 | 각 페이지 컴포넌트의 `useState` + `useEffect` |
-| 서버 데이터 갱신 | 수정/삭제/추가 후 `fetchData()` 재호출 |
-
-데이터 패칭은 별도 캐싱 라이브러리 없이 직접 `useCallback`으로 감싼 fetch 함수를 사용합니다.
-필요 시 React Query / SWR로 교체하기 쉬운 구조입니다.
+### 상태 관리
+- 로그인 상태·유저 정보: `AuthContext`
+- 페이지별 데이터: `useState` + `useEffect`
+- 데이터 갱신: 추가/수정/삭제 후 fetch 재호출

@@ -1,5 +1,5 @@
 import client from './client'
-import type { AuthResponse, LoginRequest, RegisterRequest, UserResponse } from '../types'
+import type { AuthResponse, LoginRequest, MesoBalanceRequest, RegisterRequest, UserResponse } from '../types'
 
 export const authApi = {
   register: (data: RegisterRequest) =>
@@ -13,4 +13,7 @@ export const authApi = {
 
   updateSolErdaPrice: (price: number) =>
     client.put('/auth/sol-erda-price', null, { params: { price } }),
+
+  updateMesoBalance: (data: MesoBalanceRequest) =>
+    client.put<UserResponse>('/auth/meso-balance', data),
 }

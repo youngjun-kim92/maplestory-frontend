@@ -4,12 +4,19 @@ import {
 } from 'recharts'
 import { bossApi } from '../api/boss'
 import { charactersApi } from '../api/characters'
-import type { BossKill, BossMaster, BossStats, MapleCharacter } from '../types'
+import type { BossKill, BossMaster, BossStats, MapleCharacter, ResetType } from '../types'
 import { formatMeso, formatDate, toDateString } from '../utils/format'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Select from '../components/ui/Select'
 import Input from '../components/ui/Input'
+
+const RESET_TYPE_TABS: { key: ResetType | 'all'; label: string }[] = [
+  { key: 'all', label: '전체' },
+  { key: 'daily', label: '일간' },
+  { key: 'weekly', label: '주간' },
+  { key: 'monthly', label: '월간' },
+]
 
 export default function BossPage() {
   const [bossList, setBossList] = useState<BossMaster[]>([])
@@ -17,6 +24,7 @@ export default function BossPage() {
   const [bossStats, setBossStats] = useState<BossStats[]>([])
   const [characters, setCharacters] = useState<MapleCharacter[]>([])
   const [activeTab, setActiveTab] = useState<'record' | 'stats'>('record')
+  const [resetFilter, setResetFilter] = useState<ResetType | 'all'>('all')
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [showForm, setShowForm] = useState(false)
@@ -32,7 +40,11 @@ export default function BossPage() {
     (b) => b.name === form.bossName && b.difficulty === form.difficulty
   )
 
-  const uniqueBossNames = [...new Set(bossList.map((b) => b.name))]
+  const filteredBossList = resetFilter === 'all'
+    ? bossList
+    : bossList.filter((b) => b.resetType === resetFilter)
+
+  const uniqueBossNames = [...new Set(filteredBossList.map((b) => b.name))]
   const difficultiesForBoss = bossList
     .filter((b) => b.name === form.bossName)
     .map((b) => b.difficulty)
@@ -62,6 +74,11 @@ export default function BossPage() {
   const handleBossNameChange = (name: string) => {
     const diffs = bossList.filter((b) => b.name === name).map((b) => b.difficulty)
     setForm((p) => ({ ...p, bossName: name, difficulty: diffs[0] || '' }))
+  }
+
+  const handleResetFilterChange = (filter: ResetType | 'all') => {
+    setResetFilter(filter)
+    setForm((p) => ({ ...p, bossName: '', difficulty: '' }))
   }
 
   const handleSubmit = async (e: { preventDefault(): void }) => {
@@ -130,6 +147,29 @@ export default function BossPage() {
       {showForm && (
         <Card title="보스 처치 기록" icon="⚔️">
           <form onSubmit={handleSubmit} className="space-y-3">
+            {/* resetType 필터 탭 */}
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-2)' }}>
+                보스 유형
+              </p>
+              <div className="flex gap-1.5">
+                {RESET_TYPE_TABS.map((tab) => (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => handleResetFilterChange(tab.key)}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                    style={
+                      resetFilter === tab.key
+                        ? { backgroundColor: 'rgba(249,115,22,0.18)', color: 'var(--orange-light)', border: '1px solid rgba(249,115,22,0.4)' }
+                        : { backgroundColor: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border-2)' }
+                    }
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <Select
                 label="보스 선택"

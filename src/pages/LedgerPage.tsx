@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { ledgerApi } from '../api/ledger'
+import { authApi } from '../api/auth'
 import { charactersApi } from '../api/characters'
+import { useAuth } from '../contexts/AuthContext'
 import type { EntryCategory, EntryType, LedgerEntry, MapleCharacter, WeeklyLedger } from '../types'
 import { formatMeso, formatDate, formatWeekRange, CATEGORY_LABELS, toDateString } from '../utils/format'
 import Card from '../components/ui/Card'
@@ -27,11 +29,15 @@ const EXPENSE_CATEGORIES = [
 ]
 
 export default function LedgerPage() {
+  const { user, refreshUser } = useAuth()
   const [ledger, setLedger] = useState<WeeklyLedger | null>(null)
   const [characters, setCharacters] = useState<MapleCharacter[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [showMesoForm, setShowMesoForm] = useState(false)
+  const [mesoForm, setMesoForm] = useState({ inventoryMeso: '', storageMeso: '' })
+  const [mesoSubmitting, setMesoSubmitting] = useState(false)
 
   const [form, setForm] = useState({
     type: 'INCOME' as EntryType,
@@ -89,6 +95,22 @@ export default function LedgerPage() {
     if (!confirm('이 항목을 삭제하시겠습니까?')) return
     await ledgerApi.deleteEntry(id)
     await fetchLedger()
+  }
+
+  const handleMesoSubmit = async (e: { preventDefault(): void }) => {
+    e.preventDefault()
+    const inventory = Number(mesoForm.inventoryMeso)
+    const storage = Number(mesoForm.storageMeso)
+    if (isNaN(inventory) || isNaN(storage) || inventory < 0 || storage < 0) return
+    setMesoSubmitting(true)
+    try {
+      await authApi.updateMesoBalance({ inventoryMeso: inventory, storageMeso: storage })
+      await refreshUser()
+      setShowMesoForm(false)
+      setMesoForm({ inventoryMeso: '', storageMeso: '' })
+    } finally {
+      setMesoSubmitting(false)
+    }
   }
 
   if (loading) {
@@ -169,6 +191,60 @@ export default function LedgerPage() {
           </div>
         </div>
       )}
+
+      {/* 지갑 현황 */}
+      <Card title="지갑 현황" icon="💰">
+        <div className="grid grid-cols-3 gap-3 mb-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--text-2)' }}>인벤토리</p>
+            <p className="font-bold text-base" style={{ color: 'var(--text)' }}>{formatMeso(user?.inventoryMeso ?? 0)}</p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--text-2)' }}>창고</p>
+            <p className="font-bold text-base" style={{ color: 'var(--text)' }}>{formatMeso(user?.storageMeso ?? 0)}</p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--text-2)' }}>합계</p>
+            <p className="font-bold text-base" style={{ color: 'var(--orange-light)' }}>{formatMeso(user?.totalMeso ?? 0)}</p>
+          </div>
+        </div>
+        {!showMesoForm ? (
+          <Button size="sm" variant="ghost" onClick={() => {
+            setMesoForm({
+              inventoryMeso: String(user?.inventoryMeso ?? 0),
+              storageMeso: String(user?.storageMeso ?? 0),
+            })
+            setShowMesoForm(true)
+          }}>
+            메소 잔액 수정
+          </Button>
+        ) : (
+          <form onSubmit={handleMesoSubmit} className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="인벤토리 메소"
+                type="number"
+                placeholder="예: 500000000"
+                value={mesoForm.inventoryMeso}
+                onChange={(e) => setMesoForm((p) => ({ ...p, inventoryMeso: e.target.value }))}
+                min={0}
+              />
+              <Input
+                label="창고 메소"
+                type="number"
+                placeholder="예: 2000000000"
+                value={mesoForm.storageMeso}
+                onChange={(e) => setMesoForm((p) => ({ ...p, storageMeso: e.target.value }))}
+                min={0}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={() => setShowMesoForm(false)}>취소</Button>
+              <Button type="submit" loading={mesoSubmitting}>저장</Button>
+            </div>
+          </form>
+        )}
+      </Card>
 
       {/* 항목 추가 폼 */}
       {showForm && (

@@ -7,6 +7,10 @@ export interface UserResponse {
   id: number
   nickname: string
   solErdaFragmentPrice: number
+  inventoryMeso: number
+  storageMeso: number
+  totalMeso: number
+  createdAt: string
 }
 
 export interface LoginRequest {
@@ -17,6 +21,11 @@ export interface LoginRequest {
 export interface RegisterRequest {
   nickname: string
   password: string
+}
+
+export interface MesoBalanceRequest {
+  inventoryMeso: number
+  storageMeso: number
 }
 
 // ====== 가계부 타입 ======
@@ -74,11 +83,14 @@ export interface WeeklySummary {
 }
 
 // ====== 보스 타입 ======
+export type ResetType = 'daily' | 'weekly' | 'monthly'
+
 export interface BossMaster {
   id: number
   name: string
   difficulty: string
   crystalPrice: number
+  resetType: ResetType
 }
 
 export interface BossKill {
