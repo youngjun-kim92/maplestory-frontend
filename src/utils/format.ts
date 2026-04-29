@@ -4,7 +4,10 @@ export function formatMeso(amount: number): string {
   const abs = Math.abs(amount)
 
   let result: string
-  if (abs >= 100_000_000) {
+  if (abs >= 1_000_000_000_000) {
+    const jo = (abs / 1_000_000_000_000).toFixed(2)
+    result = `${jo}조`
+  } else if (abs >= 100_000_000) {
     const eok = Math.floor(abs / 100_000_000)
     const rem = Math.floor((abs % 100_000_000) / 10_000)
     result = rem > 0 ? `${eok}억 ${rem.toLocaleString()}만` : `${eok}억`

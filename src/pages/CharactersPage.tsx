@@ -328,7 +328,7 @@ function CharacterCard({
   const progressPct = roi
     ? roi.isBreakEvenReached
       ? 100
-      : Math.min(99, Math.round((roi.cumulativeBossIncome / roi.initialInvestment) * 100))
+      : Math.min(99, Math.round((roi.cumulativeIncome / roi.initialInvestment) * 100))
     : 0
 
   return (
@@ -389,7 +389,7 @@ function CharacterCard({
                   ✅ 투자금 회수 완료!
                 </span>
                 <span className="text-xs" style={{ color: 'var(--text-2)' }}>
-                  순수익 {formatMeso(roi.cumulativeBossIncome - roi.initialInvestment)}
+                  순수익 {formatMeso(roi.cumulativeIncome - roi.initialInvestment)}
                 </span>
               </div>
             ) : (
@@ -399,8 +399,8 @@ function CharacterCard({
                   <p className="font-bold text-xs" style={{ color: 'var(--red)' }}>{formatMeso(roi.initialInvestment)}</p>
                 </div>
                 <div className="info-box text-center">
-                  <p className="text-xs mb-0.5" style={{ color: 'var(--text-3)' }}>누적 수익</p>
-                  <p className="font-bold text-xs" style={{ color: 'var(--green)' }}>{formatMeso(roi.cumulativeBossIncome)}</p>
+                  <p className="text-xs mb-0.5" style={{ color: 'var(--text-3)' }}>누적 수입</p>
+                  <p className="font-bold text-xs" style={{ color: 'var(--green)' }}>{formatMeso(roi.cumulativeIncome)}</p>
                 </div>
                 <div className="info-box text-center">
                   <p className="text-xs mb-0.5" style={{ color: 'var(--text-3)' }}>회수까지</p>
@@ -410,7 +410,7 @@ function CharacterCard({
             )
           ) : (
             <p className="text-xs" style={{ color: 'var(--text-3)' }}>
-              보스 수익 기록이 쌓이면 손익분기점이 계산됩니다.
+              수입 기록이 쌓이면 손익분기점이 계산됩니다.
             </p>
           )}
         </div>

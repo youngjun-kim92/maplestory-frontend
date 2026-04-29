@@ -4,6 +4,7 @@ import {
 } from 'recharts'
 import { bossApi } from '../api/boss'
 import { charactersApi } from '../api/characters'
+import { useAuth } from '../contexts/AuthContext'
 import type { BossKill, BossMaster, BossStats, MapleCharacter, ResetType } from '../types'
 import { formatMeso, formatDate, toDateString } from '../utils/format'
 import Card from '../components/ui/Card'
@@ -19,6 +20,7 @@ const RESET_TYPE_TABS: { key: ResetType | 'all'; label: string }[] = [
 ]
 
 export default function BossPage() {
+  const { refreshUser } = useAuth()
   const [bossList, setBossList] = useState<BossMaster[]>([])
   const [weeklyKills, setWeeklyKills] = useState<BossKill[]>([])
   const [bossStats, setBossStats] = useState<BossStats[]>([])
@@ -95,6 +97,7 @@ export default function BossPage() {
       setShowForm(false)
       setForm((p) => ({ ...p, bossName: '', difficulty: '' }))
       await fetchData()
+      await refreshUser()
     } finally {
       setSubmitting(false)
     }

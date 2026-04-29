@@ -134,6 +134,7 @@ export default function DashboardPage() {
       await fetchDrops()
       await fetchLedger()
       await fetchAllWeeks()
+      await refreshUser()
     } finally {
       setSellSubmitting(false)
     }

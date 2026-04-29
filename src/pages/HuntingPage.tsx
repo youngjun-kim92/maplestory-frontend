@@ -72,6 +72,7 @@ export default function HuntingPage() {
       setShowForm(false)
       setForm({ mapName: '', durationMinutes: '', income: '', solErdaFragments: '', sessionDate: toDateString(), characterId: '' })
       await fetchData()
+      await refreshUser()
     } finally {
       setSubmitting(false)
     }

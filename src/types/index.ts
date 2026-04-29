@@ -264,8 +264,8 @@ export interface CharacterROI {
   characterId: number
   name: string
   initialInvestment: number
-  cumulativeBossIncome: number
-  weeklyAvgBossIncome: number
+  cumulativeIncome: number
+  weeklyAvgIncome: number
   weeksToBreakEven: number
   isBreakEvenReached: boolean
   remainingToBreakEven: number

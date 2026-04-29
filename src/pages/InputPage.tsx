@@ -76,6 +76,7 @@ function BossSection({
   bossList: BossMaster[]
   characters: MapleCharacter[]
 }) {
+  const { refreshUser } = useAuth()
   const [resetFilter, setResetFilter] = useState<ResetType | 'all'>('all')
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -169,6 +170,7 @@ function BossSection({
       setSuccess(true)
       setSelectedItems(new Set())
       setForm((p) => ({ ...p, bossName: '', difficulty: '', partySize: '1' }))
+      await refreshUser()
       setTimeout(() => setSuccess(false), 3000)
     } catch {
       // 에러는 무시 (추후 에러 표시 추가 가능)
