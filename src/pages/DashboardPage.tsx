@@ -353,22 +353,22 @@ export default function DashboardPage() {
           <div className="stat-card stat-card-income">
             <p className="text-xs font-semibold mb-1" style={{ color: 'var(--text-2)' }}>수입</p>
             <p className="font-bold text-base leading-tight" style={{ color: 'var(--green)' }}>
-              {formatMeso(ledger.totalIncome)}
+              {formatMeso(ledger.summary.totalIncome)}
             </p>
           </div>
           <div className="stat-card stat-card-expense">
             <p className="text-xs font-semibold mb-1" style={{ color: 'var(--text-2)' }}>지출</p>
             <p className="font-bold text-base leading-tight" style={{ color: 'var(--red)' }}>
-              {formatMeso(ledger.totalExpense)}
+              {formatMeso(ledger.summary.totalExpense)}
             </p>
           </div>
-          <div className={`stat-card ${ledger.netAmount >= 0 ? 'stat-card-net-pos' : 'stat-card-net-neg'}`}>
+          <div className={`stat-card ${ledger.summary.netProfit >= 0 ? 'stat-card-net-pos' : 'stat-card-net-neg'}`}>
             <p className="text-xs font-semibold mb-1" style={{ color: 'var(--text-2)' }}>순수익</p>
             <p
               className="font-bold text-base leading-tight"
-              style={{ color: ledger.netAmount >= 0 ? 'var(--primary)' : 'var(--red)' }}
+              style={{ color: ledger.summary.netProfit >= 0 ? 'var(--primary)' : 'var(--red)' }}
             >
-              {ledger.netAmount >= 0 ? '+' : ''}{formatMeso(ledger.netAmount)}
+              {ledger.summary.netProfit >= 0 ? '+' : ''}{formatMeso(ledger.summary.netProfit)}
             </p>
           </div>
         </div>
@@ -400,18 +400,6 @@ export default function DashboardPage() {
         </button>
       </div>
 
-      {/* 과소비 경고 */}
-      {ledger?.overspendingWarning?.triggered && (
-        <div
-          className="rounded-2xl p-3"
-          style={{ backgroundColor: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.2)' }}
-        >
-          <p className="font-semibold text-sm" style={{ color: 'var(--red)' }}>⚠️ 과소비 경고!</p>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--red)', opacity: 0.85 }}>
-            {ledger.overspendingWarning.message}
-          </p>
-        </div>
-      )}
 
       {/* ── 2컬럼 메인 그리드 ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

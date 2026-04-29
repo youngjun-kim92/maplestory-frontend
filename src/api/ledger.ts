@@ -1,12 +1,12 @@
 import client from './client'
-import type { IncomeTrend, LedgerEntryRequest, LedgerStat, WeeklyLedger, WeeklySummary } from '../types'
+import type { IncomeTrend, LedgerAddResponse, LedgerEntryRequest, LedgerStat, WeeklyLedger, WeeklySummary } from '../types'
 
 export const ledgerApi = {
   getWeeklyLedger: (week?: string) =>
     client.get<WeeklyLedger>('/ledger', { params: week ? { week } : {} }),
 
   addEntry: (data: LedgerEntryRequest) =>
-    client.post<WeeklyLedger>('/ledger', data),
+    client.post<LedgerAddResponse>('/ledger', data),
 
   deleteEntry: (id: number) =>
     client.delete(`/ledger/${id}`),

@@ -4,7 +4,7 @@ import { bossApi } from '../api/boss'
 import { ledgerApi } from '../api/ledger'
 import { charactersApi } from '../api/characters'
 import { useAuth } from '../contexts/AuthContext'
-import type { BossDropItem, BossMaster, EntryCategory, EntryType, MapleCharacter, ResetType } from '../types'
+import type { BossDropItem, BossMaster, EntryCategory, EntryType, LedgerAddResponse, MapleCharacter, ResetType } from '../types'
 import { formatMeso, toDateString } from '../utils/format'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
@@ -416,10 +416,10 @@ function GeneralSection({ characters }: { characters: MapleCharacter[] }) {
       setForm((p) => ({ ...p, amount: '', fragments: '', description: '' }))
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
-      // 과소비 경고 (응답 구조가 overspendingWarning 또는 goalWarnings)
-      const warning = (res.data as any)?.overspendingWarning
-      if (warning?.triggered) {
-        showToast(warning.message)
+      // 지출 시 목표 지연 경고 표시
+      const data = res.data as LedgerAddResponse
+      if (data.goalWarnings && data.goalWarnings.length > 0) {
+        showToast(data.goalWarnings[0].message)
       }
     } catch (err: any) {
       const msg = err?.response?.data?.message ?? '저장 중 오류가 발생했습니다.'

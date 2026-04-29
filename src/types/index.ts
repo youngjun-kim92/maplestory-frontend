@@ -63,21 +63,30 @@ export interface LedgerEntryRequest {
   characterId?: number | null
 }
 
-export interface WeeklyLedger {
-  weekStart: string
-  weekEnd: string
+// GET /api/ledger 실제 응답 구조
+export interface WeeklyLedgerSummary {
   totalIncome: number
   totalExpense: number
-  netAmount: number
-  entries: LedgerEntry[]
-  overspendingWarning: OverspendingWarning | null
+  netProfit: number
 }
 
-export interface OverspendingWarning {
-  triggered: boolean
+export interface WeeklyLedger {
+  weekStart: string
+  entries: LedgerEntry[]
+  summary: WeeklyLedgerSummary
+}
+
+// POST /api/ledger 실제 응답 구조
+export interface GoalWarning {
+  goalId: number
+  itemName: string
+  delayWeeks: number
   message: string
-  delayedWeeks: number
-  affectedGoalName: string | null
+}
+
+export interface LedgerAddResponse {
+  entry: LedgerEntry
+  goalWarnings: GoalWarning[]
 }
 
 export interface WeeklySummary {

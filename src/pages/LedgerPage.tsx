@@ -4,7 +4,7 @@ import { authApi } from '../api/auth'
 import { charactersApi } from '../api/characters'
 import { useAuth } from '../contexts/AuthContext'
 import type { EntryCategory, EntryType, LedgerEntry, MapleCharacter, WeeklyLedger } from '../types'
-import { formatMeso, formatDate, formatWeekRange, CATEGORY_LABELS, toDateString } from '../utils/format'
+import { formatMeso, formatDate, CATEGORY_LABELS, toDateString } from '../utils/format'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
@@ -121,8 +121,6 @@ export default function LedgerPage() {
     )
   }
 
-  const warning = ledger?.overspendingWarning
-
   return (
     <div className="space-y-4">
       {/* 헤더 */}
@@ -131,7 +129,7 @@ export default function LedgerPage() {
           <h1 className="text-xl font-bold" style={{ color: 'var(--text)' }}>주간 가계부</h1>
           {ledger && (
             <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>
-              📅 {formatWeekRange(ledger.weekStart, ledger.weekEnd)} (목요일 기준)
+              📅 {ledger.weekStart} 주 (목요일 기준)
             </p>
           )}
         </div>
@@ -139,25 +137,6 @@ export default function LedgerPage() {
           {showForm ? '취소' : '+ 기록 추가'}
         </Button>
       </div>
-
-      {/* 과소비 경고 */}
-      {warning?.triggered && (
-        <div
-          className="rounded-xl p-4"
-          style={{
-            backgroundColor: 'rgba(248,113,113,0.08)',
-            border: '1px solid rgba(248,113,113,0.25)',
-          }}
-        >
-          <div className="flex items-start gap-3">
-            <span className="text-lg">⚠️</span>
-            <div>
-              <p className="font-semibold text-sm" style={{ color: 'var(--red)' }}>과소비 경고!</p>
-              <p className="text-sm mt-0.5" style={{ color: 'var(--red)', opacity: 0.8 }}>{warning.message}</p>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 주간 요약 카드 */}
       {ledger && (
@@ -167,7 +146,7 @@ export default function LedgerPage() {
               총 수입
             </p>
             <p className="font-bold text-lg" style={{ color: 'var(--green)' }}>
-              {formatMeso(ledger.totalIncome)}
+              {formatMeso(ledger.summary.totalIncome)}
             </p>
           </div>
           <div className="stat-card stat-card-expense">
@@ -175,18 +154,18 @@ export default function LedgerPage() {
               총 지출
             </p>
             <p className="font-bold text-lg" style={{ color: 'var(--red)' }}>
-              {formatMeso(ledger.totalExpense)}
+              {formatMeso(ledger.summary.totalExpense)}
             </p>
           </div>
-          <div className={`stat-card ${ledger.netAmount >= 0 ? 'stat-card-net-pos' : 'stat-card-net-neg'}`}>
+          <div className={`stat-card ${ledger.summary.netProfit >= 0 ? 'stat-card-net-pos' : 'stat-card-net-neg'}`}>
             <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-2)' }}>
               순수익
             </p>
             <p
               className="font-bold text-lg"
-              style={{ color: ledger.netAmount >= 0 ? 'var(--orange-light)' : 'var(--red)' }}
+              style={{ color: ledger.summary.netProfit >= 0 ? 'var(--orange-light)' : 'var(--red)' }}
             >
-              {ledger.netAmount >= 0 ? '+' : ''}{formatMeso(ledger.netAmount)}
+              {ledger.summary.netProfit >= 0 ? '+' : ''}{formatMeso(ledger.summary.netProfit)}
             </p>
           </div>
         </div>
