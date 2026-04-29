@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { charactersApi } from '../api/characters'
-import { statsApi } from '../api/stats'
-import type { CharacterROI, MapleCharacter, StatsComparison } from '../types'
+import type { CharacterROI, CharacterStatsResponse, MapleCharacter } from '../types'
 import { formatMeso } from '../utils/format'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
@@ -32,7 +31,7 @@ const JOB_GROUPS = [
 export default function CharactersPage() {
   const [characters, setCharacters] = useState<MapleCharacter[]>([])
   const [rois, setRois] = useState<Record<number, CharacterROI>>({})
-  const [comparison, setComparison] = useState<StatsComparison | null>(null)
+  const [characterStats, setCharacterStats] = useState<CharacterStatsResponse[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -45,12 +44,12 @@ export default function CharactersPage() {
   const fetchCharacters = useCallback(async () => {
     setLoading(true)
     try {
-      const [charsRes, compRes] = await Promise.all([
+      const [charsRes, statsRes] = await Promise.all([
         charactersApi.getCharacters(),
-        statsApi.getUserComparison().catch(() => null),
+        charactersApi.getCharacterStats().catch(() => ({ data: [] })),
       ])
       setCharacters(charsRes.data)
-      if (compRes) setComparison(compRes.data)
+      setCharacterStats(statsRes.data)
     } finally {
       setLoading(false)
     }
@@ -147,33 +146,43 @@ export default function CharactersPage() {
         </Button>
       </div>
 
-      {/* Anonymous comparison */}
-      {comparison && (
-        <Card icon="👥" title="익명 수익 비교">
-          <p className="text-sm mb-3" style={{ color: 'var(--text)' }}>{comparison.message}</p>
-          <div className="grid grid-cols-3 gap-2">
-            <div className="info-box text-center">
-              <p className="text-xs mb-1" style={{ color: 'var(--text-3)' }}>내 주간 평균</p>
-              <p className="font-bold text-sm" style={{ color: 'var(--primary)' }}>
-                {formatMeso(comparison.myAvgWeeklyIncome)}
-              </p>
-            </div>
-            <div className="info-box text-center">
-              <p className="text-xs mb-1" style={{ color: 'var(--text-3)' }}>전체 평균</p>
-              <p className="font-bold text-sm" style={{ color: 'var(--text)' }}>
-                {formatMeso(comparison.globalAvgWeeklyIncome)}
-              </p>
-            </div>
-            <div className="info-box text-center">
-              <p className="text-xs mb-1" style={{ color: 'var(--text-3)' }}>상위</p>
-              <p className="font-bold text-sm" style={{ color: 'var(--green)' }}>
-                {comparison.percentile}%
-              </p>
-            </div>
+      {/* 캐릭터별 수입/지출 통계 */}
+      {characterStats.length > 0 && (
+        <Card icon="📊" title="캐릭터별 수입/지출">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                  {['캐릭터', '직업', '총수입', '총지출', '순이익'].map((h) => (
+                    <th key={h} className="text-left pb-2 pr-3 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {characterStats.map((s) => (
+                  <tr key={s.characterId} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td className="py-2 pr-3 font-medium" style={{ color: 'var(--text)' }}>
+                      {s.isMain ? '⭐ ' : ''}{s.characterName}
+                    </td>
+                    <td className="py-2 pr-3 text-xs" style={{ color: 'var(--text-3)' }}>
+                      {s.jobClass ?? '—'}
+                    </td>
+                    <td className="py-2 pr-3 font-semibold" style={{ color: 'var(--green)' }}>
+                      {formatMeso(s.totalIncome)}
+                    </td>
+                    <td className="py-2 pr-3 font-semibold" style={{ color: 'var(--red)' }}>
+                      {formatMeso(s.totalExpense)}
+                    </td>
+                    <td className="py-2 font-bold" style={{ color: s.netProfit >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                      {s.netProfit >= 0 ? '+' : ''}{formatMeso(s.netProfit)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <p className="text-xs mt-2 text-right" style={{ color: 'var(--text-3)' }}>
-            참여 유저 {(comparison.totalUserCount ?? 0).toLocaleString()}명
-          </p>
         </Card>
       )}
 

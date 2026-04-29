@@ -205,6 +205,22 @@ export default function DashboardPage() {
     [allWeeks]
   )
 
+  // 일별 수입/지출 집계 (현재 로드된 주의 entries 기반)
+  const dayMap = useMemo(() => {
+    const map = new Map<string, { income: number; expense: number }>()
+    for (const entry of (ledger?.entries ?? [])) {
+      const d = entry.entryDate.slice(0, 10)
+      const cur = map.get(d) ?? { income: 0, expense: 0 }
+      if ((entry.type ?? '').toLowerCase() === 'income') {
+        cur.income += entry.amount
+      } else {
+        cur.expense += entry.amount
+      }
+      map.set(d, { ...cur })
+    }
+    return map
+  }, [ledger?.entries])
+
   // sync calendar view month to selected week when calendar opens
   useEffect(() => {
     if (showCalendar) {
@@ -327,10 +343,12 @@ export default function DashboardPage() {
                   <div className="grid grid-cols-7">
                     {row.map((day, colIdx) => {
                       const isToday = day ? toDateString(day) === todayStr : false
+                      const dayStr = day ? toDateString(day) : ''
+                      const dayData = dayStr ? dayMap.get(dayStr) : undefined
                       return (
                         <div
                           key={colIdx}
-                          className="aspect-square flex flex-col items-center justify-center"
+                          className="flex flex-col items-center py-1 min-h-[3rem]"
                         >
                           {day && (
                             <>
@@ -355,22 +373,26 @@ export default function DashboardPage() {
                                   style={{ backgroundColor: 'var(--primary)' }}
                                 />
                               )}
+                              {dayData && (
+                                <div className="flex flex-col items-center mt-0.5 gap-px">
+                                  {dayData.income > 0 && (
+                                    <span style={{ fontSize: '7px', lineHeight: 1.3, color: 'var(--green)', fontWeight: 600 }}>
+                                      +{formatMeso(dayData.income)}
+                                    </span>
+                                  )}
+                                  {dayData.expense > 0 && (
+                                    <span style={{ fontSize: '7px', lineHeight: 1.3, color: 'var(--red)', fontWeight: 600 }}>
+                                      -{formatMeso(dayData.expense)}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </>
                           )}
                         </div>
                       )
                     })}
                   </div>
-                  {net !== null && (
-                    <div className="text-right pr-2 pb-0.5">
-                      <span
-                        className="text-[10px] font-semibold"
-                        style={{ color: net >= 0 ? 'var(--green)' : 'var(--red)' }}
-                      >
-                        {net >= 0 ? '+' : ''}{formatMeso(net)}
-                      </span>
-                    </div>
-                  )}
                 </button>
               )
             })}

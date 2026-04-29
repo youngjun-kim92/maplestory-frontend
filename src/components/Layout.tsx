@@ -4,7 +4,6 @@ import { useAuth } from '../contexts/AuthContext'
 const navItems = [
   { to: '/dashboard',  label: '대시보드', icon: '📊' },
   { to: '/input',      label: '기록하기', icon: '✏️' },
-  { to: '/exp',        label: '경험치',   icon: '📈' },
   { to: '/goals',      label: '목표',     icon: '🎯' },
   { to: '/characters', label: '캐릭터',   icon: '🧙' },
   { to: '/settings',   label: '설정',     icon: '⚙️' },

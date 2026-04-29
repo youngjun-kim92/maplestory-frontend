@@ -1,31 +1,32 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Layout from './components/Layout'
-import LoginPage from './pages/LoginPage'
-import RegisterPage from './pages/RegisterPage'
-import LedgerPage from './pages/LedgerPage'
-import BossPage from './pages/BossPage'
-import HuntingPage from './pages/HuntingPage'
+import LandingPage from './pages/LandingPage'
+import DashboardPage from './pages/DashboardPage'
+import InputPage from './pages/InputPage'
 import GoalsPage from './pages/GoalsPage'
 import CharactersPage from './pages/CharactersPage'
-import StatsPage from './pages/StatsPage'
+import SettingsPage from './pages/SettingsPage'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth()
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-orange-400 text-xl animate-pulse">로딩 중...</div>
+      <div className="flex items-center justify-center min-h-screen" style={{ backgroundColor: 'var(--bg)' }}>
+        <div className="text-center">
+          <p className="text-3xl mb-2">🍁</p>
+          <p className="text-sm animate-pulse font-diary" style={{ color: 'var(--text-2)' }}>불러오는 중...</p>
+        </div>
       </div>
     )
   }
-  return user ? <>{children}</> : <Navigate to="/login" replace />
+  return user ? <>{children}</> : <Navigate to="/" replace />
 }
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth()
   if (isLoading) return null
-  return user ? <Navigate to="/" replace /> : <>{children}</>
+  return user ? <Navigate to="/dashboard" replace /> : <>{children}</>
 }
 
 export default function App() {
@@ -33,8 +34,7 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
-          <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
+          <Route path="/" element={<PublicRoute><LandingPage /></PublicRoute>} />
           <Route
             element={
               <PrivateRoute>
@@ -42,13 +42,13 @@ export default function App() {
               </PrivateRoute>
             }
           >
-            <Route path="/" element={<LedgerPage />} />
-            <Route path="/boss" element={<BossPage />} />
-            <Route path="/hunting" element={<HuntingPage />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/input" element={<InputPage />} />
             <Route path="/goals" element={<GoalsPage />} />
             <Route path="/characters" element={<CharactersPage />} />
-            <Route path="/stats" element={<StatsPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
           </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

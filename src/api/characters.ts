@@ -1,5 +1,5 @@
 import client from './client'
-import type { CharacterRequest, CharacterROI, MapleCharacter } from '../types'
+import type { CharacterRequest, CharacterROI, CharacterStatsResponse, MapleCharacter } from '../types'
 
 export const charactersApi = {
   createCharacter: (data: CharacterRequest) =>
@@ -16,4 +16,7 @@ export const charactersApi = {
 
   getCharacterROI: (id: number) =>
     client.get<CharacterROI>(`/characters/${id}/roi`),
+
+  getCharacterStats: () =>
+    client.get<CharacterStatsResponse[]>('/characters/stats'),
 }

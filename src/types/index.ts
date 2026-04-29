@@ -280,17 +280,13 @@ export interface StatsComparison {
   message: string
 }
 
-export interface ExpCalculatorRequest {
-  currentLevel: number
-  currentExpPercent: number
-  avgExpPerHour: number
-  targetLevel?: number
-}
-
-export interface ExpCalculatorResponse {
-  currentLevel: number
-  targetLevel: number
-  requiredExp: number
-  estimatedHours: number
-  estimatedMinutes: number
+export interface CharacterStatsResponse {
+  characterId: number
+  characterName: string
+  jobClass: string | null
+  isMain: boolean
+  totalIncome: number
+  totalExpense: number
+  netProfit: number
+  entryCount: number
 }
