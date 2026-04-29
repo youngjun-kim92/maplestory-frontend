@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { ledgerApi } from '../api/ledger'
@@ -21,42 +21,20 @@ import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 
 // ── 달력 헬퍼 ──
-function buildCalendarWeeks(allWeeks: WeeklySummary[], currentWeekStr: string) {
-  // 시작점: allWeeks 중 가장 오래된 주 또는 최대 3개월 전
-  let startDate: Date
-  if (allWeeks.length > 0) {
-    const earliest = new Date(allWeeks[0].weekStart + 'T00:00:00')
-    const threeMonthsAgo = new Date()
-    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3)
-    startDate = earliest < threeMonthsAgo ? getWeekStart(threeMonthsAgo) : earliest
-  } else {
-    const threeMonthsAgo = new Date()
-    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3)
-    startDate = getWeekStart(threeMonthsAgo)
-  }
-
-  const current = new Date(currentWeekStr + 'T00:00:00')
-  const weekMap = new Map(allWeeks.map((w) => [w.weekStart, w]))
-
-  // 월별 그룹 생성
-  const monthGroups = new Map<string, { year: number; month: number; weeks: { weekStart: string; data: WeeklySummary | null }[] }>()
-
-  const d = new Date(startDate)
-  while (d <= current) {
-    const ws = toDateString(d)
-    const date = new Date(ws + 'T00:00:00')
-    const monthKey = `${date.getFullYear()}-${date.getMonth()}`
-    if (!monthGroups.has(monthKey)) {
-      monthGroups.set(monthKey, { year: date.getFullYear(), month: date.getMonth(), weeks: [] })
-    }
-    monthGroups.get(monthKey)!.weeks.push({ weekStart: ws, data: weekMap.get(ws) ?? null })
-    d.setDate(d.getDate() + 7)
-  }
-
-  return [...monthGroups.values()].reverse()
-}
-
+const DAY_HEADERS = ['일', '월', '화', '수', '목', '금', '토']
 const MONTH_KO = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월']
+
+function buildMonthCalendar(year: number, month: number): (Date | null)[][] {
+  const firstDay = new Date(year, month, 1)
+  const lastDate = new Date(year, month + 1, 0).getDate()
+  const cells: (Date | null)[] = []
+  for (let i = 0; i < firstDay.getDay(); i++) cells.push(null)
+  for (let d = 1; d <= lastDate; d++) cells.push(new Date(year, month, d))
+  while (cells.length % 7 !== 0) cells.push(null)
+  const rows: (Date | null)[][] = []
+  for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7))
+  return rows
+}
 
 export default function DashboardPage() {
   const { user, refreshUser } = useAuth()
@@ -81,6 +59,10 @@ export default function DashboardPage() {
   const [sellSubmitting, setSellSubmitting] = useState(false)
 
   const [showCalendar, setShowCalendar] = useState(false)
+  const [calendarViewDate, setCalendarViewDate] = useState<{ year: number; month: number }>(() => {
+    const now = new Date()
+    return { year: now.getFullYear(), month: now.getMonth() }
+  })
 
   const weekStartStr = toDateString(weekStart)
   const weekEnd = new Date(weekStart)
@@ -217,8 +199,18 @@ export default function DashboardPage() {
     지출: w.totalExpense,
   }))
 
-  const calendarMonths = buildCalendarWeeks(allWeeks, weekStartStr)
   const currentRealWeek = toDateString(getWeekStart())
+  const weekMap = useMemo(
+    () => new Map(allWeeks.map((w) => [w.weekStart, w])),
+    [allWeeks]
+  )
+
+  // sync calendar view month to selected week when calendar opens
+  useEffect(() => {
+    if (showCalendar) {
+      setCalendarViewDate({ year: weekStart.getFullYear(), month: weekStart.getMonth() })
+    }
+  }, [showCalendar, weekStart])
 
   return (
     <div className="space-y-4">
@@ -262,88 +254,155 @@ export default function DashboardPage() {
       {/* 달력 패널 */}
       {showCalendar && (
         <div
-          className="rounded-2xl p-4 space-y-4"
+          className="rounded-2xl overflow-hidden"
           style={{ backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', boxShadow: 'var(--shadow-md)' }}
         >
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>📅 주간 달력</p>
+          {/* 월 헤더 */}
+          <div className="flex items-center justify-between px-4 pt-4 pb-2">
+            <button
+              onClick={() => setCalendarViewDate(({ year, month }) => {
+                const d = new Date(year, month - 1, 1)
+                return { year: d.getFullYear(), month: d.getMonth() }
+              })}
+              className="week-nav-btn text-xs"
+            >◀</button>
+            <p className="text-sm font-bold" style={{ color: 'var(--text)' }}>
+              {calendarViewDate.year}년 {MONTH_KO[calendarViewDate.month]}
+            </p>
+            <button
+              onClick={() => setCalendarViewDate(({ year, month }) => {
+                const d = new Date(year, month + 1, 1)
+                return { year: d.getFullYear(), month: d.getMonth() }
+              })}
+              className="week-nav-btn text-xs"
+            >▶</button>
+          </div>
+
+          {/* 요일 헤더 */}
+          <div className="grid grid-cols-7 px-3 mb-0.5">
+            {DAY_HEADERS.map((h, i) => (
+              <div
+                key={h}
+                className="text-center text-xs py-1 font-medium"
+                style={{ color: i === 0 ? 'var(--red)' : i === 6 ? '#60a5fa' : 'var(--text-3)' }}
+              >
+                {h}
+              </div>
+            ))}
+          </div>
+
+          {/* 주 행 — 행 전체가 하나의 클릭 영역 */}
+          <div className="px-2 pb-3 space-y-0.5">
+            {buildMonthCalendar(calendarViewDate.year, calendarViewDate.month).map((row, rowIdx) => {
+              const firstDay = row.find((d) => d !== null)
+              if (!firstDay) return null
+              const rowWeekStart = toDateString(getWeekStart(firstDay))
+              const weekData = weekMap.get(rowWeekStart)
+              const net = weekData ? weekData.totalIncome - weekData.totalExpense : null
+              const isSelected = rowWeekStart === weekStartStr
+              const isCurrentWeek = rowWeekStart === currentRealWeek
+              const todayStr = toDateString(new Date())
+
+              return (
+                <button
+                  key={rowIdx}
+                  onClick={() => jumpToWeek(rowWeekStart)}
+                  className="w-full rounded-xl transition-all active:scale-[0.99]"
+                  style={{
+                    backgroundColor: isSelected
+                      ? 'var(--primary-dim)'
+                      : net !== null
+                        ? net >= 0
+                          ? 'rgba(22,163,74,0.07)'
+                          : 'rgba(220,38,38,0.07)'
+                        : 'transparent',
+                    border: isSelected
+                      ? '1.5px solid var(--primary)'
+                      : isCurrentWeek
+                        ? '1.5px dashed var(--primary-glow)'
+                        : '1px solid transparent',
+                    padding: '2px',
+                  }}
+                >
+                  <div className="grid grid-cols-7">
+                    {row.map((day, colIdx) => {
+                      const isToday = day ? toDateString(day) === todayStr : false
+                      return (
+                        <div
+                          key={colIdx}
+                          className="aspect-square flex flex-col items-center justify-center"
+                        >
+                          {day && (
+                            <>
+                              <span
+                                className="text-xs leading-none"
+                                style={{
+                                  color: isToday || isSelected
+                                    ? 'var(--primary)'
+                                    : colIdx === 0
+                                      ? 'var(--red)'
+                                      : colIdx === 6
+                                        ? '#60a5fa'
+                                        : 'var(--text)',
+                                  fontWeight: isToday ? 700 : undefined,
+                                }}
+                              >
+                                {day.getDate()}
+                              </span>
+                              {isToday && (
+                                <span
+                                  className="w-1 h-1 rounded-full mt-0.5"
+                                  style={{ backgroundColor: 'var(--primary)' }}
+                                />
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  {net !== null && (
+                    <div className="text-right pr-2 pb-0.5">
+                      <span
+                        className="text-[10px] font-semibold"
+                        style={{ color: net >= 0 ? 'var(--green)' : 'var(--red)' }}
+                      >
+                        {net >= 0 ? '+' : ''}{formatMeso(net)}
+                      </span>
+                    </div>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* 하단 범례 + 닫기 */}
+          <div
+            className="flex items-center justify-between px-4 py-3"
+            style={{ borderTop: '1px solid var(--border)' }}
+          >
+            <div className="flex items-center gap-3" style={{ color: 'var(--text-3)', fontSize: '10px' }}>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-sm inline-block" style={{ backgroundColor: 'rgba(22,163,74,0.2)' }} />
+                수익
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-sm inline-block" style={{ backgroundColor: 'rgba(220,38,38,0.15)' }} />
+                지출 초과
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-sm inline-block" style={{ border: '1.5px dashed var(--primary-glow)' }} />
+                이번 주
+              </span>
+            </div>
             <button
               onClick={() => setShowCalendar(false)}
-              className="text-xs px-2 py-1 rounded-lg"
-              style={{ color: 'var(--text-3)', backgroundColor: 'var(--surface-2)' }}
+              className="text-xs px-3 py-1.5 rounded-lg font-medium transition-all"
+              style={{ color: 'var(--text-2)', backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)' }}
             >
               닫기
             </button>
           </div>
-
-          {calendarMonths.length === 0 ? (
-            <p className="text-sm text-center py-4" style={{ color: 'var(--text-3)' }}>기록이 없습니다</p>
-          ) : (
-            calendarMonths.map(({ year, month, weeks }) => (
-              <div key={`${year}-${month}`}>
-                <p className="text-xs font-semibold mb-2 uppercase tracking-wide" style={{ color: 'var(--text-2)' }}>
-                  {year}년 {MONTH_KO[month]}
-                </p>
-                <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-1.5">
-                  {weeks.map(({ weekStart: ws, data }) => {
-                    const isSelected = ws === weekStartStr
-                    const isCurrentReal = ws === currentRealWeek
-                    const net = data ? data.totalIncome - data.totalExpense : null
-                    const hasData = data !== null
-                    return (
-                      <button
-                        key={ws}
-                        onClick={() => jumpToWeek(ws)}
-                        className="rounded-xl p-2 text-center transition-all hover:scale-105 active:scale-95"
-                        style={{
-                          backgroundColor: isSelected
-                            ? 'var(--primary-dim)'
-                            : hasData
-                            ? net !== null && net >= 0
-                              ? 'rgba(22,163,74,0.08)'
-                              : 'rgba(220,38,38,0.08)'
-                            : 'var(--surface-2)',
-                          border: isSelected
-                            ? '2px solid var(--primary)'
-                            : isCurrentReal
-                            ? '2px dashed var(--primary-glow)'
-                            : '1px solid var(--border)',
-                        }}
-                      >
-                        <p
-                          className="text-xs font-bold leading-tight"
-                          style={{ color: isSelected ? 'var(--primary)' : 'var(--text)' }}
-                        >
-                          {ws.slice(5).replace('-', '/')}
-                        </p>
-                        {net !== null && (
-                          <p
-                            className="leading-tight mt-0.5"
-                            style={{
-                              fontSize: '9px',
-                              color: net >= 0 ? 'var(--green)' : 'var(--red)',
-                            }}
-                          >
-                            {net >= 0 ? '+' : ''}{formatMeso(net)}
-                          </p>
-                        )}
-                        {!hasData && (
-                          <p className="leading-tight mt-0.5" style={{ fontSize: '9px', color: 'var(--text-3)' }}>
-                            기록없음
-                          </p>
-                        )}
-                        {isCurrentReal && !isSelected && (
-                          <p className="leading-tight mt-0.5" style={{ fontSize: '9px', color: 'var(--primary)' }}>
-                            이번주
-                          </p>
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            ))
-          )}
         </div>
       )}
 

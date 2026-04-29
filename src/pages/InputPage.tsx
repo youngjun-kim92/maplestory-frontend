@@ -59,13 +59,7 @@ export default function InputPage() {
   const [characters, setCharacters] = useState<MapleCharacter[]>([])
 
   useEffect(() => {
-    bossApi.getBossList().then((r) => {
-      const list = r.data.map((b: BossMaster & { bossName?: string }) => ({
-        ...b,
-        name: b.name ?? b.bossName ?? '',
-      }))
-      setBossList(list)
-    })
+    bossApi.getBossList().then((r) => setBossList(r.data))
     charactersApi.getCharacters().then((r) => setCharacters(r.data))
   }, [])
 
@@ -98,15 +92,21 @@ function BossSection({
     killDate: toDateString(), characterId: '',
   })
 
+  // 캐릭터 로드 시 메인캐릭터를 기본값으로 설정
+  useEffect(() => {
+    const main = characters.find((c) => c.isMain)
+    if (main) setForm((p) => ({ ...p, characterId: String(main.id) }))
+  }, [characters])
+
   // 드랍 아이템 상태
   const [dropItems, setDropItems] = useState<BossDropItem[]>([])
   const [dropItemsLoading, setDropItemsLoading] = useState(false)
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
 
   const filtered = resetFilter === 'all' ? bossList : bossList.filter((b) => b.resetType === resetFilter)
-  const uniqueNames = [...new Set(filtered.map((b) => b.name))]
-  const difficulties = bossList.filter((b) => b.name === form.bossName).map((b) => b.difficulty)
-  const selectedBoss = bossList.find((b) => b.name === form.bossName && b.difficulty === form.difficulty)
+  const uniqueNames = [...new Set(filtered.map((b) => b.bossName))]
+  const difficulties = bossList.filter((b) => b.bossName === form.bossName).map((b) => b.difficulty)
+  const selectedBoss = bossList.find((b) => b.bossName === form.bossName && b.difficulty === form.difficulty)
   const maxParty = getMaxParty(form.bossName)
 
   // 보스+난이도 변경 시 드랍 아이템 자동 로드
@@ -126,7 +126,7 @@ function BossSection({
   }, [form.bossName, form.difficulty])
 
   const handleBossNameChange = (name: string) => {
-    const diffs = bossList.filter((b) => b.name === name).map((b) => b.difficulty)
+    const diffs = bossList.filter((b) => b.bossName === name).map((b) => b.difficulty)
     setForm((p) => ({ ...p, bossName: name, difficulty: diffs[0] ?? '', partySize: '1' }))
     setSelectedItems(new Set())
   }
@@ -343,10 +343,10 @@ function BossSection({
           />
           {characters.length > 0 && (
             <Select
-              label="캐릭터 (선택)"
+              label="캐릭터"
               options={[
                 { value: '', label: '선택 안함' },
-                ...characters.map((c) => ({ value: String(c.id), label: c.name })),
+                ...characters.map((c) => ({ value: String(c.id), label: c.isMain ? `⭐ ${c.name}` : c.name })),
               ]}
               value={form.characterId}
               onChange={(e) => setForm((p) => ({ ...p, characterId: e.target.value }))}
@@ -381,6 +381,12 @@ function GeneralSection({ characters }: { characters: MapleCharacter[] }) {
     amount: '', fragments: '', description: '',
     entryDate: toDateString(), characterId: '',
   })
+
+  // 캐릭터 로드 시 메인캐릭터를 기본값으로 설정
+  useEffect(() => {
+    const main = characters.find((c) => c.isMain)
+    if (main) setForm((p) => ({ ...p, characterId: String(main.id) }))
+  }, [characters])
 
   const handleTypeChange = (t: EntryType) => {
     setType(t)
@@ -558,10 +564,10 @@ function GeneralSection({ characters }: { characters: MapleCharacter[] }) {
             />
             {characters.length > 0 && (
               <Select
-                label="캐릭터 (선택)"
+                label="캐릭터"
                 options={[
                   { value: '', label: '선택 안함' },
-                  ...characters.map((c) => ({ value: String(c.id), label: c.name })),
+                  ...characters.map((c) => ({ value: String(c.id), label: c.isMain ? `⭐ ${c.name}` : c.name })),
                 ]}
                 value={form.characterId}
                 onChange={(e) => setForm((p) => ({ ...p, characterId: e.target.value }))}
