@@ -12,7 +12,7 @@ export const authApi = {
     client.get<UserResponse>('/auth/profile'),
 
   updateSolErdaPrice: (price: number) =>
-    client.put('/auth/sol-erda-price', null, { params: { price } }),
+    client.put('/auth/sol-erda-price', undefined, { params: { price } }),
 
   updateMesoBalance: (data: MesoBalanceRequest) =>
     client.put<UserResponse>('/auth/meso-balance', data),

@@ -1,58 +1,85 @@
-/**
- * 메소 단위로 숫자를 포맷합니다.
- * 예: 1234567890 → "12.3억"
- */
 export function formatMeso(amount: number): string {
-  if (amount >= 1_0000_0000) {
-    return `${(amount / 1_0000_0000).toFixed(1)}억`
+  if (amount === 0) return '0'
+  const isNeg = amount < 0
+  const abs = Math.abs(amount)
+
+  let result: string
+  if (abs >= 100_000_000) {
+    const eok = Math.floor(abs / 100_000_000)
+    const rem = Math.floor((abs % 100_000_000) / 10_000)
+    result = rem > 0 ? `${eok}억 ${rem.toLocaleString()}만` : `${eok}억`
+  } else if (abs >= 10_000_000) {
+    const man = Math.floor(abs / 10_000)
+    result = `${man.toLocaleString()}만`
+  } else if (abs >= 10_000) {
+    const man = Math.floor(abs / 10_000)
+    result = `${man}만`
+  } else {
+    result = abs.toLocaleString()
   }
-  if (amount >= 1_0000) {
-    return `${(amount / 1_0000).toFixed(0)}만`
-  }
-  return amount.toLocaleString()
+
+  return isNeg ? `-${result}` : result
 }
 
-/**
- * 메소를 상세하게 포맷합니다.
- * 예: 1234567890 → "1,234,567,890"
- */
 export function formatMesoFull(amount: number): string {
   return amount.toLocaleString() + ' 메소'
 }
 
-/**
- * 날짜를 YYYY-MM-DD 형식으로 반환합니다.
- */
 export function toDateString(date: Date = new Date()): string {
-  return date.toISOString().split('T')[0]
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
 }
 
-/**
- * 날짜를 한국어 형식으로 포맷합니다.
- */
 export function formatDate(dateStr: string): string {
-  const d = new Date(dateStr)
-  return `${d.getMonth() + 1}월 ${d.getDate()}일`
+  const d = new Date(dateStr + 'T00:00:00')
+  return `${d.getMonth() + 1}/${d.getDate()}`
 }
 
-/**
- * 주 범위를 한국어로 포맷합니다.
- */
+const DAY_KO = ['일', '월', '화', '수', '목', '금', '토']
+
+export function formatDateKo(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00')
+  return `${d.getMonth() + 1}/${d.getDate()}(${DAY_KO[d.getDay()]})`
+}
+
 export function formatWeekRange(weekStart: string, weekEnd: string): string {
-  const start = new Date(weekStart)
-  const end = new Date(weekEnd)
-  return `${start.getMonth() + 1}/${start.getDate()} ~ ${end.getMonth() + 1}/${end.getDate()}`
+  const s = new Date(weekStart + 'T00:00:00')
+  const e = new Date(weekEnd + 'T00:00:00')
+  return `${s.getMonth() + 1}/${s.getDate()}(${DAY_KO[s.getDay()]}) ~ ${e.getMonth() + 1}/${e.getDate()}(${DAY_KO[e.getDay()]})`
 }
 
-/**
- * 수익/지출 카테고리를 한국어로 변환합니다.
- */
+/** 해당 날짜가 속하는 주의 목요일(주간 시작일)을 반환 */
+export function getWeekStart(date: Date = new Date()): Date {
+  const d = new Date(date)
+  d.setHours(0, 0, 0, 0)
+  const day = d.getDay()
+  const diff = (day + 3) % 7  // 목요일(4)까지의 거리
+  d.setDate(d.getDate() - diff)
+  return d
+}
+
 export const CATEGORY_LABELS: Record<string, string> = {
-  BOSS: '보스',
-  HUNTING: '사냥',
-  TRADE: '거래',
-  CUBE: '큐브',
-  STARFORCE: '스타포스',
-  OTHER_INCOME: '기타수입',
-  OTHER_EXPENSE: '기타지출',
+  boss: '보스',
+  hunting: '사냥',
+  trade: '거래',
+  auction: '경매장',
+  sol_erda: '솔에르다',
+  cube: '큐브',
+  starforce: '스타포스',
+  spell_trace: '주문서',
+  other: '기타',
+}
+
+export const CATEGORY_ICONS: Record<string, string> = {
+  boss: '⚔️',
+  hunting: '👾',
+  trade: '🤝',
+  auction: '🏪',
+  sol_erda: '🔮',
+  cube: '🎲',
+  starforce: '⭐',
+  spell_trace: '📜',
+  other: '💫',
 }

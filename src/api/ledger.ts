@@ -1,5 +1,5 @@
 import client from './client'
-import type { LedgerEntryRequest, WeeklyLedger, WeeklySummary } from '../types'
+import type { IncomeTrend, LedgerEntryRequest, LedgerStat, WeeklyLedger, WeeklySummary } from '../types'
 
 export const ledgerApi = {
   getWeeklyLedger: (week?: string) =>
@@ -14,6 +14,9 @@ export const ledgerApi = {
   getWeeksList: () =>
     client.get<WeeklySummary[]>('/ledger/weeks'),
 
+  getIncomeTrend: (weeks = 8) =>
+    client.get<IncomeTrend[]>('/ledger/income-trend', { params: { weeks } }),
+
   getCategoryStats: (weeks = 4) =>
-    client.get<[string, number][]>('/ledger/stats', { params: { weeks } }),
+    client.get<LedgerStat[]>('/ledger/stats', { params: { weeks } }),
 }

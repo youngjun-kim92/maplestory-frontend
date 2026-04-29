@@ -11,21 +11,21 @@ import Input from '../components/ui/Input'
 import Select from '../components/ui/Select'
 
 const TYPE_OPTIONS = [
-  { value: 'INCOME', label: '수입' },
-  { value: 'EXPENSE', label: '지출' },
+  { value: 'income' as const, label: '수입' },
+  { value: 'expense' as const, label: '지출' },
 ]
 
 const INCOME_CATEGORIES = [
-  { value: 'BOSS', label: '보스' },
-  { value: 'HUNTING', label: '사냥' },
-  { value: 'TRADE', label: '거래' },
-  { value: 'OTHER_INCOME', label: '기타 수입' },
+  { value: 'boss', label: '보스' },
+  { value: 'hunting', label: '사냥' },
+  { value: 'trade', label: '거래' },
+  { value: 'other', label: '기타 수입' },
 ]
 
 const EXPENSE_CATEGORIES = [
-  { value: 'CUBE', label: '큐브' },
-  { value: 'STARFORCE', label: '스타포스' },
-  { value: 'OTHER_EXPENSE', label: '기타 지출' },
+  { value: 'cube', label: '큐브' },
+  { value: 'starforce', label: '스타포스' },
+  { value: 'other', label: '기타 지출' },
 ]
 
 export default function LedgerPage() {
@@ -40,8 +40,8 @@ export default function LedgerPage() {
   const [mesoSubmitting, setMesoSubmitting] = useState(false)
 
   const [form, setForm] = useState({
-    type: 'INCOME' as EntryType,
-    category: 'BOSS' as EntryCategory,
+    type: 'income' as EntryType,
+    category: 'boss' as EntryCategory,
     amount: '',
     description: '',
     entryDate: toDateString(),
@@ -63,10 +63,10 @@ export default function LedgerPage() {
     charactersApi.getCharacters().then((r) => setCharacters(r.data))
   }, [fetchLedger])
 
-  const categoryOptions = form.type === 'INCOME' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
+  const categoryOptions = form.type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
 
   const handleTypeChange = (type: EntryType) => {
-    const defaultCat = type === 'INCOME' ? 'BOSS' : 'CUBE'
+    const defaultCat = type === 'income' ? 'boss' : 'cube'
     setForm((p) => ({ ...p, type, category: defaultCat as EntryCategory }))
   }
 
@@ -264,7 +264,7 @@ export default function LedgerPage() {
                       className="flex-1 py-2 rounded-xl text-sm font-medium transition-all"
                       style={
                         form.type === opt.value
-                          ? opt.value === 'INCOME'
+                          ? opt.value === 'income'
                             ? { backgroundColor: 'rgba(52,211,153,0.15)', color: 'var(--green)', border: '1px solid rgba(52,211,153,0.3)' }
                             : { backgroundColor: 'rgba(248,113,113,0.15)', color: 'var(--red)', border: '1px solid rgba(248,113,113,0.3)' }
                           : { backgroundColor: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border-2)' }
@@ -343,12 +343,12 @@ export default function LedgerPage() {
                   <span
                     className="text-xs font-bold px-2 py-0.5 rounded-lg shrink-0"
                     style={
-                      entry.type === 'INCOME'
+                      entry.type === 'income'
                         ? { backgroundColor: 'rgba(52,211,153,0.12)', color: 'var(--green)' }
                         : { backgroundColor: 'rgba(248,113,113,0.12)', color: 'var(--red)' }
                     }
                   >
-                    {entry.type === 'INCOME' ? '수입' : '지출'}
+                    {entry.type === 'income' ? '수입' : '지출'}
                   </span>
                   <span
                     className="text-xs px-2 py-0.5 rounded-lg shrink-0"
@@ -369,9 +369,9 @@ export default function LedgerPage() {
                   <div className="text-right">
                     <p
                       className="font-semibold text-sm"
-                      style={{ color: entry.type === 'INCOME' ? 'var(--green)' : 'var(--red)' }}
+                      style={{ color: entry.type === 'income' ? 'var(--green)' : 'var(--red)' }}
                     >
-                      {entry.type === 'INCOME' ? '+' : '-'}{formatMeso(entry.amount)}
+                      {entry.type === 'income' ? '+' : '-'}{formatMeso(entry.amount)}
                     </p>
                     <p className="text-xs" style={{ color: 'var(--text-3)' }}>{formatDate(entry.entryDate)}</p>
                   </div>

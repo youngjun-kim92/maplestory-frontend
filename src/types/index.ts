@@ -1,6 +1,7 @@
 // ====== 인증 타입 ======
 export interface AuthResponse {
   token: string
+  user?: UserResponse
 }
 
 export interface UserResponse {
@@ -29,15 +30,18 @@ export interface MesoBalanceRequest {
 }
 
 // ====== 가계부 타입 ======
-export type EntryType = 'INCOME' | 'EXPENSE'
+// 백엔드 API는 소문자 값 사용 (income/expense, boss/hunting/...)
+export type EntryType = 'income' | 'expense'
 export type EntryCategory =
-  | 'BOSS'
-  | 'HUNTING'
-  | 'TRADE'
-  | 'CUBE'
-  | 'STARFORCE'
-  | 'OTHER_INCOME'
-  | 'OTHER_EXPENSE'
+  | 'boss'
+  | 'hunting'
+  | 'trade'
+  | 'auction'
+  | 'sol_erda'
+  | 'cube'
+  | 'starforce'
+  | 'spell_trace'
+  | 'other'
 
 export interface LedgerEntry {
   id: number
@@ -82,6 +86,55 @@ export interface WeeklySummary {
   totalExpense: number
 }
 
+export interface IncomeTrend {
+  weekStart: string
+  bossIncome: number
+  huntingIncome: number
+  auctionIncome: number
+  totalIncome: number
+}
+
+export interface LedgerStat {
+  category: string
+  type: string
+  total: number
+  count: number
+  average: number
+}
+
+// ====== 보스 드랍 타입 ======
+export type ItemCategory = 'dark_accessory' | 'radiant_accessory' | 'dawn_accessory' | 'other'
+export type DropStatus = 'holding' | 'listed' | 'sold'
+
+export interface BossDropItem {
+  id: number
+  bossName: string
+  difficulty: string
+  itemName: string
+  itemCategory: ItemCategory
+}
+
+export interface BossDrop {
+  id: number
+  bossKillId: number
+  bossName: string
+  difficulty: string
+  itemName: string
+  itemCategory: ItemCategory
+  status: DropStatus
+  saleAmount: number | null
+  saleDate: string | null
+  weekStart: string
+  characterId: number | null
+  characterName: string | null
+  createdAt: string
+}
+
+export interface BossDropSellRequest {
+  saleAmount: number
+  saleDate: string
+}
+
 // ====== 보스 타입 ======
 export type ResetType = 'daily' | 'weekly' | 'monthly'
 
@@ -99,14 +152,17 @@ export interface BossKill {
   difficulty: string
   crystalPrice: number
   killDate: string
+  partySize: number | null
   characterId: number | null
   characterName: string | null
+  createdAt: string
 }
 
 export interface BossKillRequest {
   bossName: string
   difficulty: string
   killDate: string
+  partySize?: number
   characterId?: number | null
 }
 
@@ -168,9 +224,10 @@ export interface GoalEstimate {
   itemName: string
   targetAmount: number
   currentSavings: number
-  remainingAmount: number
-  avgWeeklyIncome: number
-  estimatedWeeks: number
+  remaining: number
+  progressPercent: number
+  avgWeeklyNet: number
+  weeksRemaining: number
   estimatedDate: string
 }
 
@@ -194,18 +251,20 @@ export interface CharacterRequest {
 
 export interface CharacterROI {
   characterId: number
-  characterName: string
+  name: string
   initialInvestment: number
-  totalBossRevenue: number
-  weeklyBossRevenue: number
-  weeksUntilBreakEven: number
-  alreadyProfitable: boolean
+  cumulativeBossIncome: number
+  weeklyAvgBossIncome: number
+  weeksToBreakEven: number
+  isBreakEvenReached: boolean
+  remainingToBreakEven: number
 }
 
 // ====== 통계 타입 ======
 export interface StatsComparison {
-  myWeeklyAvg: number
-  allUsersWeeklyAvg: number
+  myAvgWeeklyIncome: number
+  globalAvgWeeklyIncome: number
+  totalUserCount: number
   percentile: number
   message: string
 }
