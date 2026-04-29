@@ -149,10 +149,12 @@ export type ResetType = 'daily' | 'weekly' | 'monthly'
 
 export interface BossMaster {
   id: number
-  name: string
+  bossName: string
   difficulty: string
   crystalPrice: number
+  maxAttemptsPerWeek: number
   resetType: ResetType
+  maxPartySize: number
 }
 
 export interface BossKill {

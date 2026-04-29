@@ -37,16 +37,16 @@ export default function BossPage() {
   })
 
   const selectedBoss = bossList.find(
-    (b) => b.name === form.bossName && b.difficulty === form.difficulty
+    (b) => b.bossName === form.bossName && b.difficulty === form.difficulty
   )
 
   const filteredBossList = resetFilter === 'all'
     ? bossList
     : bossList.filter((b) => b.resetType === resetFilter)
 
-  const uniqueBossNames = [...new Set(filteredBossList.map((b) => b.name))]
+  const uniqueBossNames = [...new Set(filteredBossList.map((b) => b.bossName))]
   const difficultiesForBoss = bossList
-    .filter((b) => b.name === form.bossName)
+    .filter((b) => b.bossName === form.bossName)
     .map((b) => b.difficulty)
 
   const fetchData = useCallback(async () => {
@@ -72,7 +72,7 @@ export default function BossPage() {
   }, [fetchData])
 
   const handleBossNameChange = (name: string) => {
-    const diffs = bossList.filter((b) => b.name === name).map((b) => b.difficulty)
+    const diffs = bossList.filter((b) => b.bossName === name).map((b) => b.difficulty)
     setForm((p) => ({ ...p, bossName: name, difficulty: diffs[0] || '' }))
   }
 

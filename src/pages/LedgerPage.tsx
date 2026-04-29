@@ -86,6 +86,7 @@ export default function LedgerPage() {
       setForm((p) => ({ ...p, amount: '', description: '' }))
       setShowForm(false)
       await fetchLedger()
+      await refreshUser()
     } finally {
       setSubmitting(false)
     }
@@ -95,6 +96,7 @@ export default function LedgerPage() {
     if (!confirm('이 항목을 삭제하시겠습니까?')) return
     await ledgerApi.deleteEntry(id)
     await fetchLedger()
+    await refreshUser()
   }
 
   const handleMesoSubmit = async (e: { preventDefault(): void }) => {

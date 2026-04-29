@@ -18,14 +18,6 @@ const DIFFICULTY_KO: Record<string, string> = {
 }
 const diffLabel = (d: string) => DIFFICULTY_KO[d] ?? d
 
-// 보스별 최대 파티 인원
-const BOSS_MAX_PARTY: Record<string, number> = {
-  '더스크': 4,
-  '칼로스': 4,
-  '발키리 아르테리아': 4,
-}
-const getMaxParty = (name: string) => BOSS_MAX_PARTY[name] ?? 6
-
 const RESET_TABS = [
   { key: 'all' as const,     label: '전체' },
   { key: 'daily' as const,   label: '일간' },
@@ -107,7 +99,14 @@ function BossSection({
   const uniqueNames = [...new Set(filtered.map((b) => b.bossName))]
   const difficulties = bossList.filter((b) => b.bossName === form.bossName).map((b) => b.difficulty)
   const selectedBoss = bossList.find((b) => b.bossName === form.bossName && b.difficulty === form.difficulty)
-  const maxParty = getMaxParty(form.bossName)
+  const maxParty = selectedBoss?.maxPartySize ?? 6
+
+  // partySize가 maxPartySize를 초과하면 자동 조정
+  useEffect(() => {
+    if (selectedBoss && Number(form.partySize) > selectedBoss.maxPartySize) {
+      setForm((p) => ({ ...p, partySize: String(selectedBoss.maxPartySize) }))
+    }
+  }, [form.bossName, form.difficulty]) // eslint-disable-line
 
   // 보스+난이도 변경 시 드랍 아이템 자동 로드
   useEffect(() => {
@@ -369,7 +368,7 @@ function BossSection({
 
 /* ─── 수익 / 지출 ─── */
 function GeneralSection({ characters }: { characters: MapleCharacter[] }) {
-  const { user } = useAuth()
+  const { user, refreshUser } = useAuth()
   const navigate = useNavigate()
   const [type, setType] = useState<EntryType>('income')
   const [category, setCategory] = useState<EntryCategory>('hunting')
@@ -422,6 +421,7 @@ function GeneralSection({ characters }: { characters: MapleCharacter[] }) {
       setForm((p) => ({ ...p, amount: '', fragments: '', description: '' }))
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
+      await refreshUser()
       // 지출 시 목표 지연 경고 표시
       const data = res.data as LedgerAddResponse
       if (data.goalWarnings && data.goalWarnings.length > 0) {
