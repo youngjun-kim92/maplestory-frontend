@@ -24,17 +24,14 @@ import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import Select from '../components/ui/Select'
 
-// 목요일 시작: 목(0) 금(1) 토(2) 일(3) 월(4) 화(5) 수(6)
-const DAY_HEADERS = ['목', '금', '토', '일', '월', '화', '수']
+const DAY_HEADERS = ['일', '월', '화', '수', '목', '금', '토']
 const MONTH_KO = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월']
 
 function buildMonthCalendar(year: number, month: number): (Date | null)[][] {
   const firstDay = new Date(year, month, 1)
   const lastDate = new Date(year, month + 1, 0).getDate()
   const cells: (Date | null)[] = []
-  // 목요일 기준 오프셋: getDay() 0=일,1=월,...,4=목,...,6=토
-  const offsetFromThursday = (firstDay.getDay() - 4 + 7) % 7
-  for (let i = 0; i < offsetFromThursday; i++) cells.push(null)
+  for (let i = 0; i < firstDay.getDay(); i++) cells.push(null)
   for (let d = 1; d <= lastDate; d++) cells.push(new Date(year, month, d))
   while (cells.length % 7 !== 0) cells.push(null)
   const rows: (Date | null)[][] = []
@@ -269,11 +266,11 @@ export default function DashboardPage() {
     if (!showCalendar) return
     let cancelled = false
     const rows = buildMonthCalendar(calendarViewDate.year, calendarViewDate.month)
+    // 행의 첫날만 보면 목요일이 행 중간에 올 때 해당 주가 누락됨 → 모든 날짜 기준으로 fetch
     const weekStarts = [...new Set(
-      rows.flatMap(row => {
-        const firstDay = row.find(d => d !== null)
-        return firstDay ? [toDateString(getWeekStart(firstDay))] : []
-      })
+      rows.flatMap(row =>
+        row.filter((d): d is Date => d !== null).map(d => toDateString(getWeekStart(d)))
+      )
     )]
     Promise.all(weekStarts.map(ws => ledgerApi.getWeeklyLedger(ws)))
       .then(results => {
@@ -364,96 +361,110 @@ export default function DashboardPage() {
               <div
                 key={h}
                 className="text-center text-xs py-1 font-medium"
-                style={{ color: i === 3 ? 'var(--red)' : i === 2 ? '#93c5fd' : 'var(--text-3)' }}
+                style={{ color: i === 0 ? 'var(--red)' : i === 6 ? '#93c5fd' : 'var(--text-3)' }}
               >{h}</div>
             ))}
           </div>
 
           <div className="px-2 pb-3 space-y-0.5">
             {buildMonthCalendar(calendarViewDate.year, calendarViewDate.month).map((row, rowIdx) => {
-              const firstDay = row.find((d) => d !== null)
-              if (!firstDay) return null
-              const rowWeekStart = toDateString(getWeekStart(firstDay))
-              const weekData = weekMap.get(rowWeekStart)
-              const net = weekData ? weekData.totalIncome - weekData.totalExpense : null
-              const isSelected = rowWeekStart === weekStartStr
-              const isCurrentWeek = rowWeekStart === currentRealWeek
               const todayStr = toDateString(new Date())
+              const weekEndStr = toDateString(weekEnd)
+
+              // 이 행에 선택된 주(목~수) 셀이 있는지 → 행 테두리용
+              const rowHasSelected = row.some(d => {
+                if (!d) return false
+                const ds = toDateString(d)
+                return ds >= weekStartStr && ds <= weekEndStr
+              })
+              // 이 행에 현재 실제 주 셀이 있는지 → 점선 테두리용
+              const rowHasCurrentWeek = row.some(
+                d => d !== null && toDateString(getWeekStart(d)) === currentRealWeek
+              )
 
               return (
-                <button
+                <div
                   key={rowIdx}
-                  onClick={() => jumpToWeek(rowWeekStart)}
-                  className="w-full rounded-xl transition-all active:scale-[0.99]"
+                  className="grid grid-cols-7 rounded-xl"
                   style={{
-                    backgroundColor: isSelected
-                      ? 'var(--primary-dim)'
-                      : net !== null
-                        ? net >= 0 ? 'rgba(74,222,128,0.05)' : 'rgba(248,113,113,0.05)'
-                        : 'transparent',
-                    border: isSelected
+                    border: rowHasSelected
                       ? '1.5px solid var(--primary)'
-                      : isCurrentWeek
+                      : rowHasCurrentWeek
                         ? '1.5px dashed var(--primary-glow)'
                         : '1px solid transparent',
-                    padding: '2px',
                   }}
                 >
-                  <div className="grid grid-cols-7">
-                    {row.map((day, colIdx) => {
-                      const isToday = day ? toDateString(day) === todayStr : false
-                      const dayStr = day ? toDateString(day) : ''
-                      const dayData = dayStr ? calendarDayMap.get(dayStr) : undefined
-                      return (
-                        <div key={colIdx} className="flex flex-col items-center py-1.5 min-h-[4.5rem]">
-                          {day && (
-                            <>
-                              <div
-                                className="w-6 h-6 flex items-center justify-center rounded-full"
-                                style={isToday ? { backgroundColor: 'var(--primary)' } : {}}
-                              >
-                                <span
-                                  style={{
-                                    fontSize: '11px',
-                                    lineHeight: 1,
-                                    fontWeight: isToday ? 700 : 500,
-                                    color: isToday
-                                      ? '#fff'
-                                      : isSelected
-                                        ? 'var(--primary)'
-                                        : colIdx === 3
-                                          ? 'var(--red)'
-                                          : colIdx === 2
-                                            ? '#93c5fd'
-                                            : 'var(--text)',
-                                  }}
-                                >{day.getDate()}</span>
-                              </div>
-                              {/* 일별 요약 */}
-                              <div className="flex flex-col items-center mt-1 gap-0.5 w-full px-0.5">
-                                {dayData && dayData.income > 0 && (
-                                  <span style={{ fontSize: '9px', lineHeight: 1.2, color: 'var(--green)', fontWeight: 600, textAlign: 'center' }}>
-                                    +{formatMeso(dayData.income)}
-                                  </span>
-                                )}
-                                {dayData && dayData.expense > 0 && (
-                                  <span style={{ fontSize: '9px', lineHeight: 1.2, color: 'var(--red)', fontWeight: 600, textAlign: 'center' }}>
-                                    -{formatMeso(dayData.expense)}
-                                  </span>
-                                )}
-                                {dayData && dayData.erda > 0 && (
-                                  <span style={{ fontSize: '8.5px', lineHeight: 1.2, color: '#c4b5fd', fontWeight: 600, textAlign: 'center' }}>
-                                    🔹{dayData.erda}
-                                  </span>
-                                )}
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                </button>
+                  {row.map((day, colIdx) => {
+                    const isToday = day ? toDateString(day) === todayStr : false
+                    const dayStr = day ? toDateString(day) : ''
+                    const dayData = dayStr ? calendarDayMap.get(dayStr) : undefined
+                    const isInSelected = dayStr !== '' && dayStr >= weekStartStr && dayStr <= toDateString(weekEnd)
+                    const dayWeekStart = day ? toDateString(getWeekStart(day)) : ''
+                    const dayWeekData = dayWeekStart ? weekMap.get(dayWeekStart) : undefined
+                    const dayNet = dayWeekData ? dayWeekData.totalIncome - dayWeekData.totalExpense : null
+
+                    return (
+                      <div
+                        key={colIdx}
+                        className="flex flex-col items-center py-1.5 min-h-[4.5rem] transition-colors"
+                        style={{
+                          backgroundColor: !day ? undefined
+                            : isInSelected ? 'var(--primary-dim)'
+                            : dayNet !== null
+                              ? dayNet >= 0 ? 'rgba(63,185,80,0.04)' : 'rgba(248,81,73,0.04)'
+                              : undefined,
+                          cursor: day ? 'pointer' : 'default',
+                          borderRadius: colIdx === 0 ? '0.6rem 0 0 0.6rem' : colIdx === 6 ? '0 0.6rem 0.6rem 0' : undefined,
+                        }}
+                        onClick={() => day && jumpToWeek(toDateString(getWeekStart(day)))}
+                      >
+                        {day && (
+                          <>
+                            <div
+                              className="w-6 h-6 flex items-center justify-center rounded-full"
+                              style={isToday ? { backgroundColor: 'var(--primary)' } : {}}
+                            >
+                              <span
+                                style={{
+                                  fontSize: '11px',
+                                  lineHeight: 1,
+                                  fontWeight: isToday ? 700 : 500,
+                                  color: isToday
+                                    ? '#fff'
+                                    : isInSelected
+                                      ? 'var(--primary)'
+                                      : colIdx === 0
+                                        ? 'var(--red)'
+                                        : colIdx === 6
+                                          ? '#93c5fd'
+                                          : 'var(--text)',
+                                }}
+                              >{day.getDate()}</span>
+                            </div>
+                            {/* 일별 요약 */}
+                            <div className="flex flex-col items-center mt-1 gap-0.5 w-full px-0.5">
+                              {dayData && dayData.income > 0 && (
+                                <span style={{ fontSize: '9px', lineHeight: 1.2, color: 'var(--green)', fontWeight: 600, textAlign: 'center' }}>
+                                  +{formatMeso(dayData.income)}
+                                </span>
+                              )}
+                              {dayData && dayData.expense > 0 && (
+                                <span style={{ fontSize: '9px', lineHeight: 1.2, color: 'var(--red)', fontWeight: 600, textAlign: 'center' }}>
+                                  -{formatMeso(dayData.expense)}
+                                </span>
+                              )}
+                              {dayData && dayData.erda > 0 && (
+                                <span style={{ fontSize: '8.5px', lineHeight: 1.2, color: '#c4b5fd', fontWeight: 600, textAlign: 'center' }}>
+                                  🔹{dayData.erda}
+                                </span>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
               )
             })}
           </div>
