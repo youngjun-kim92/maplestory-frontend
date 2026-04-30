@@ -24,14 +24,17 @@ import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import Select from '../components/ui/Select'
 
-const DAY_HEADERS = ['일', '월', '화', '수', '목', '금', '토']
+// 목요일 시작: 목(0) 금(1) 토(2) 일(3) 월(4) 화(5) 수(6)
+const DAY_HEADERS = ['목', '금', '토', '일', '월', '화', '수']
 const MONTH_KO = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월']
 
 function buildMonthCalendar(year: number, month: number): (Date | null)[][] {
   const firstDay = new Date(year, month, 1)
   const lastDate = new Date(year, month + 1, 0).getDate()
   const cells: (Date | null)[] = []
-  for (let i = 0; i < firstDay.getDay(); i++) cells.push(null)
+  // 목요일 기준 오프셋: getDay() 0=일,1=월,...,4=목,...,6=토
+  const offsetFromThursday = (firstDay.getDay() - 4 + 7) % 7
+  for (let i = 0; i < offsetFromThursday; i++) cells.push(null)
   for (let d = 1; d <= lastDate; d++) cells.push(new Date(year, month, d))
   while (cells.length % 7 !== 0) cells.push(null)
   const rows: (Date | null)[][] = []
@@ -361,7 +364,7 @@ export default function DashboardPage() {
               <div
                 key={h}
                 className="text-center text-xs py-1 font-medium"
-                style={{ color: i === 0 ? 'var(--red)' : i === 6 ? '#93c5fd' : 'var(--text-3)' }}
+                style={{ color: i === 3 ? 'var(--red)' : i === 2 ? '#93c5fd' : 'var(--text-3)' }}
               >{h}</div>
             ))}
           </div>
@@ -418,9 +421,9 @@ export default function DashboardPage() {
                                       ? '#fff'
                                       : isSelected
                                         ? 'var(--primary)'
-                                        : colIdx === 0
+                                        : colIdx === 3
                                           ? 'var(--red)'
-                                          : colIdx === 6
+                                          : colIdx === 2
                                             ? '#93c5fd'
                                             : 'var(--text)',
                                   }}
