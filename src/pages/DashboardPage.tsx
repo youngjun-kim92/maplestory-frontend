@@ -405,23 +405,27 @@ export default function DashboardPage() {
                         <div key={colIdx} className="flex flex-col items-center py-1.5 min-h-[4.5rem]">
                           {day && (
                             <>
-                              <span
-                                style={{
-                                  fontSize: '11px',
-                                  lineHeight: 1,
-                                  fontWeight: isToday ? 700 : 500,
-                                  color: isToday || isSelected
-                                    ? 'var(--primary)'
-                                    : colIdx === 0
-                                      ? 'var(--red)'
-                                      : colIdx === 6
-                                        ? '#93c5fd'
-                                        : 'var(--text)',
-                                }}
-                              >{day.getDate()}</span>
-                              {isToday && (
-                                <span className="w-1 h-1 rounded-full mt-0.5" style={{ backgroundColor: 'var(--primary)' }} />
-                              )}
+                              <div
+                                className="w-6 h-6 flex items-center justify-center rounded-full"
+                                style={isToday ? { backgroundColor: 'var(--primary)' } : {}}
+                              >
+                                <span
+                                  style={{
+                                    fontSize: '11px',
+                                    lineHeight: 1,
+                                    fontWeight: isToday ? 700 : 500,
+                                    color: isToday
+                                      ? '#fff'
+                                      : isSelected
+                                        ? 'var(--primary)'
+                                        : colIdx === 0
+                                          ? 'var(--red)'
+                                          : colIdx === 6
+                                            ? '#93c5fd'
+                                            : 'var(--text)',
+                                  }}
+                                >{day.getDate()}</span>
+                              </div>
                               {/* 일별 요약 */}
                               <div className="flex flex-col items-center mt-1 gap-0.5 w-full px-0.5">
                                 {dayData && dayData.income > 0 && (
@@ -567,36 +571,22 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* ── 섹션 2: 솔 에르다 조각 ── */}
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-3)' }}>
-              🔮 솔 에르다 조각
-            </p>
-            <div
-              className="relative overflow-hidden rounded-xl flex items-center gap-4 px-5 py-4"
-              style={{
-                backgroundColor: 'var(--surface)',
-                border: '1px solid var(--border)',
-                borderLeft: '3px solid #a78bfa',
-              }}
-            >
-              <span style={{ fontSize: '2rem', lineHeight: 1, opacity: 0.7 }}>🔮</span>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-3)' }}>
-                  {isThisWeek ? '이번 주' : '해당 주'} 획득 조각 수
-                </p>
-                <p className="font-bold text-2xl leading-none" style={{ color: '#c4b5fd' }}>
-                  {weeklyErdaFragments}개
-                </p>
-              </div>
-              <div
-                className="ml-auto text-right"
-                style={{ color: 'var(--text-3)', fontSize: '11px', lineHeight: 1.6 }}
-              >
-                <p>사냥 기록의</p>
-                <p>솔 에르다 조각 합산</p>
-              </div>
-            </div>
+          {/* ── 솔 에르다 조각 (컴팩트) ── */}
+          <div
+            className="flex items-center gap-3 px-4 py-3 rounded-xl"
+            style={{
+              backgroundColor: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderLeft: '3px solid #a78bfa',
+            }}
+          >
+            <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>🔮</span>
+            <span className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>
+              {isThisWeek ? '이번 주' : '해당 주'} 솔 에르다 조각
+            </span>
+            <span className="ml-auto font-bold text-xl" style={{ color: '#c4b5fd' }}>
+              {weeklyErdaFragments}개
+            </span>
           </div>
         </>
       )}
@@ -1072,7 +1062,7 @@ function EntryTableRow({
           : <span style={{ color: 'var(--text-3)', fontSize: '10px' }}>—</span>
         }
       </td>
-      <td className="px-2 py-2.5">
+      <td className="px-2 py-2.5" style={{ whiteSpace: 'nowrap' }}>
         <div className="flex items-center justify-end gap-1">
           <button
             onClick={onEdit}

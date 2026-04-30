@@ -104,6 +104,17 @@ export default function CharactersPage() {
   const handleSubmit = async (e: { preventDefault(): void }) => {
     e.preventDefault()
     if (!form.name) return
+
+    if (form.isMain) {
+      const existingMain = characters.find((c) => c.isMain && c.id !== editingId)
+      if (existingMain) {
+        const ok = window.confirm(
+          `'${existingMain.name}'이(가) 현재 메인 캐릭터입니다.\n'${form.name}'으로 메인 캐릭터를 변경하시겠습니까?`
+        )
+        if (!ok) return
+      }
+    }
+
     setSubmitting(true)
     try {
       const payload = {

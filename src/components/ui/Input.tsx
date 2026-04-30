@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes } from 'react'
+import type { InputHTMLAttributes, FocusEvent } from 'react'
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string
@@ -6,6 +6,17 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 }
 
 export default function Input({ label, error, className = '', ...props }: InputProps) {
+  const handleFocus = (e: FocusEvent<HTMLInputElement>) => {
+    if (props.type === 'number' && String(props.value) === '0') {
+      props.onChange?.({
+        ...e,
+        target: Object.assign(e.target, { value: '' }),
+        currentTarget: Object.assign(e.currentTarget, { value: '' }),
+      } as React.ChangeEvent<HTMLInputElement>)
+    }
+    props.onFocus?.(e)
+  }
+
   return (
     <div className="flex flex-col gap-1.5">
       {label && (
@@ -16,6 +27,7 @@ export default function Input({ label, error, className = '', ...props }: InputP
       <input
         className={`form-field ${error ? 'form-field-error' : ''} ${className}`}
         {...props}
+        onFocus={handleFocus}
       />
       {error && (
         <span className="text-xs font-medium" style={{ color: 'var(--red)' }}>{error}</span>

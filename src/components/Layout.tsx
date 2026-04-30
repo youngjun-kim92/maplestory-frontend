@@ -86,6 +86,9 @@ export default function Layout() {
               </NavLink>
             </div>
           ))}
+          <div className="mt-auto px-3 pb-3 hidden lg:block">
+            <p style={{ color: 'var(--text-3)', fontSize: '10px', textAlign: 'center' }}>made by 콩만</p>
+          </div>
         </nav>
 
         {/* Main */}
