@@ -6,7 +6,7 @@ import { bossApi } from '../api/boss'
 import { charactersApi } from '../api/characters'
 import { useAuth } from '../contexts/AuthContext'
 import type { BossKill, BossMaster, BossStats, MapleCharacter, ResetType } from '../types'
-import { formatMeso, formatDate, toDateString } from '../utils/format'
+import { formatMeso, formatDate, toDateString, difficultyLabel } from '../utils/format'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Select from '../components/ui/Select'
@@ -47,7 +47,7 @@ export default function BossPage() {
     : bossList.filter((b) => b.resetType === resetFilter)
 
   const uniqueBossNames = [...new Set(filteredBossList.map((b) => b.bossName))]
-  const difficultiesForBoss = bossList
+  const difficultiesForBoss = filteredBossList
     .filter((b) => b.bossName === form.bossName)
     .map((b) => b.difficulty)
 
@@ -74,7 +74,7 @@ export default function BossPage() {
   }, [fetchData])
 
   const handleBossNameChange = (name: string) => {
-    const diffs = bossList.filter((b) => b.bossName === name).map((b) => b.difficulty)
+    const diffs = filteredBossList.filter((b) => b.bossName === name).map((b) => b.difficulty)
     setForm((p) => ({ ...p, bossName: name, difficulty: diffs[0] || '' }))
   }
 
@@ -187,7 +187,7 @@ export default function BossPage() {
                 label="난이도"
                 options={
                   difficultiesForBoss.length > 0
-                    ? difficultiesForBoss.map((d) => ({ value: d, label: d }))
+                    ? difficultiesForBoss.map((d) => ({ value: d, label: difficultyLabel(d) }))
                     : [{ value: '', label: '보스를 먼저 선택하세요' }]
                 }
                 value={form.difficulty}
@@ -244,7 +244,7 @@ export default function BossPage() {
                   <div>
                     <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>
                       {kill.bossName}
-                      <span className="text-xs ml-2" style={{ color: 'var(--text-2)' }}>({kill.difficulty})</span>
+                      <span className="text-xs ml-2" style={{ color: 'var(--text-2)' }}>({difficultyLabel(kill.difficulty)})</span>
                     </p>
                     {kill.characterName && (
                       <p className="text-xs" style={{ color: 'var(--text-3)' }}>{kill.characterName}</p>
@@ -307,7 +307,7 @@ export default function BossPage() {
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-sm w-5" style={{ color: 'var(--orange-light)' }}>#{i + 1}</span>
                         <span className="text-sm" style={{ color: 'var(--text)' }}>{stat.bossName}</span>
-                        <span className="text-xs" style={{ color: 'var(--text-2)' }}>({stat.difficulty})</span>
+                        <span className="text-xs" style={{ color: 'var(--text-2)' }}>({difficultyLabel(stat.difficulty)})</span>
                       </div>
                       <div className="text-right">
                         <p className="font-semibold text-sm" style={{ color: 'var(--orange-light)' }}>{formatMeso(stat.totalRevenue)}</p>

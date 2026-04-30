@@ -193,14 +193,10 @@ export default function HuntingPage() {
                 min={0}
               />
             </div>
-            {form.solErdaFragments && user && user.solErdaFragmentPrice > 0 && (
-              <div
-                className="text-xs px-3 py-2 rounded-xl"
-                style={{ backgroundColor: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.2)', color: 'var(--orange-light)' }}
-              >
-                솔 에르다 조각 환산: {(Number(form.solErdaFragments) * user.solErdaFragmentPrice).toLocaleString()} 메소
-                → 합산 총수익: {(Number(form.income) + Number(form.solErdaFragments) * user.solErdaFragmentPrice).toLocaleString()} 메소
-              </div>
+            {form.solErdaFragments && Number(form.solErdaFragments) > 0 && user && user.solErdaFragmentPrice > 0 && (
+              <p className="text-xs pl-1" style={{ color: 'var(--text-2)' }}>
+                🔮 {form.solErdaFragments}개 × {user.solErdaFragmentPrice.toLocaleString()}메소 = {formatMeso(Number(form.solErdaFragments) * user.solErdaFragmentPrice)} 메소
+              </p>
             )}
             <div className="grid grid-cols-2 gap-3">
               <Input
@@ -243,7 +239,7 @@ export default function HuntingPage() {
                       {sess.durationMinutes}분
                       {sess.solErdaFragments > 0 && (
                         <span style={{ color: '#a78bfa' }} className="ml-1">
-                          · 솔에르다 {sess.solErdaFragments}개
+                          · 솔 에르다 조각 {sess.solErdaFragments}개
                         </span>
                       )}
                       {sess.characterName && ` · ${sess.characterName}`}

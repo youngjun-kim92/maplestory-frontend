@@ -6,7 +6,10 @@ import { authApi } from '../api/auth'
 import { bossApi } from '../api/boss'
 import { charactersApi } from '../api/characters'
 import { useAuth } from '../contexts/AuthContext'
-import type { BossDrop, LedgerEntry, MapleCharacter, WeeklyLedger, WeeklySummary } from '../types'
+import type {
+  BossDrop, EntryCategory, EntryType, LedgerEntry,
+  MapleCharacter, WeeklyLedger, WeeklySummary,
+} from '../types'
 import {
   formatMeso,
   formatDateKo,
@@ -15,12 +18,12 @@ import {
   toDateString,
   CATEGORY_ICONS,
   CATEGORY_LABELS,
+  difficultyLabel,
 } from '../utils/format'
-import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
+import Select from '../components/ui/Select'
 
-// ── 달력 헬퍼 ──
 const DAY_HEADERS = ['일', '월', '화', '수', '목', '금', '토']
 const MONTH_KO = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월']
 
@@ -64,18 +67,29 @@ export default function DashboardPage() {
     return { year: now.getFullYear(), month: now.getMonth() }
   })
 
+  // ── 수정 모달 상태 ──
+  const [editingEntry, setEditingEntry] = useState<LedgerEntry | null>(null)
+  const [editForm, setEditForm] = useState({
+    type: 'income' as EntryType,
+    category: 'boss' as EntryCategory,
+    amount: '',
+    description: '',
+    entryDate: '',
+    characterId: '',
+    solErdaFragments: '',
+  })
+  const [editSubmitting, setEditSubmitting] = useState(false)
+
   const weekStartStr = toDateString(weekStart)
   const weekEnd = new Date(weekStart)
   weekEnd.setDate(weekEnd.getDate() + 6)
   const isThisWeek = weekStartStr === toDateString(getWeekStart())
 
+  // 항상 목요일 기준 week 파라미터 전달
   const fetchLedger = useCallback(async () => {
     setLoading(true)
     try {
-      const currentWeekStr = toDateString(getWeekStart())
-      const res = await ledgerApi.getWeeklyLedger(
-        weekStartStr === currentWeekStr ? undefined : weekStartStr
-      )
+      const res = await ledgerApi.getWeeklyLedger(weekStartStr)
       setLedger(res.data)
     } finally {
       setLoading(false)
@@ -95,10 +109,7 @@ export default function DashboardPage() {
   const fetchDrops = useCallback(async () => {
     setDropsLoading(true)
     try {
-      const currentWeekStr = toDateString(getWeekStart())
-      const res = await bossApi.getWeeklyDrops(
-        weekStartStr === currentWeekStr ? undefined : weekStartStr
-      )
+      const res = await bossApi.getWeeklyDrops(weekStartStr)
       setDrops(res.data)
     } catch {
       setDrops([])
@@ -157,8 +168,43 @@ export default function DashboardPage() {
   const handleDeleteEntry = async (id: number) => {
     if (!confirm('이 항목을 삭제하시겠습니까?')) return
     await ledgerApi.deleteEntry(id)
-    await fetchLedger()
-    await fetchAllWeeks()
+    await Promise.all([fetchLedger(), fetchAllWeeks(), refreshUser()])
+  }
+
+  const openEditEntry = (entry: LedgerEntry) => {
+    setEditingEntry(entry)
+    setEditForm({
+      type: entry.type,
+      category: entry.category,
+      amount: String(entry.amount),
+      description: entry.description ?? '',
+      entryDate: entry.entryDate.slice(0, 10),
+      characterId: entry.characterId ? String(entry.characterId) : '',
+      solErdaFragments: entry.solErdaFragments ? String(entry.solErdaFragments) : '',
+    })
+  }
+
+  const handleEditSubmit = async (e: { preventDefault(): void }) => {
+    e.preventDefault()
+    if (!editingEntry) return
+    const amount = Number(editForm.amount)
+    if (!amount || amount < 0) return
+    setEditSubmitting(true)
+    try {
+      await ledgerApi.updateEntry(editingEntry.id, {
+        type: editForm.type,
+        category: editForm.category,
+        amount,
+        description: editForm.description,
+        entryDate: editForm.entryDate,
+        characterId: editForm.characterId ? Number(editForm.characterId) : null,
+        solErdaFragments: editForm.solErdaFragments ? Number(editForm.solErdaFragments) : null,
+      })
+      setEditingEntry(null)
+      await Promise.all([fetchLedger(), fetchAllWeeks(), refreshUser()])
+    } finally {
+      setEditSubmitting(false)
+    }
   }
 
   const openMesoForm = () => {
@@ -206,51 +252,55 @@ export default function DashboardPage() {
     [allWeeks]
   )
 
-  // 일별 수입/지출 집계 (현재 로드된 주의 entries 기반)
+  // 일별 집계 (수입 + 지출 + 솔 에르다 조각)
   const dayMap = useMemo(() => {
-    const map = new Map<string, { income: number; expense: number }>()
+    const map = new Map<string, { income: number; expense: number; erda: number }>()
     for (const entry of (ledger?.entries ?? [])) {
       const d = entry.entryDate.slice(0, 10)
-      const cur = map.get(d) ?? { income: 0, expense: 0 }
+      const cur = map.get(d) ?? { income: 0, expense: 0, erda: 0 }
       if ((entry.type ?? '').toLowerCase() === 'income') {
         cur.income += entry.amount
       } else {
         cur.expense += entry.amount
       }
+      cur.erda += entry.solErdaFragments ?? 0
       map.set(d, { ...cur })
     }
     return map
   }, [ledger?.entries])
 
-  // sync calendar view month to selected week when calendar opens
   useEffect(() => {
     if (showCalendar) {
       setCalendarViewDate({ year: weekStart.getFullYear(), month: weekStart.getMonth() })
     }
   }, [showCalendar, weekStart])
 
+  const weeklyErdaFragments = entries.reduce((s, e) => s + (e.solErdaFragments ?? 0), 0)
+
+  const panelStyle = {
+    backgroundColor: 'var(--surface)',
+    border: '1px solid var(--border)',
+  }
+
+  const thStyle = { color: 'var(--text-3)' } as const
+
   return (
     <div className="space-y-4">
       {/* 헤더 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold font-heading" style={{ color: 'var(--text)' }}>
-            📊 대시보드
-          </h1>
+          <h1 className="text-xl font-bold" style={{ color: 'var(--text)' }}>📊 대시보드</h1>
           <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>
             {formatWeekRange(weekStartStr, toDateString(weekEnd))}
           </p>
         </div>
         <div className="flex items-center gap-1">
-          {/* 달력 버튼 */}
           <button
             className="week-nav-btn text-base"
             onClick={() => setShowCalendar((v) => !v)}
             title="달력으로 보기"
             style={showCalendar ? { backgroundColor: 'var(--primary-dim)', color: 'var(--primary)', border: '1px solid var(--primary-glow)' } : {}}
-          >
-            📅
-          </button>
+          >📅</button>
           <button className="week-nav-btn" onClick={() => goWeek(-1)}>◀</button>
           {!isThisWeek && (
             <button className="week-nav-btn text-xs" onClick={() => { setWeekStart(getWeekStart()); setShowCalendar(false) }}>
@@ -262,19 +312,13 @@ export default function DashboardPage() {
             onClick={() => goWeek(1)}
             disabled={isThisWeek}
             style={isThisWeek ? { opacity: 0.3, cursor: 'not-allowed' } : {}}
-          >
-            ▶
-          </button>
+          >▶</button>
         </div>
       </div>
 
       {/* 달력 패널 */}
       {showCalendar && (
-        <div
-          className="rounded-2xl overflow-hidden"
-          style={{ backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', boxShadow: 'var(--shadow-md)' }}
-        >
-          {/* 월 헤더 */}
+        <div className="rounded-xl overflow-hidden" style={{ ...panelStyle, boxShadow: 'var(--shadow-md)' }}>
           <div className="flex items-center justify-between px-4 pt-4 pb-2">
             <button
               onClick={() => setCalendarViewDate(({ year, month }) => {
@@ -295,20 +339,16 @@ export default function DashboardPage() {
             >▶</button>
           </div>
 
-          {/* 요일 헤더 */}
           <div className="grid grid-cols-7 px-3 mb-0.5">
             {DAY_HEADERS.map((h, i) => (
               <div
                 key={h}
                 className="text-center text-xs py-1 font-medium"
-                style={{ color: i === 0 ? 'var(--red)' : i === 6 ? '#60a5fa' : 'var(--text-3)' }}
-              >
-                {h}
-              </div>
+                style={{ color: i === 0 ? 'var(--red)' : i === 6 ? '#93c5fd' : 'var(--text-3)' }}
+              >{h}</div>
             ))}
           </div>
 
-          {/* 주 행 — 행 전체가 하나의 클릭 영역 */}
           <div className="px-2 pb-3 space-y-0.5">
             {buildMonthCalendar(calendarViewDate.year, calendarViewDate.month).map((row, rowIdx) => {
               const firstDay = row.find((d) => d !== null)
@@ -329,9 +369,7 @@ export default function DashboardPage() {
                     backgroundColor: isSelected
                       ? 'var(--primary-dim)'
                       : net !== null
-                        ? net >= 0
-                          ? 'rgba(22,163,74,0.07)'
-                          : 'rgba(220,38,38,0.07)'
+                        ? net >= 0 ? 'rgba(74,222,128,0.05)' : 'rgba(248,113,113,0.05)'
                         : 'transparent',
                     border: isSelected
                       ? '1.5px solid var(--primary)'
@@ -347,10 +385,7 @@ export default function DashboardPage() {
                       const dayStr = day ? toDateString(day) : ''
                       const dayData = dayStr ? dayMap.get(dayStr) : undefined
                       return (
-                        <div
-                          key={colIdx}
-                          className="flex flex-col items-center py-1 min-h-[3rem]"
-                        >
+                        <div key={colIdx} className="flex flex-col items-center py-1 min-h-[3.2rem]">
                           {day && (
                             <>
                               <span
@@ -361,33 +396,32 @@ export default function DashboardPage() {
                                     : colIdx === 0
                                       ? 'var(--red)'
                                       : colIdx === 6
-                                        ? '#60a5fa'
+                                        ? '#93c5fd'
                                         : 'var(--text)',
                                   fontWeight: isToday ? 700 : undefined,
                                 }}
-                              >
-                                {day.getDate()}
-                              </span>
+                              >{day.getDate()}</span>
                               {isToday && (
-                                <span
-                                  className="w-1 h-1 rounded-full mt-0.5"
-                                  style={{ backgroundColor: 'var(--primary)' }}
-                                />
+                                <span className="w-1 h-1 rounded-full mt-0.5" style={{ backgroundColor: 'var(--primary)' }} />
                               )}
-                              {dayData && (
-                                <div className="flex flex-col items-center mt-0.5 gap-px">
-                                  {dayData.income > 0 && (
-                                    <span style={{ fontSize: '7px', lineHeight: 1.3, color: 'var(--green)', fontWeight: 600 }}>
-                                      +{formatMeso(dayData.income)}
-                                    </span>
-                                  )}
-                                  {dayData.expense > 0 && (
-                                    <span style={{ fontSize: '7px', lineHeight: 1.3, color: 'var(--red)', fontWeight: 600 }}>
-                                      -{formatMeso(dayData.expense)}
-                                    </span>
-                                  )}
-                                </div>
-                              )}
+                              {/* 일별 요약 — 항상 표시 */}
+                              <div className="flex flex-col items-center mt-0.5 gap-px">
+                                {dayData && dayData.income > 0 && (
+                                  <span style={{ fontSize: '7px', lineHeight: 1.3, color: 'var(--green)', fontWeight: 600 }}>
+                                    +{formatMeso(dayData.income)}
+                                  </span>
+                                )}
+                                {dayData && dayData.expense > 0 && (
+                                  <span style={{ fontSize: '7px', lineHeight: 1.3, color: 'var(--red)', fontWeight: 600 }}>
+                                    -{formatMeso(dayData.expense)}
+                                  </span>
+                                )}
+                                {dayData && dayData.erda > 0 && (
+                                  <span style={{ fontSize: '7px', lineHeight: 1.3, color: '#c4b5fd', fontWeight: 600 }}>
+                                    🔹{dayData.erda}
+                                  </span>
+                                )}
+                              </div>
                             </>
                           )}
                         </div>
@@ -399,161 +433,98 @@ export default function DashboardPage() {
             })}
           </div>
 
-          {/* 하단 범례 + 닫기 */}
-          <div
-            className="flex items-center justify-between px-4 py-3"
-            style={{ borderTop: '1px solid var(--border)' }}
-          >
+          <div className="flex items-center justify-between px-4 py-3" style={{ borderTop: '1px solid var(--border)' }}>
             <div className="flex items-center gap-3" style={{ color: 'var(--text-3)', fontSize: '10px' }}>
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-sm inline-block" style={{ backgroundColor: 'rgba(22,163,74,0.2)' }} />
-                수익
+                <span className="w-2 h-2 rounded-sm inline-block" style={{ backgroundColor: 'rgba(74,222,128,0.2)' }} />수익
               </span>
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-sm inline-block" style={{ backgroundColor: 'rgba(220,38,38,0.15)' }} />
-                지출 초과
+                <span className="w-2 h-2 rounded-sm inline-block" style={{ backgroundColor: 'rgba(248,113,113,0.15)' }} />지출 초과
               </span>
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-sm inline-block" style={{ border: '1.5px dashed var(--primary-glow)' }} />
-                이번 주
+                <span className="w-2 h-2 rounded-sm inline-block" style={{ border: '1.5px dashed var(--primary-glow)' }} />이번 주
               </span>
             </div>
             <button
               onClick={() => setShowCalendar(false)}
-              className="text-xs px-3 py-1.5 rounded-lg font-medium transition-all"
+              className="text-xs px-3 py-1.5 rounded-lg font-medium"
               style={{ color: 'var(--text-2)', backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)' }}
-            >
-              닫기
-            </button>
+            >닫기</button>
           </div>
         </div>
       )}
 
-      {/* 이번 주 요약 (3칸) */}
+      {/* ── 섹션 1: 메소 KPI ── */}
       {ledger && (
-        <div className="grid grid-cols-3 gap-3">
-          <div className="stat-card stat-card-income">
-            <p className="text-xs font-semibold mb-1" style={{ color: 'var(--text-2)' }}>수입</p>
-            <p className="font-bold text-base leading-tight" style={{ color: 'var(--green)' }}>
-              {formatMeso(ledger.summary.totalIncome)}
+        <>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-3)' }}>
+              💰 메소
             </p>
-          </div>
-          <div className="stat-card stat-card-expense">
-            <p className="text-xs font-semibold mb-1" style={{ color: 'var(--text-2)' }}>지출</p>
-            <p className="font-bold text-base leading-tight" style={{ color: 'var(--red)' }}>
-              {formatMeso(ledger.summary.totalExpense)}
-            </p>
-          </div>
-          <div className={`stat-card ${ledger.summary.netProfit >= 0 ? 'stat-card-net-pos' : 'stat-card-net-neg'}`}>
-            <p className="text-xs font-semibold mb-1" style={{ color: 'var(--text-2)' }}>순수익</p>
-            <p
-              className="font-bold text-base leading-tight"
-              style={{ color: ledger.summary.netProfit >= 0 ? 'var(--primary)' : 'var(--red)' }}
-            >
-              {ledger.summary.netProfit >= 0 ? '+' : ''}{formatMeso(ledger.summary.netProfit)}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* 캐릭터 탭 */}
-      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-        <button
-          className={`char-tab ${selectedCharId === 'all' ? 'char-tab-active' : ''}`}
-          onClick={() => setSelectedCharId('all')}
-        >
-          전체
-        </button>
-        {characters.map((c) => (
-          <button
-            key={c.id}
-            className={`char-tab ${selectedCharId === c.id ? 'char-tab-active' : ''}`}
-            onClick={() => setSelectedCharId(c.id)}
-          >
-            {c.isMain ? '⭐ ' : ''}{c.name}
-          </button>
-        ))}
-        <button
-          className="char-tab"
-          style={{ borderStyle: 'dashed' }}
-          onClick={() => navigate('/characters')}
-        >
-          + 추가
-        </button>
-      </div>
-
-
-      {/* ── 2컬럼 메인 그리드 ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-        {/* 왼쪽: 이번 주 내역 */}
-        <Card title={isThisWeek ? '이번 주 내역' : '해당 주 내역'} icon="📋">
-          {loading ? (
-            <p className="text-sm text-center py-8 animate-pulse" style={{ color: 'var(--text-3)' }}>
-              불러오는 중...
-            </p>
-          ) : entries.length === 0 ? (
-            <div className="text-center py-10">
-              <p className="text-3xl mb-2">📝</p>
-              <p className="text-sm" style={{ color: 'var(--text-3)' }}>아직 기록이 없어요</p>
-              <button
-                onClick={() => navigate('/input')}
-                className="mt-3 text-sm underline"
-                style={{ color: 'var(--primary)' }}
-              >
-                첫 기록 추가하기
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-1.5 max-h-80 overflow-y-auto pr-1">
-              {entries.map((entry) => (
-                <EntryRow key={entry.id} entry={entry} onDelete={() => handleDeleteEntry(entry.id)} />
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {[
+                { label: '이번 주 수입', value: `+${formatMeso(ledger.summary.totalIncome)}`, color: 'var(--green)', icon: '📥' },
+                { label: '이번 주 지출', value: `-${formatMeso(ledger.summary.totalExpense)}`, color: 'var(--red)', icon: '📤' },
+                {
+                  label: '순수익',
+                  value: `${ledger.summary.netProfit >= 0 ? '+' : ''}${formatMeso(ledger.summary.netProfit)}`,
+                  color: ledger.summary.netProfit >= 0 ? 'var(--primary)' : 'var(--red)',
+                  icon: ledger.summary.netProfit >= 0 ? '📈' : '📉',
+                },
+                {
+                  label: '현재 보유 메소',
+                  value: formatMeso(user?.totalMeso ?? 0),
+                  color: 'var(--primary)',
+                  icon: '🏦',
+                  action: openMesoForm,
+                },
+              ].map((kpi) => (
+                <div
+                  key={kpi.label}
+                  className="relative overflow-hidden rounded-xl"
+                  style={{
+                    backgroundColor: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    borderLeft: `3px solid ${kpi.color}`,
+                    padding: '0.9rem 1rem',
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-1">
+                    <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)', letterSpacing: '0.05em' }}>
+                      {kpi.label}
+                    </p>
+                    {'action' in kpi && kpi.action && (
+                      <button
+                        onClick={kpi.action}
+                        className="text-xs px-1.5 py-0.5 rounded shrink-0"
+                        style={{ color: 'var(--primary)', backgroundColor: 'var(--primary-dim)', lineHeight: 1.4 }}
+                      >수정</button>
+                    )}
+                  </div>
+                  <p
+                    className="font-bold mt-2 leading-none"
+                    style={{ color: kpi.color, fontSize: 'clamp(1rem, 2.2vw, 1.35rem)' }}
+                  >
+                    {kpi.value}
+                  </p>
+                  <span
+                    className="absolute bottom-2 right-2.5 select-none pointer-events-none"
+                    style={{ fontSize: '1.8rem', lineHeight: 1, opacity: 0.1 }}
+                  >
+                    {kpi.icon}
+                  </span>
+                </div>
               ))}
             </div>
-          )}
-        </Card>
 
-        {/* 오른쪽: 메소 잔액 + 차트 */}
-        <div className="space-y-4">
-          {/* 메소 잔액 */}
-          <Card>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="font-semibold text-sm" style={{ color: 'var(--text)' }}>💰 현재 보유 메소</h3>
-              {!showMesoForm && (
-                <button
-                  onClick={openMesoForm}
-                  className="text-xs px-2.5 py-1 rounded-lg"
-                  style={{ color: 'var(--primary)', backgroundColor: 'var(--primary-dim)', border: '1px solid var(--primary-glow)' }}
-                >
-                  수정
-                </button>
-              )}
-            </div>
-
-            {!showMesoForm ? (
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { label: '인벤토리', value: user?.inventoryMeso ?? 0, highlight: false },
-                  { label: '창고',     value: user?.storageMeso ?? 0,   highlight: false },
-                  { label: '합계',     value: user?.totalMeso ?? 0,     highlight: true },
-                ].map((item) => (
-                  <div
-                    key={item.label}
-                    className="rounded-xl p-2 text-center"
-                    style={{
-                      backgroundColor: item.highlight ? 'var(--primary-dim)' : 'var(--surface-2)',
-                      border: `1px solid ${item.highlight ? 'var(--primary-glow)' : 'var(--border)'}`,
-                    }}
-                  >
-                    <p className="text-xs mb-0.5" style={{ color: 'var(--text-3)' }}>{item.label}</p>
-                    <p className="font-bold text-sm" style={{ color: item.highlight ? 'var(--primary)' : 'var(--text)' }}>
-                      {formatMeso(item.value)}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <form onSubmit={handleMesoSubmit} className="space-y-3">
+            {/* 메소 수정 폼 */}
+            {showMesoForm && (
+              <form
+                onSubmit={handleMesoSubmit}
+                className="mt-3 rounded-xl p-4 space-y-3"
+                style={panelStyle}
+              >
+                <p className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>💰 보유 메소 업데이트</p>
                 <div className="grid grid-cols-2 gap-3">
                   <Input
                     label="인벤토리 메소"
@@ -576,12 +547,121 @@ export default function DashboardPage() {
                 </div>
               </form>
             )}
-          </Card>
+          </div>
 
-          {/* 수익 추이 차트 */}
+          {/* ── 섹션 2: 솔 에르다 조각 ── */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-3)' }}>
+              🔮 솔 에르다 조각
+            </p>
+            <div
+              className="relative overflow-hidden rounded-xl flex items-center gap-4 px-5 py-4"
+              style={{
+                backgroundColor: 'var(--surface)',
+                border: '1px solid var(--border)',
+                borderLeft: '3px solid #a78bfa',
+              }}
+            >
+              <span style={{ fontSize: '2rem', lineHeight: 1, opacity: 0.7 }}>🔮</span>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-3)' }}>
+                  {isThisWeek ? '이번 주' : '해당 주'} 획득 조각 수
+                </p>
+                <p className="font-bold text-2xl leading-none" style={{ color: '#c4b5fd' }}>
+                  {weeklyErdaFragments}개
+                </p>
+              </div>
+              <div
+                className="ml-auto text-right"
+                style={{ color: 'var(--text-3)', fontSize: '11px', lineHeight: 1.6 }}
+              >
+                <p>사냥 기록의</p>
+                <p>솔 에르다 조각 합산</p>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* 캐릭터 탭 */}
+      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+        <button
+          className={`char-tab ${selectedCharId === 'all' ? 'char-tab-active' : ''}`}
+          onClick={() => setSelectedCharId('all')}
+        >전체</button>
+        {characters.map((c) => (
+          <button
+            key={c.id}
+            className={`char-tab ${selectedCharId === c.id ? 'char-tab-active' : ''}`}
+            onClick={() => setSelectedCharId(c.id)}
+          >{c.isMain ? '⭐ ' : ''}{c.name}</button>
+        ))}
+        <button
+          className="char-tab"
+          style={{ borderStyle: 'dashed' }}
+          onClick={() => navigate('/characters')}
+        >+ 추가</button>
+      </div>
+
+      {/* 메인 2컬럼 */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+
+        {/* 왼쪽: 내역 테이블 */}
+        <div className="lg:col-span-3 rounded-xl overflow-hidden" style={panelStyle}>
+          <div className="dark-panel-header">
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+              📋 {isThisWeek ? '이번 주' : '해당 주'} 내역
+            </h3>
+            <span className="text-xs" style={{ color: 'var(--text-3)' }}>{entries.length}건</span>
+          </div>
+
+          {loading ? (
+            <p className="text-sm text-center py-8 animate-pulse" style={{ color: 'var(--text-3)' }}>불러오는 중...</p>
+          ) : entries.length === 0 ? (
+            <div className="text-center py-10">
+              <p className="text-3xl mb-2">📝</p>
+              <p className="text-sm" style={{ color: 'var(--text-3)' }}>아직 기록이 없어요</p>
+              <button
+                onClick={() => navigate('/input')}
+                className="mt-3 text-sm underline"
+                style={{ color: 'var(--primary)' }}
+              >첫 기록 추가하기</button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto max-h-80 overflow-y-auto">
+              <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ backgroundColor: 'var(--surface-2)', position: 'sticky', top: 0, zIndex: 1 }}>
+                    <th className="px-3 py-2 text-left text-xs font-medium" style={{ ...thStyle, width: '56px' }}>유형</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium" style={thStyle}>내역</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium" style={{ ...thStyle, width: '110px' }}>메소</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium" style={{ color: '#a78bfa', width: '72px' }}>🔮 조각</th>
+                    <th style={{ width: '56px' }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {entries.map((entry, i) => (
+                    <EntryTableRow
+                      key={entry.id}
+                      entry={entry}
+                      onDelete={() => handleDeleteEntry(entry.id)}
+                      onEdit={() => openEditEntry(entry)}
+                      isLast={i === entries.length - 1}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* 오른쪽: 차트 + 누적 */}
+        <div className="lg:col-span-2 space-y-4">
+
           {chartData.length > 0 && (
-            <Card title="주간 수익 추이" icon="📈">
-              <ResponsiveContainer width="100%" height={160}>
+            <div className="rounded-xl p-4" style={panelStyle}>
+              <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text)' }}>📈 주간 수익 추이</h3>
+              <ResponsiveContainer width="100%" height={148}>
                 <BarChart data={chartData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
                   <XAxis
                     dataKey="week"
@@ -593,215 +673,216 @@ export default function DashboardPage() {
                   <Tooltip
                     formatter={(v) => formatMeso(v as number)}
                     contentStyle={{
-                      backgroundColor: 'var(--surface)',
-                      border: '1px solid var(--border)',
-                      borderRadius: '12px',
-                      fontSize: '12px',
-                      boxShadow: 'var(--shadow)',
+                      backgroundColor: 'var(--surface-2)',
+                      border: '1px solid var(--border-2)',
+                      borderRadius: '8px',
+                      fontSize: '11px',
                     }}
                     cursor={{ fill: 'var(--primary-dim)' }}
                   />
                   <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: '10px' }} />
-                  <Bar dataKey="수입" fill="#16A34A" radius={[3, 3, 0, 0]} maxBarSize={28} />
-                  <Bar dataKey="지출" fill="#DC2626" radius={[3, 3, 0, 0]} maxBarSize={28} />
+                  <Bar dataKey="수입" fill="#4ade80" radius={[3, 3, 0, 0]} maxBarSize={22} />
+                  <Bar dataKey="지출" fill="#f87171" radius={[3, 3, 0, 0]} maxBarSize={22} />
                 </BarChart>
               </ResponsiveContainer>
-            </Card>
+            </div>
           )}
-        </div>
-      </div>
 
-      {/* 이번 주 물욕템 드랍 */}
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-2)' }}>
-          📦 {isThisWeek ? '이번 주' : '해당 주'} 드랍 아이템
-        </p>
-        <Card>
-          {dropsLoading ? (
-            <p className="text-sm text-center py-6 animate-pulse" style={{ color: 'var(--text-3)' }}>불러오는 중...</p>
-          ) : drops.length === 0 ? (
-            <p className="text-sm text-center py-6" style={{ color: 'var(--text-3)' }}>드랍 기록이 없어요</p>
-          ) : (
+          <div className="rounded-xl p-4" style={panelStyle}>
+            <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text)' }}>📋 전체 누적</h3>
             <div className="space-y-2">
-              {drops.map((drop) => (
-                <div key={drop.id}>
-                  <div className="list-row">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{drop.itemName}</p>
-                        <span
-                          className="text-xs px-2 py-0.5 rounded-full"
-                          style={
-                            drop.status === 'sold'
-                              ? { backgroundColor: 'rgba(22,163,74,0.12)', color: 'var(--green)' }
-                              : drop.status === 'listed'
-                              ? { backgroundColor: 'rgba(234,179,8,0.12)', color: '#ca8a04' }
-                              : { backgroundColor: 'var(--primary-dim)', color: 'var(--primary)' }
-                          }
-                        >
-                          {drop.status === 'sold' ? '✅ 판매 완료' : drop.status === 'listed' ? '🏪 경매장 등록 중' : '📦 보유 중'}
-                        </span>
-                      </div>
-                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
-                        {drop.bossName} {drop.difficulty} {drop.characterName && `• ${drop.characterName}`}
-                      </p>
-                      {drop.status === 'sold' && drop.saleAmount && (
-                        <p className="text-xs mt-0.5 font-medium" style={{ color: 'var(--green)' }}>
-                          {formatMeso(drop.saleAmount)} 판매
-                        </p>
-                      )}
-                    </div>
-                    {drop.status === 'holding' && (
-                      <button
-                        onClick={() => handleListDrop(drop.id)}
-                        className="text-xs px-2.5 py-1.5 rounded-lg shrink-0 font-medium transition-all"
-                        style={{ backgroundColor: 'rgba(234,179,8,0.1)', color: '#ca8a04', border: '1px solid rgba(234,179,8,0.3)' }}
-                      >
-                        경매장 등록
-                      </button>
-                    )}
-                    {drop.status === 'listed' && (
-                      <button
-                        onClick={() => {
-                          setSellingId(drop.id)
-                          setSellForm({ saleAmount: '', saleDate: toDateString() })
-                        }}
-                        className="text-xs px-2.5 py-1.5 rounded-lg shrink-0 font-medium transition-all"
-                        style={{ backgroundColor: 'var(--primary-dim)', color: 'var(--primary)', border: '1px solid var(--primary-glow)' }}
-                      >
-                        판매 처리
-                      </button>
-                    )}
-                  </div>
-
-                  {/* 판매 처리 인라인 폼 */}
-                  {sellingId === drop.id && drop.status === 'listed' && (
-                    <form
-                      onSubmit={handleSellSubmit}
-                      className="mt-2 p-3 rounded-xl space-y-2"
-                      style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)' }}
-                    >
-                      <p className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>판매 처리 — {drop.itemName}</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        <Input
-                          label="판매 금액 (메소)"
-                          type="number"
-                          placeholder="예: 3500000000"
-                          value={sellForm.saleAmount}
-                          onChange={(e) => setSellForm((p) => ({ ...p, saleAmount: e.target.value }))}
-                          min={1}
-                        />
-                        <Input
-                          label="판매 날짜"
-                          type="date"
-                          value={sellForm.saleDate}
-                          onChange={(e) => setSellForm((p) => ({ ...p, saleDate: e.target.value }))}
-                        />
-                      </div>
-                      {sellForm.saleAmount && (
-                        <p className="text-xs" style={{ color: 'var(--text-2)' }}>
-                          = {formatMeso(Number(sellForm.saleAmount))}
-                        </p>
-                      )}
-                      <div className="flex gap-2">
-                        <Button type="submit" size="sm" loading={sellSubmitting} className="flex-1">
-                          판매 완료 처리
-                        </Button>
-                        <Button type="button" variant="ghost" size="sm" onClick={() => setSellingId(null)}>
-                          취소
-                        </Button>
-                      </div>
-                      <p className="text-xs" style={{ color: 'var(--text-3)' }}>
-                        💡 판매 처리 시 경매장 수익으로 가계부에 자동 반영됩니다.
-                      </p>
-                    </form>
-                  )}
+              {[
+                { label: '총 수입', value: cumulativeIncome, color: 'var(--green)', prefix: '+' },
+                { label: '총 지출', value: cumulativeExpense, color: 'var(--red)', prefix: '-' },
+                { label: '총 순수익', value: cumulativeNet, color: cumulativeNet >= 0 ? 'var(--primary)' : 'var(--red)', prefix: cumulativeNet >= 0 ? '+' : '' },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className="flex items-center justify-between py-2 px-3 rounded-lg"
+                  style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)' }}
+                >
+                  <span className="text-xs" style={{ color: 'var(--text-3)' }}>{item.label}</span>
+                  <span className="text-sm font-bold" style={{ color: item.color }}>
+                    {item.prefix}{formatMeso(item.value)}
+                  </span>
                 </div>
               ))}
             </div>
-          )}
-        </Card>
-      </div>
-
-      {/* 전체 누적 통계 */}
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-2)' }}>
-          📋 전체 누적
-        </p>
-        <div className="grid grid-cols-3 gap-3 mb-3">
-          <div className="stat-card stat-card-income">
-            <p className="text-xs font-semibold mb-1" style={{ color: 'var(--text-2)' }}>총 수입</p>
-            <p className="font-bold text-base leading-tight" style={{ color: 'var(--green)' }}>
-              {formatMeso(cumulativeIncome)}
-            </p>
-          </div>
-          <div className="stat-card stat-card-expense">
-            <p className="text-xs font-semibold mb-1" style={{ color: 'var(--text-2)' }}>총 지출</p>
-            <p className="font-bold text-base leading-tight" style={{ color: 'var(--red)' }}>
-              {formatMeso(cumulativeExpense)}
-            </p>
-          </div>
-          <div className={`stat-card ${cumulativeNet >= 0 ? 'stat-card-net-pos' : 'stat-card-net-neg'}`}>
-            <p className="text-xs font-semibold mb-1" style={{ color: 'var(--text-2)' }}>총 순수익</p>
-            <p
-              className="font-bold text-base leading-tight"
-              style={{ color: cumulativeNet >= 0 ? 'var(--primary)' : 'var(--red)' }}
-            >
-              {cumulativeNet >= 0 ? '+' : ''}{formatMeso(cumulativeNet)}
-            </p>
           </div>
         </div>
+      </div>
 
-        {/* 주간별 목록 */}
-        <Card>
-          {allWeeksLoading ? (
-            <p className="text-sm text-center py-6 animate-pulse" style={{ color: 'var(--text-3)' }}>
-              불러오는 중...
-            </p>
-          ) : allWeeks.length === 0 ? (
-            <p className="text-sm text-center py-6" style={{ color: 'var(--text-3)' }}>
-              아직 기록이 없어요
-            </p>
-          ) : (
-            <div className="space-y-1.5 max-h-64 overflow-y-auto">
-              {[...allWeeks].reverse().map((w) => {
-                const net = w.totalIncome - w.totalExpense
-                const isCurrent = weekStartStr === w.weekStart
-                return (
-                  <div
-                    key={w.weekStart}
-                    className="list-row cursor-pointer"
-                    style={
-                      isCurrent
-                        ? { backgroundColor: 'var(--primary-dim)', outline: '1.5px solid var(--primary-glow)' }
-                        : {}
-                    }
-                    onClick={() => jumpToWeek(w.weekStart)}
-                  >
-                    <div>
-                      <p
-                        className="text-sm font-semibold"
-                        style={{ color: isCurrent ? 'var(--primary)' : 'var(--text)' }}
+      {/* 드랍 아이템 */}
+      <div className="rounded-xl overflow-hidden" style={panelStyle}>
+        <div className="dark-panel-header">
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+            📦 {isThisWeek ? '이번 주' : '해당 주'} 드랍 아이템
+          </h3>
+        </div>
+        {dropsLoading ? (
+          <p className="text-sm text-center py-6 animate-pulse" style={{ color: 'var(--text-3)' }}>불러오는 중...</p>
+        ) : drops.length === 0 ? (
+          <p className="text-sm text-center py-6" style={{ color: 'var(--text-3)' }}>드랍 기록이 없어요</p>
+        ) : (
+          <div className="p-3 space-y-2">
+            {drops.map((drop) => (
+              <div key={drop.id}>
+                <div className="list-row">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{drop.itemName}</p>
+                      <span
+                        className="text-xs px-2 py-0.5 rounded-full"
+                        style={
+                          drop.status === 'sold'
+                            ? { backgroundColor: 'rgba(74,222,128,0.12)', color: 'var(--green)' }
+                            : drop.status === 'listed'
+                            ? { backgroundColor: 'rgba(234,179,8,0.12)', color: '#fbbf24' }
+                            : { backgroundColor: 'var(--primary-dim)', color: 'var(--primary)' }
+                        }
                       >
-                        {w.weekStart.slice(5).replace('-', '/')} 주
-                        {isCurrent && <span className="ml-1.5 text-xs font-normal">← 현재</span>}
-                      </p>
-                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
-                        +{formatMeso(w.totalIncome)} / -{formatMeso(w.totalExpense)}
-                      </p>
+                        {drop.status === 'sold' ? '✅ 판매 완료' : drop.status === 'listed' ? '🏪 경매장 등록 중' : '📦 보유 중'}
+                      </span>
                     </div>
-                    <p
-                      className="font-bold text-sm shrink-0"
-                      style={{ color: net >= 0 ? 'var(--green)' : 'var(--red)' }}
-                    >
-                      {net >= 0 ? '+' : ''}{formatMeso(net)}
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
+                      {drop.bossName} {difficultyLabel(drop.difficulty)}{drop.characterName && ` • ${drop.characterName}`}
                     </p>
+                    {drop.status === 'sold' && drop.saleAmount && (
+                      <p className="text-xs mt-0.5 font-medium" style={{ color: 'var(--green)' }}>
+                        {formatMeso(drop.saleAmount)} 판매
+                      </p>
+                    )}
                   </div>
-                )
-              })}
-            </div>
-          )}
-        </Card>
+                  {drop.status === 'holding' && (
+                    <button
+                      onClick={() => handleListDrop(drop.id)}
+                      className="text-xs px-2.5 py-1.5 rounded-lg shrink-0 font-medium"
+                      style={{ backgroundColor: 'rgba(251,191,36,0.1)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }}
+                    >경매장 등록</button>
+                  )}
+                  {drop.status === 'listed' && (
+                    <button
+                      onClick={() => { setSellingId(drop.id); setSellForm({ saleAmount: '', saleDate: toDateString() }) }}
+                      className="text-xs px-2.5 py-1.5 rounded-lg shrink-0 font-medium"
+                      style={{ backgroundColor: 'var(--primary-dim)', color: 'var(--primary)', border: '1px solid var(--primary-glow)' }}
+                    >판매 처리</button>
+                  )}
+                </div>
+
+                {sellingId === drop.id && drop.status === 'listed' && (
+                  <form
+                    onSubmit={handleSellSubmit}
+                    className="mt-2 p-3 rounded-xl space-y-2"
+                    style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)' }}
+                  >
+                    <p className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>판매 처리 — {drop.itemName}</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        label="판매 금액 (메소)"
+                        type="number"
+                        placeholder="예: 3500000000"
+                        value={sellForm.saleAmount}
+                        onChange={(e) => setSellForm((p) => ({ ...p, saleAmount: e.target.value }))}
+                        min={1}
+                      />
+                      <Input
+                        label="판매 날짜"
+                        type="date"
+                        value={sellForm.saleDate}
+                        onChange={(e) => setSellForm((p) => ({ ...p, saleDate: e.target.value }))}
+                      />
+                    </div>
+                    {sellForm.saleAmount && (
+                      <p className="text-xs" style={{ color: 'var(--text-2)' }}>= {formatMeso(Number(sellForm.saleAmount))}</p>
+                    )}
+                    <div className="flex gap-2">
+                      <Button type="submit" size="sm" loading={sellSubmitting} className="flex-1">판매 완료 처리</Button>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setSellingId(null)}>취소</Button>
+                    </div>
+                    <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+                      💡 판매 처리 시 경매장 수익으로 가계부에 자동 반영됩니다.
+                    </p>
+                  </form>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* 주별 기록 테이블 (솔 에르다 조각 + 항목 수 컬럼 포함) */}
+      <div className="rounded-xl overflow-hidden" style={panelStyle}>
+        <div className="dark-panel-header">
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>📜 주별 기록</h3>
+        </div>
+        {allWeeksLoading ? (
+          <p className="text-sm text-center py-6 animate-pulse" style={{ color: 'var(--text-3)' }}>불러오는 중...</p>
+        ) : allWeeks.length === 0 ? (
+          <p className="text-sm text-center py-6" style={{ color: 'var(--text-3)' }}>아직 기록이 없어요</p>
+        ) : (
+          <div className="overflow-x-auto max-h-72 overflow-y-auto">
+            <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ backgroundColor: 'var(--surface-2)', position: 'sticky', top: 0, zIndex: 1 }}>
+                  <th className="px-4 py-2 text-left text-xs font-medium" style={thStyle}>주차</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium" style={thStyle}>수입</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium" style={thStyle}>지출</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium" style={thStyle}>순수익</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium" style={{ color: '#a78bfa' }}>🔮 조각</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium" style={thStyle}>항목</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...allWeeks].reverse().map((w, i, arr) => {
+                  const net = w.totalIncome - w.totalExpense
+                  const isCurrent = weekStartStr === w.weekStart
+                  return (
+                    <tr
+                      key={w.weekStart}
+                      onClick={() => jumpToWeek(w.weekStart)}
+                      className="table-row cursor-pointer"
+                      style={{
+                        backgroundColor: isCurrent ? 'var(--primary-dim)' : undefined,
+                        borderBottom: i === arr.length - 1 ? 'none' : '1px solid var(--border)',
+                      }}
+                    >
+                      <td className="px-4 py-2.5">
+                        <span className="text-sm font-medium" style={{ color: isCurrent ? 'var(--primary)' : 'var(--text)' }}>
+                          {w.weekStart.slice(5).replace('-', '/')} 주
+                          {isCurrent && (
+                            <span className="ml-1.5 text-xs font-normal" style={{ color: 'var(--primary)' }}>← 현재</span>
+                          )}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <span className="text-sm" style={{ color: 'var(--green)' }}>+{formatMeso(w.totalIncome)}</span>
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <span className="text-sm" style={{ color: 'var(--red)' }}>-{formatMeso(w.totalExpense)}</span>
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <span className="text-sm font-bold" style={{ color: net >= 0 ? 'var(--primary)' : 'var(--red)' }}>
+                          {net >= 0 ? '+' : ''}{formatMeso(net)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        {(w.totalSolErdaFragments ?? 0) > 0
+                          ? <span className="text-xs font-semibold" style={{ color: '#c4b5fd' }}>{w.totalSolErdaFragments}개</span>
+                          : <span style={{ color: 'var(--text-3)', fontSize: '10px' }}>—</span>
+                        }
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        <span className="text-xs" style={{ color: 'var(--text-3)' }}>
+                          {w.entryCount != null ? `${w.entryCount}건` : '—'}
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* FAB */}
@@ -810,59 +891,188 @@ export default function DashboardPage() {
         className="fixed bottom-20 md:bottom-8 right-4 md:right-8 w-14 h-14 rounded-full flex items-center justify-center text-2xl z-40 transition-all hover:scale-110 active:scale-95"
         style={{
           background: 'linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%)',
-          boxShadow: '0 4px 16px var(--primary-glow)',
+          boxShadow: '0 4px 20px var(--primary-glow)',
           color: 'white',
         }}
         aria-label="기록 추가"
-      >
-        ✏️
-      </button>
+      >✏️</button>
+
+      {/* ── 수정 모달 ── */}
+      {editingEntry && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.8)' }}
+          onClick={(e) => { if (e.target === e.currentTarget) setEditingEntry(null) }}
+        >
+          <div
+            className="rounded-2xl p-6 w-full max-w-md space-y-4"
+            style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-md)' }}
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold text-base" style={{ color: 'var(--text)' }}>✏️ 항목 수정</h2>
+              <button
+                onClick={() => setEditingEntry(null)}
+                className="text-sm w-7 h-7 flex items-center justify-center rounded-lg"
+                style={{ color: 'var(--text-3)', backgroundColor: 'var(--surface-2)' }}
+              >✕</button>
+            </div>
+            <form onSubmit={handleEditSubmit} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <Select
+                  label="유형"
+                  value={editForm.type}
+                  onChange={(e) => setEditForm((p) => ({ ...p, type: e.target.value as EntryType }))}
+                  options={[
+                    { value: 'income', label: '수입' },
+                    { value: 'expense', label: '지출' },
+                  ]}
+                />
+                <Select
+                  label="카테고리"
+                  value={editForm.category}
+                  onChange={(e) => setEditForm((p) => ({ ...p, category: e.target.value as EntryCategory }))}
+                  options={Object.entries(CATEGORY_LABELS).map(([v, l]) => ({ value: v, label: l }))}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Input
+                  label="금액 (메소)"
+                  type="number"
+                  value={editForm.amount}
+                  onChange={(e) => setEditForm((p) => ({ ...p, amount: e.target.value }))}
+                  min={0}
+                />
+                <Input
+                  label="날짜"
+                  type="date"
+                  value={editForm.entryDate}
+                  onChange={(e) => setEditForm((p) => ({ ...p, entryDate: e.target.value }))}
+                />
+              </div>
+              {editForm.amount && Number(editForm.amount) > 0 && (
+                <p className="text-xs pl-1" style={{ color: 'var(--text-2)' }}>
+                  = {formatMeso(Number(editForm.amount))} 메소
+                </p>
+              )}
+              <Input
+                label="설명 (선택)"
+                placeholder="메모"
+                value={editForm.description}
+                onChange={(e) => setEditForm((p) => ({ ...p, description: e.target.value }))}
+              />
+              {characters.length > 0 && (
+                <Select
+                  label="캐릭터 (선택)"
+                  value={editForm.characterId}
+                  onChange={(e) => setEditForm((p) => ({ ...p, characterId: e.target.value }))}
+                  options={[
+                    { value: '', label: '선택 안함' },
+                    ...characters.map((c) => ({ value: String(c.id), label: c.name })),
+                  ]}
+                />
+              )}
+              {editForm.type === 'income' && editForm.category === 'hunting' && (
+                <Input
+                  label="솔 에르다 조각 개수 (선택)"
+                  type="number"
+                  placeholder="획득한 조각 수"
+                  value={editForm.solErdaFragments}
+                  onChange={(e) => setEditForm((p) => ({ ...p, solErdaFragments: e.target.value }))}
+                  min={0}
+                />
+              )}
+              <div className="flex gap-2 justify-end pt-1">
+                <Button type="button" variant="ghost" size="sm" onClick={() => setEditingEntry(null)}>취소</Button>
+                <Button type="submit" size="sm" loading={editSubmitting}>저장</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-function EntryRow({ entry, onDelete }: { entry: LedgerEntry; onDelete: () => void }) {
-  // 백엔드에서 소문자로 오므로 소문자 키로 직접 조회
+function EntryTableRow({
+  entry,
+  onDelete,
+  onEdit,
+  isLast,
+}: {
+  entry: LedgerEntry
+  onDelete: () => void
+  onEdit: () => void
+  isLast: boolean
+}) {
   const categoryKey = (entry.category ?? '').toLowerCase()
   const icon = CATEGORY_ICONS[categoryKey] ?? '💫'
   const label = CATEGORY_LABELS[categoryKey] ?? entry.category
   const isIncome = (entry.type ?? '').toLowerCase() === 'income'
+  const erdaCount = entry.solErdaFragments ?? 0
 
   return (
-    <div className="list-row">
-      <div className="flex items-center gap-2.5 min-w-0">
-        <div
-          className="w-8 h-8 rounded-xl flex items-center justify-center text-sm shrink-0"
-          style={{ backgroundColor: isIncome ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)' }}
+    <tr
+      className="table-row"
+      style={{ borderBottom: isLast ? 'none' : '1px solid var(--border)' }}
+    >
+      <td className="px-3 py-2.5">
+        <span
+          className="text-xs px-1.5 py-0.5 rounded font-medium"
+          style={{
+            whiteSpace: 'nowrap',
+            ...(isIncome
+              ? { color: 'var(--green)', backgroundColor: 'rgba(74,222,128,0.1)' }
+              : { color: 'var(--red)', backgroundColor: 'rgba(248,113,113,0.1)' }),
+          }}
         >
-          {icon}
-        </div>
-        <div className="min-w-0">
-          <p className="text-sm font-medium truncate" style={{ color: 'var(--text)' }}>
-            {entry.description || label}
-          </p>
-          <div className="flex items-center gap-1.5 mt-0.5">
-            <span className="text-xs" style={{ color: 'var(--text-3)' }}>{formatDateKo(entry.entryDate)}</span>
-            {entry.characterName && (
-              <span className="text-xs" style={{ color: 'var(--text-3)' }}>• {entry.characterName}</span>
-            )}
+          {isIncome ? '수입' : '지출'}
+        </span>
+      </td>
+      <td className="px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          <span className="text-base leading-none shrink-0">{icon}</span>
+          <div className="min-w-0">
+            <p className="text-sm font-medium truncate" style={{ color: 'var(--text)' }}>
+              {entry.description || label}
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
+              {formatDateKo(entry.entryDate)}
+              {entry.characterName && ` · ${entry.characterName}`}
+            </p>
           </div>
         </div>
-      </div>
-      <div className="flex items-center gap-1.5 shrink-0">
-        <p className="font-bold text-sm" style={{ color: isIncome ? 'var(--green)' : 'var(--red)' }}>
+      </td>
+      <td className="px-3 py-2.5 text-right whitespace-nowrap">
+        <span className="font-bold text-sm" style={{ color: isIncome ? 'var(--green)' : 'var(--red)' }}>
           {isIncome ? '+' : '-'}{formatMeso(entry.amount)}
-        </p>
-        <button
-          onClick={onDelete}
-          className="w-6 h-6 flex items-center justify-center rounded-lg text-xs"
-          style={{ color: 'var(--text-3)' }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--red)')}
-          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-3)')}
-        >
-          ✕
-        </button>
-      </div>
-    </div>
+        </span>
+      </td>
+      <td className="px-3 py-2.5 text-right">
+        {erdaCount > 0
+          ? <span className="text-xs font-semibold" style={{ color: '#c4b5fd' }}>{erdaCount}개</span>
+          : <span style={{ color: 'var(--text-3)', fontSize: '10px' }}>—</span>
+        }
+      </td>
+      <td className="px-2 py-2.5">
+        <div className="flex items-center justify-end gap-1">
+          <button
+            onClick={onEdit}
+            title="수정"
+            className="w-5 h-5 flex items-center justify-center rounded text-xs"
+            style={{ color: 'var(--text-3)' }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--primary)')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-3)')}
+          >✏</button>
+          <button
+            onClick={onDelete}
+            title="삭제"
+            className="w-5 h-5 flex items-center justify-center rounded text-xs"
+            style={{ color: 'var(--text-3)' }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--red)')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-3)')}
+          >✕</button>
+        </div>
+      </td>
+    </tr>
   )
 }

@@ -7,32 +7,26 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   loading?: boolean
 }
 
-const variants: Record<string, string> = {
-  primary: '',
-  secondary: '',
-  danger: '',
-  ghost: '',
-}
-
 const variantStyles: Record<string, React.CSSProperties> = {
   primary: {
-    background: 'linear-gradient(135deg, #f97316 0%, #ea6c0a 100%)',
+    background: 'linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%)',
     color: '#fff',
-    boxShadow: '0 2px 12px rgba(249,115,22,0.35)',
+    boxShadow: '0 2px 10px var(--primary-glow)',
   },
   secondary: {
     backgroundColor: 'var(--surface-2)',
     color: 'var(--text)',
-    border: '1px solid var(--border-2)',
+    border: '1.5px solid var(--border-2)',
   },
   danger: {
-    backgroundColor: 'rgba(248,113,113,0.15)',
+    backgroundColor: 'rgba(220, 38, 38, 0.08)',
     color: 'var(--red)',
-    border: '1px solid rgba(248,113,113,0.3)',
+    border: '1.5px solid rgba(220, 38, 38, 0.25)',
   },
   ghost: {
     backgroundColor: 'transparent',
     color: 'var(--text-2)',
+    border: '1.5px solid var(--border)',
   },
 }
 
@@ -56,10 +50,10 @@ export default function Button({
     <button
       disabled={disabled || loading}
       className={`
-        inline-flex items-center justify-center gap-2 rounded-xl font-medium
+        inline-flex items-center justify-center gap-2 rounded-xl font-semibold
         transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed
-        hover:brightness-110 active:scale-[0.97]
-        ${variants[variant]} ${sizes[size]} ${className}
+        hover:brightness-105 active:scale-[0.97]
+        ${sizes[size]} ${className}
       `}
       style={{ ...variantStyles[variant], ...style }}
       {...props}

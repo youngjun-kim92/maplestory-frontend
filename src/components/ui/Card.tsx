@@ -13,8 +13,8 @@ export default function Card({ children, className = '', title, icon }: CardProp
       className={`rounded-2xl ${className}`}
       style={{
         backgroundColor: 'var(--surface)',
-        border: '1px solid var(--border)',
-        boxShadow: '0 4px 24px rgba(0,0,0,0.35)',
+        border: '1.5px solid var(--border)',
+        boxShadow: 'var(--shadow)',
         padding: '1.25rem',
       }}
     >
@@ -25,7 +25,7 @@ export default function Card({ children, className = '', title, icon }: CardProp
         >
           {icon && <span className="text-lg">{icon}</span>}
           {title && (
-            <h2 className="font-semibold text-sm tracking-wide" style={{ color: 'var(--text)' }}>
+            <h2 className="font-semibold text-sm" style={{ color: 'var(--text)' }}>
               {title}
             </h2>
           )}

@@ -68,11 +68,23 @@ export const CATEGORY_LABELS: Record<string, string> = {
   hunting: '사냥',
   trade: '거래',
   auction: '경매장',
-  sol_erda: '솔에르다',
+  sol_erda: '솔 에르다 조각',
   cube: '큐브',
   starforce: '스타포스',
   spell_trace: '주문서',
   other: '기타',
+}
+
+export const DIFFICULTY_LABELS: Record<string, string> = {
+  easy:    '이지',
+  normal:  '노말',
+  hard:    '하드',
+  chaos:   '카오스',
+  extreme: '익스트림',
+}
+
+export function difficultyLabel(difficulty: string): string {
+  return DIFFICULTY_LABELS[difficulty.toLowerCase()] ?? difficulty
 }
 
 export const CATEGORY_ICONS: Record<string, string> = {

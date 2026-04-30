@@ -92,7 +92,7 @@ export default function GoalsPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white">🎯 목표 아이템</h1>
+        <h1 className="text-xl font-bold font-heading" style={{ color: 'var(--text)' }}>🎯 목표 아이템</h1>
         <Button
           onClick={() => {
             setShowForm((v) => !v)
@@ -188,16 +188,16 @@ export default function GoalsPage() {
                       </div>
                       <div className="info-box">
                         <p className="text-xs" style={{ color: 'var(--text-2)' }}>남은 금액</p>
-                        <p className="font-medium text-sm mt-0.5" style={{ color: 'var(--orange-light)' }}>{formatMeso(est.remainingAmount)}</p>
+                        <p className="font-medium text-sm mt-0.5" style={{ color: 'var(--orange-light)' }}>{formatMeso(est.remaining)}</p>
                       </div>
                       <div className="info-box">
                         <p className="text-xs" style={{ color: 'var(--text-2)' }}>주간 평균 수익</p>
-                        <p className="font-medium text-sm mt-0.5" style={{ color: 'var(--green)' }}>{formatMeso(est.avgWeeklyIncome)}</p>
+                        <p className="font-medium text-sm mt-0.5" style={{ color: 'var(--green)' }}>{formatMeso(est.avgWeeklyNet)}</p>
                       </div>
                       <div className="info-box">
                         <p className="text-xs" style={{ color: 'var(--text-2)' }}>예상 달성</p>
                         <p className="font-medium text-sm mt-0.5" style={{ color: '#60a5fa' }}>
-                          {est.estimatedWeeks > 0 ? `약 ${est.estimatedWeeks}주 후` : '이미 달성 가능!'}
+                          {est.weeksRemaining > 0 ? `약 ${est.weeksRemaining}주 후` : '이미 달성 가능!'}
                         </p>
                       </div>
                     </div>

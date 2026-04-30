@@ -11,6 +11,9 @@ export const ledgerApi = {
   deleteEntry: (id: number) =>
     client.delete(`/ledger/${id}`),
 
+  updateEntry: (id: number, data: LedgerEntryRequest) =>
+    client.put<{ entry: import('../types').LedgerEntry }>(`/ledger/${id}`, data),
+
   getWeeksList: () =>
     client.get<WeeklySummary[]>('/ledger/weeks'),
 

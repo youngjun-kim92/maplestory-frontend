@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { charactersApi } from '../api/characters'
+import { useAuth } from '../contexts/AuthContext'
 import type { CharacterROI, CharacterStatsResponse, MapleCharacter } from '../types'
 import { formatMeso } from '../utils/format'
 import Card from '../components/ui/Card'
@@ -29,6 +30,7 @@ const JOB_GROUPS = [
 ]
 
 export default function CharactersPage() {
+  const { refreshUser } = useAuth()
   const [characters, setCharacters] = useState<MapleCharacter[]>([])
   const [rois, setRois] = useState<Record<number, CharacterROI>>({})
   const [characterStats, setCharacterStats] = useState<CharacterStatsResponse[]>([])
@@ -36,9 +38,12 @@ export default function CharactersPage() {
   const [showForm, setShowForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
+
+  const totalFragments = characters.reduce((s, c) => s + (c.solErdaFragments ?? 0), 0)
 
   const [form, setForm] = useState({
-    name: '', jobClass: '', level: '', isMain: false, initialInvestment: '',
+    name: '', jobClass: '', level: '', isMain: false, initialInvestment: '', solErdaFragments: '',
   })
 
   const fetchCharacters = useCallback(async () => {
@@ -72,13 +77,13 @@ export default function CharactersPage() {
   }, [characters]) // eslint-disable-line
 
   const resetForm = () => {
-    setForm({ name: '', jobClass: '', level: '', isMain: false, initialInvestment: '' })
+    setForm({ name: '', jobClass: '', level: '', isMain: false, initialInvestment: '', solErdaFragments: '' })
     setShowForm(false)
     setEditingId(null)
   }
 
   const openAddForm = () => {
-    setForm({ name: '', jobClass: '', level: '', isMain: characters.length === 0, initialInvestment: '' })
+    setForm({ name: '', jobClass: '', level: '', isMain: characters.length === 0, initialInvestment: '', solErdaFragments: '' })
     setEditingId(null)
     setShowForm(true)
   }
@@ -90,6 +95,7 @@ export default function CharactersPage() {
       level: char.level ? String(char.level) : '',
       isMain: char.isMain,
       initialInvestment: char.initialInvestment ? String(char.initialInvestment) : '',
+      solErdaFragments: char.solErdaFragments ? String(char.solErdaFragments) : '',
     })
     setEditingId(char.id)
     setShowForm(true)
@@ -106,6 +112,7 @@ export default function CharactersPage() {
         level: form.level ? Number(form.level) : undefined,
         isMain: form.isMain,
         initialInvestment: form.initialInvestment ? Number(form.initialInvestment) : undefined,
+        solErdaFragments: form.solErdaFragments ? Number(form.solErdaFragments) : undefined,
       }
       if (editingId) {
         await charactersApi.updateCharacter(editingId, payload)
@@ -113,17 +120,19 @@ export default function CharactersPage() {
         await charactersApi.createCharacter(payload)
       }
       resetForm()
-      await fetchCharacters()
+      await Promise.all([fetchCharacters(), refreshUser()])
     } finally {
       setSubmitting(false)
     }
   }
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('이 캐릭터를 삭제하시겠습니까?')) return
+  const handleDeleteConfirm = async () => {
+    if (deleteConfirmId === null) return
+    const id = deleteConfirmId
+    setDeleteConfirmId(null)
     await charactersApi.deleteCharacter(id)
     setRois((p) => { const n = { ...p }; delete n[id]; return n })
-    await fetchCharacters()
+    await Promise.all([fetchCharacters(), refreshUser()])
   }
 
   const mainChars = characters.filter((c) => c.isMain)
@@ -244,6 +253,23 @@ export default function CharactersPage() {
                 min={0}
               />
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Input
+                  label="솔 에르다 조각 보유량"
+                  type="number"
+                  placeholder="0"
+                  value={form.solErdaFragments}
+                  onChange={(e) => setForm((p) => ({ ...p, solErdaFragments: e.target.value }))}
+                  min={0}
+                />
+                {editingId && (
+                  <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-3)' }}>
+                    사냥 기록 시 자동 누적됩니다. 맞지 않을 때만 수정하세요.
+                  </p>
+                )}
+              </div>
+            </div>
             {form.initialInvestment && (
               <p className="text-xs pl-1" style={{ color: 'var(--text-2)' }}>
                 = {formatMeso(Number(form.initialInvestment))}
@@ -278,6 +304,22 @@ export default function CharactersPage() {
         </Card>
       )}
 
+      {/* 솔 에르다 조각 합계 */}
+      {characters.length > 0 && (
+        <Card icon="🔮" title="솔 에르다 조각 보유 현황">
+          <p className="text-xs mb-2" style={{ color: 'var(--text-2)' }}>
+            캐릭터별로 보유한 조각 수를 입력하면 합계를 확인할 수 있습니다.
+          </p>
+          <div
+            className="flex items-center justify-between px-3 py-2 rounded-xl"
+            style={{ backgroundColor: 'var(--primary-dim)', border: '1px solid var(--primary-glow)' }}
+          >
+            <span className="text-sm font-semibold" style={{ color: 'var(--text-2)' }}>전체 합계</span>
+            <span className="font-bold" style={{ color: 'var(--primary)' }}>{totalFragments.toLocaleString()}개</span>
+          </div>
+        </Card>
+      )}
+
       {/* Main characters */}
       {mainChars.length > 0 && (
         <div className="space-y-2">
@@ -290,7 +332,7 @@ export default function CharactersPage() {
               char={c}
               roi={rois[c.id]}
               onEdit={() => handleEdit(c)}
-              onDelete={() => handleDelete(c.id)}
+              onDelete={() => setDeleteConfirmId(c.id)}
             />
           ))}
         </div>
@@ -308,9 +350,37 @@ export default function CharactersPage() {
               char={c}
               roi={rois[c.id]}
               onEdit={() => handleEdit(c)}
-              onDelete={() => handleDelete(c.id)}
+              onDelete={() => setDeleteConfirmId(c.id)}
             />
           ))}
+        </div>
+      )}
+
+      {/* 캐릭터 삭제 확인 모달 */}
+      {deleteConfirmId !== null && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+        >
+          <div
+            className="rounded-2xl p-6 w-full max-w-sm space-y-4"
+            style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)' }}
+          >
+            <h2 className="font-bold text-lg" style={{ color: 'var(--text)' }}>캐릭터를 삭제하시겠습니까?</h2>
+            <p className="text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>
+              캐릭터를 삭제하면 해당 캐릭터의 보스·사냥 기록에서 캐릭터 정보가 제거됩니다.
+              기록 자체는 유지됩니다. 계속하시겠습니까?
+            </p>
+            <div className="flex gap-2 justify-end">
+              <Button variant="ghost" onClick={() => setDeleteConfirmId(null)}>취소</Button>
+              <Button
+                onClick={handleDeleteConfirm}
+                style={{ backgroundColor: 'var(--red)', color: '#fff', border: 'none' }}
+              >
+                삭제
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -360,6 +430,14 @@ function CharacterCard({
             삭제
           </button>
         </div>
+      </div>
+
+      {/* 솔 에르다 조각 */}
+      <div className="flex items-center gap-2 pt-2" style={{ borderTop: '1px solid var(--border)' }}>
+        <span className="text-xs" style={{ color: 'var(--text-2)' }}>🔮 솔 에르다 조각</span>
+        <span className="font-semibold text-xs" style={{ color: 'var(--primary)' }}>
+          {(char.solErdaFragments ?? 0).toLocaleString()}개
+        </span>
       </div>
 
       {/* ROI section */}

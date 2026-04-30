@@ -1,9 +1,33 @@
 import client from './client'
-import type { BossDrop, BossDropItem, BossDropSellRequest, BossKill, BossKillRequest, BossMaster, BossStats } from '../types'
+import type { BossDrop, BossDropItem, BossDropSellRequest, BossKill, BossKillRequest, BossMaster, BossStats, ResetType } from '../types'
+
+// 백엔드 데이터 오류 보정: (보스명, 난이도) → 올바른 resetType
+const RESET_TYPE_OVERRIDES: Record<string, Record<string, ResetType>> = {
+  '매그너스':   { easy: 'daily', normal: 'daily', hard: 'weekly' },
+  '파풀라투스': { easy: 'daily', normal: 'daily' },
+  '자쿰':       { easy: 'daily', normal: 'daily' },
+  '벨룸':       { normal: 'daily' },
+  '피에르':     { normal: 'daily' },
+  '블러디퀸':   { normal: 'daily' },
+  '반반':       { normal: 'daily' },
+  '힐라':       { normal: 'daily' },
+  '핑크빈':     { normal: 'daily', chaos: 'weekly' },
+}
+
+function applyResetTypeOverrides(list: BossMaster[]): BossMaster[] {
+  return list.map((b) => {
+    const overrides = RESET_TYPE_OVERRIDES[b.bossName]
+    const corrected = overrides?.[b.difficulty.toLowerCase()]
+    return corrected ? { ...b, resetType: corrected } : b
+  })
+}
 
 export const bossApi = {
   getBossList: () =>
-    client.get<BossMaster[]>('/boss/list'),
+    client.get<BossMaster[]>('/boss/list').then((res) => ({
+      ...res,
+      data: applyResetTypeOverrides(res.data),
+    })),
 
   recordBossKill: (data: BossKillRequest) =>
     client.post<BossKill>('/boss/kill', data),

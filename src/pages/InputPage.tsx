@@ -5,18 +5,12 @@ import { ledgerApi } from '../api/ledger'
 import { charactersApi } from '../api/characters'
 import { useAuth } from '../contexts/AuthContext'
 import type { BossDropItem, BossMaster, EntryCategory, EntryType, LedgerAddResponse, MapleCharacter, ResetType } from '../types'
-import { formatMeso, toDateString } from '../utils/format'
+import { formatMeso, toDateString, difficultyLabel } from '../utils/format'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import Select from '../components/ui/Select'
 
-// 난이도 → 한글 매핑
-const DIFFICULTY_KO: Record<string, string> = {
-  Easy: '이지', Normal: '노말', Hard: '하드',
-  Chaos: '카오스', Extreme: '익스트림',
-}
-const diffLabel = (d: string) => DIFFICULTY_KO[d] ?? d
 
 const RESET_TABS = [
   { key: 'all' as const,     label: '전체' },
@@ -28,7 +22,7 @@ const RESET_TABS = [
 const INCOME_CATS: { value: EntryCategory; label: string }[] = [
   { value: 'hunting',  label: '사냥 👾' },
   { value: 'auction',  label: '경매장 🏪' },
-  { value: 'sol_erda', label: '솔에르다 🔮' },
+  { value: 'sol_erda', label: '솔 에르다 조각 🔮' },
   { value: 'other',    label: '기타 💰' },
 ]
 
@@ -98,7 +92,7 @@ function BossSection({
 
   const filtered = resetFilter === 'all' ? bossList : bossList.filter((b) => b.resetType === resetFilter)
   const uniqueNames = [...new Set(filtered.map((b) => b.bossName))]
-  const difficulties = bossList.filter((b) => b.bossName === form.bossName).map((b) => b.difficulty)
+  const difficulties = filtered.filter((b) => b.bossName === form.bossName).map((b) => b.difficulty)
   const selectedBoss = bossList.find((b) => b.bossName === form.bossName && b.difficulty === form.difficulty)
   const maxParty = selectedBoss?.maxPartySize ?? 6
 
@@ -126,7 +120,7 @@ function BossSection({
   }, [form.bossName, form.difficulty])
 
   const handleBossNameChange = (name: string) => {
-    const diffs = bossList.filter((b) => b.bossName === name).map((b) => b.difficulty)
+    const diffs = filtered.filter((b) => b.bossName === name).map((b) => b.difficulty)
     setForm((p) => ({ ...p, bossName: name, difficulty: diffs[0] ?? '', partySize: '1' }))
     setSelectedItems(new Set())
   }
@@ -233,7 +227,7 @@ function BossSection({
             label="난이도"
             options={
               difficulties.length > 0
-                ? difficulties.map((d) => ({ value: d, label: diffLabel(d) }))
+                ? difficulties.map((d) => ({ value: d, label: difficultyLabel(d) }))
                 : [{ value: '', label: '보스 먼저 선택' }]
             }
             value={form.difficulty}
@@ -397,6 +391,7 @@ function GeneralSection({ characters }: { characters: MapleCharacter[] }) {
 
   const catOptions = type === 'income' ? INCOME_CATS : EXPENSE_CATS
   const isSolErda = category === 'sol_erda'
+  const isHunting = category === 'hunting' && type === 'income'
   const solPrice = user?.solErdaFragmentPrice ?? 0
   const solAmount = isSolErda ? (Number(form.fragments) || 0) * solPrice : 0
 
@@ -419,6 +414,7 @@ function GeneralSection({ characters }: { characters: MapleCharacter[] }) {
         description: form.description,
         entryDate: form.entryDate,
         characterId: form.characterId ? Number(form.characterId) : null,
+        solErdaFragments: isHunting && form.fragments ? Number(form.fragments) : null,
       })
       setForm((p) => ({ ...p, amount: '', fragments: '', description: '' }))
       setSuccess(true)
@@ -511,12 +507,12 @@ function GeneralSection({ characters }: { characters: MapleCharacter[] }) {
             ))}
           </div>
 
-          {/* 금액 / 솔에르다 */}
+          {/* 금액 / 솔 에르다 조각 */}
           {isSolErda ? (
             solPrice > 0 ? (
               <div className="space-y-1">
                 <Input
-                  label="솔에르다 조각 개수"
+                  label="판매한 조각 수"
                   type="number"
                   placeholder="예: 100"
                   value={form.fragments}
@@ -525,8 +521,7 @@ function GeneralSection({ characters }: { characters: MapleCharacter[] }) {
                 />
                 {form.fragments && (
                   <p className="text-xs pl-1" style={{ color: 'var(--text-2)' }}>
-                    = {formatMeso(solAmount)}{' '}
-                    <span style={{ color: 'var(--text-3)' }}>(개당 {solPrice.toLocaleString()}메소)</span>
+                    {form.fragments}개 × {solPrice.toLocaleString()}메소 = {formatMeso(solAmount)} 메소
                   </p>
                 )}
               </div>
@@ -547,14 +542,38 @@ function GeneralSection({ characters }: { characters: MapleCharacter[] }) {
               </div>
             )
           ) : (
-            <Input
-              label="금액 (메소)"
-              type="number"
-              placeholder="예: 50000000"
-              value={form.amount}
-              onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))}
-              min={1}
-            />
+            <div className="space-y-3">
+              <div>
+                <Input
+                  label="금액 (메소)"
+                  type="number"
+                  placeholder="예: 50000000"
+                  value={form.amount}
+                  onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))}
+                  min={1}
+                />
+                {form.amount && Number(form.amount) > 0 && (
+                  <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-2)' }}>
+                    = {formatMeso(Number(form.amount))} 메소
+                  </p>
+                )}
+              </div>
+              {isHunting && (
+                <div>
+                  <Input
+                    label="솔 에르다 조각 개수 (선택)"
+                    type="number"
+                    placeholder="획득한 조각 수"
+                    value={form.fragments}
+                    onChange={(e) => setForm((p) => ({ ...p, fragments: e.target.value }))}
+                    min={0}
+                  />
+                  <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-3)' }}>
+                    사냥 중 얻은 조각 개수를 입력하면 캐릭터별 보유 현황에 자동 반영됩니다.
+                  </p>
+                </div>
+              )}
+            </div>
           )}
 
           <div className="grid grid-cols-2 gap-3">

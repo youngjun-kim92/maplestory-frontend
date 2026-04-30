@@ -52,6 +52,7 @@ export interface LedgerEntry {
   entryDate: string
   characterId: number | null
   characterName: string | null
+  solErdaFragments?: number | null
 }
 
 export interface LedgerEntryRequest {
@@ -61,6 +62,7 @@ export interface LedgerEntryRequest {
   description: string
   entryDate: string
   characterId?: number | null
+  solErdaFragments?: number | null
 }
 
 // GET /api/ledger 실제 응답 구조
@@ -93,6 +95,8 @@ export interface WeeklySummary {
   weekStart: string
   totalIncome: number
   totalExpense: number
+  totalSolErdaFragments?: number
+  entryCount?: number
 }
 
 export interface IncomeTrend {
@@ -250,6 +254,7 @@ export interface MapleCharacter {
   level: number
   isMain: boolean
   initialInvestment: number
+  solErdaFragments: number
 }
 
 export interface CharacterRequest {
@@ -258,6 +263,7 @@ export interface CharacterRequest {
   level?: number
   isMain?: boolean
   initialInvestment?: number
+  solErdaFragments?: number
 }
 
 export interface CharacterROI {

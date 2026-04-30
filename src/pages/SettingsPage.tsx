@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { authApi } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
 import { formatMeso } from '../utils/format'
@@ -8,6 +9,22 @@ import Input from '../components/ui/Input'
 
 export default function SettingsPage() {
   const { user, refreshUser } = useAuth()
+  const navigate = useNavigate()
+
+  const [showResetModal, setShowResetModal] = useState(false)
+  const [resetSubmitting, setResetSubmitting] = useState(false)
+
+  const handleReset = async () => {
+    setResetSubmitting(true)
+    try {
+      await authApi.reset()
+      await refreshUser()
+      setShowResetModal(false)
+      navigate('/dashboard')
+    } finally {
+      setResetSubmitting(false)
+    }
+  }
 
   const [solPrice, setSolPrice] = useState(String(user?.solErdaFragmentPrice ?? 0))
   const [solSubmitting, setSolSubmitting] = useState(false)
@@ -97,9 +114,9 @@ export default function SettingsPage() {
       </Card>
 
       {/* Sol Erda price */}
-      <Card icon="🔮" title="솔에르다 조각 개당 가격">
+      <Card icon="🔮" title="솔 에르다 조각 개당 가격">
         <p className="text-xs mb-3" style={{ color: 'var(--text-2)' }}>
-          기록하기 → 수익/지출 탭에서 솔에르다 카테고리 선택 시 자동 환산에 사용됩니다.
+          기록하기 → 수익/지출 탭에서 솔 에르다 조각 카테고리 선택 시 자동 환산에 사용됩니다.
         </p>
         {solSuccess && (
           <div
@@ -185,20 +202,34 @@ export default function SettingsPage() {
         )}
         <form onSubmit={handleMesoSubmit} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <Input
-              label="인벤토리 메소"
-              type="number"
-              value={mesoForm.inventoryMeso}
-              onChange={(e) => setMesoForm((p) => ({ ...p, inventoryMeso: e.target.value }))}
-              min={0}
-            />
-            <Input
-              label="창고 메소"
-              type="number"
-              value={mesoForm.storageMeso}
-              onChange={(e) => setMesoForm((p) => ({ ...p, storageMeso: e.target.value }))}
-              min={0}
-            />
+            <div>
+              <Input
+                label="인벤토리 메소"
+                type="number"
+                value={mesoForm.inventoryMeso}
+                onChange={(e) => setMesoForm((p) => ({ ...p, inventoryMeso: e.target.value }))}
+                min={0}
+              />
+              {Number(mesoForm.inventoryMeso) > 0 && (
+                <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-2)' }}>
+                  = {formatMeso(Number(mesoForm.inventoryMeso))} 메소
+                </p>
+              )}
+            </div>
+            <div>
+              <Input
+                label="창고 메소"
+                type="number"
+                value={mesoForm.storageMeso}
+                onChange={(e) => setMesoForm((p) => ({ ...p, storageMeso: e.target.value }))}
+                min={0}
+              />
+              {Number(mesoForm.storageMeso) > 0 && (
+                <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-2)' }}>
+                  = {formatMeso(Number(mesoForm.storageMeso))} 메소
+                </p>
+              )}
+            </div>
           </div>
           <Button type="submit" loading={mesoSubmitting} className="w-full">
             잔액 업데이트
@@ -214,6 +245,49 @@ export default function SettingsPage() {
         💡 메이플스토리 주간 초기화는 매주 <strong style={{ color: 'var(--text-2)' }}>목요일 00:00</strong>에 진행됩니다.
         보스 결정석 주간 한도도 이 시점에 초기화됩니다.
       </div>
+
+      {/* Danger zone */}
+      <Card icon="⚠️" title="위험 구역">
+        <p className="text-xs mb-3" style={{ color: 'var(--text-2)' }}>
+          모든 기록을 영구 삭제합니다. 이 작업은 되돌릴 수 없습니다.
+        </p>
+        <Button variant="ghost" onClick={() => setShowResetModal(true)} className="w-full" style={{ color: 'var(--red)', border: '1px solid rgba(220,38,38,0.3)' }}>
+          전체 기록 초기화
+        </Button>
+      </Card>
+
+      {/* Reset confirm modal */}
+      {showResetModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+        >
+          <div
+            className="rounded-2xl p-6 w-full max-w-sm space-y-4"
+            style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)' }}
+          >
+            <h2 className="font-bold text-lg" style={{ color: 'var(--text)' }}>
+              전체 기록을 초기화하시겠습니까?
+            </h2>
+            <p className="text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>
+              모든 캐릭터, 보스 처치 기록, 사냥 기록, 수입/지출 내역, 목표가 삭제됩니다.
+              이 작업은 <strong style={{ color: 'var(--red)' }}>되돌릴 수 없습니다.</strong>
+            </p>
+            <div className="flex gap-2 justify-end">
+              <Button variant="ghost" onClick={() => setShowResetModal(false)} disabled={resetSubmitting}>
+                취소
+              </Button>
+              <Button
+                onClick={handleReset}
+                loading={resetSubmitting}
+                style={{ backgroundColor: 'var(--red)', color: '#fff', border: 'none' }}
+              >
+                초기화
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

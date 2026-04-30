@@ -1,241 +1,311 @@
-import { useState, useEffect } from 'react'
-import { RadialBarChart, RadialBar, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
-import { statsApi } from '../api/stats'
-import type { ExpCalculatorResponse, StatsComparison } from '../types'
-import { formatMeso } from '../utils/format'
+import { useState, useEffect, useCallback } from 'react'
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, PieChart, Pie, Cell, // Cell used inside Pie
+} from 'recharts'
+import { ledgerApi } from '../api/ledger'
+import { goalsApi } from '../api/goals'
+import type { Goal, GoalEstimate, IncomeTrend } from '../types'
+import { formatMeso, formatDate } from '../utils/format'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 
+const PIE_COLORS = ['#E87E1E', '#16A34A', '#3B82F6', '#A855F7']
+
 export default function StatsPage() {
-  const [comparison, setComparison] = useState<StatsComparison | null>(null)
-  const [compLoading, setCompLoading] = useState(true)
+  const [trend, setTrend] = useState<IncomeTrend[]>([])
+  const [goals, setGoals] = useState<Goal[]>([])
+  const [estimates, setEstimates] = useState<Record<number, GoalEstimate>>({})
+  const [loading, setLoading] = useState(true)
+  const [showGoalForm, setShowGoalForm] = useState(false)
+  const [goalForm, setGoalForm] = useState({ itemName: '', targetAmount: '' })
+  const [goalSubmitting, setGoalSubmitting] = useState(false)
 
-  const [expForm, setExpForm] = useState({
-    currentLevel: '',
-    currentExpPercent: '',
-    avgExpPerHour: '',
-    targetLevel: '',
-  })
-  const [expResult, setExpResult] = useState<ExpCalculatorResponse | null>(null)
-  const [expLoading, setExpLoading] = useState(false)
-
-  useEffect(() => {
-    statsApi.getUserComparison()
-      .then((r) => setComparison(r.data))
-      .catch(() => setComparison(null))
-      .finally(() => setCompLoading(false))
+  const fetchAll = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [trendRes, goalsRes] = await Promise.all([
+        ledgerApi.getIncomeTrend(8),
+        goalsApi.getGoals(),
+      ])
+      setTrend(trendRes.data)
+      setGoals(goalsRes.data)
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  const handleExpCalc = async (e: { preventDefault(): void }) => {
-    e.preventDefault()
-    if (!expForm.currentLevel || !expForm.currentExpPercent || !expForm.avgExpPerHour) return
-    setExpLoading(true)
+  useEffect(() => { fetchAll() }, [fetchAll])
+
+  const loadEstimate = async (goalId: number) => {
+    if (estimates[goalId]) return
     try {
-      const res = await statsApi.calculateExp({
-        currentLevel: Number(expForm.currentLevel),
-        currentExpPercent: Number(expForm.currentExpPercent),
-        avgExpPerHour: Number(expForm.avgExpPerHour),
-        targetLevel: expForm.targetLevel ? Number(expForm.targetLevel) : undefined,
-      })
-      setExpResult(res.data)
+      const res = await goalsApi.getGoalEstimate(goalId)
+      setEstimates((p) => ({ ...p, [goalId]: res.data }))
+    } catch { /* 데이터 부족 */ }
+  }
+
+  useEffect(() => {
+    goals.filter((g) => !g.achieved).forEach((g) => loadEstimate(g.id))
+  }, [goals]) // eslint-disable-line
+
+  const handleAddGoal = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!goalForm.itemName || !goalForm.targetAmount) return
+    setGoalSubmitting(true)
+    try {
+      await goalsApi.createGoal({ itemName: goalForm.itemName, targetAmount: Number(goalForm.targetAmount) })
+      setGoalForm({ itemName: '', targetAmount: '' })
+      setShowGoalForm(false)
+      await fetchAll()
     } finally {
-      setExpLoading(false)
+      setGoalSubmitting(false)
     }
   }
 
-  const percentileColor = comparison
-    ? comparison.percentile >= 80
-      ? '#f97316'
-      : comparison.percentile >= 50
-      ? '#22c55e'
-      : '#94a3b8'
-    : '#94a3b8'
+  const handleAchieve = async (id: number) => {
+    await goalsApi.markAchieved(id)
+    await fetchAll()
+  }
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('목표를 삭제하시겠습니까?')) return
+    await goalsApi.deleteGoal(id)
+    await fetchAll()
+  }
+
+  const chartData = trend.map((t) => ({
+    week: formatDate(t.weekStart),
+    보스: t.bossIncome,
+    사냥: t.huntingIncome,
+    경매장: t.auctionIncome,
+  }))
+
+  const pieData = (() => {
+    if (!trend.length) return []
+    const slice = trend.slice(-4)
+    const boss    = slice.reduce((s, t) => s + t.bossIncome, 0)
+    const hunting = slice.reduce((s, t) => s + t.huntingIncome, 0)
+    const auction = slice.reduce((s, t) => s + t.auctionIncome, 0)
+    const other   = slice.reduce((s, t) => s + Math.max(0, t.totalIncome - t.bossIncome - t.huntingIncome - t.auctionIncome), 0)
+    return [
+      { name: '보스', value: boss },
+      { name: '사냥', value: hunting },
+      { name: '경매장', value: auction },
+      { name: '기타', value: other },
+    ].filter((d) => d.value > 0)
+  })()
+
+  const activeGoals   = goals.filter((g) => !g.achieved)
+  const achievedGoals = goals.filter((g) => g.achieved)
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold text-white">📊 통계</h1>
+      <h1 className="text-xl font-bold font-diary" style={{ color: 'var(--text)' }}>
+        📊 통계
+      </h1>
 
-      {/* 기능 #9: 익명 유저 수익 비교 */}
-      <Card title="익명 수익 비교" icon="👥">
-        {compLoading ? (
-          <div className="text-center py-6 text-orange-400 animate-pulse text-sm">불러오는 중...</div>
-        ) : !comparison ? (
-          <p className="text-slate-500 text-sm text-center py-6">
-            수익 비교 데이터가 부족합니다.<br />
-            더 많은 가계부를 기록하면 확인할 수 있어요.
+      {/* Income trend line chart */}
+      <Card title="주간 수익 추이 (최근 8주)" icon="📈">
+        {loading ? (
+          <p className="text-sm text-center py-10 animate-pulse" style={{ color: 'var(--text-3)' }}>
+            불러오는 중...
           </p>
+        ) : trend.length < 2 ? (
+          <div className="text-center py-8">
+            <p className="text-2xl mb-2">📉</p>
+            <p className="text-sm" style={{ color: 'var(--text-3)' }}>
+              2주 이상 기록이 쌓이면 차트가 표시됩니다.
+            </p>
+          </div>
         ) : (
-          <div className="space-y-4">
-            {/* 백분위 원형 차트 */}
-            <div className="flex items-center gap-4">
-              <div style={{ width: 120, height: 120 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={[
-                        { value: comparison.percentile },
-                        { value: 100 - comparison.percentile },
-                      ]}
-                      startAngle={90}
-                      endAngle={-270}
-                      innerRadius={38}
-                      outerRadius={52}
-                      dataKey="value"
-                      strokeWidth={0}
-                    >
-                      <Cell fill={percentileColor} />
-                      <Cell fill="var(--border-2)" />
-                    </Pie>
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="flex-1">
-                <p className="font-bold text-2xl" style={{ color: percentileColor }}>
-                  상위 {100 - comparison.percentile}%
-                </p>
-                <p className="text-sm mt-1" style={{ color: 'var(--text-2)' }}>{comparison.message}</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="info-box rounded-xl p-3">
-                <p className="text-xs mb-1" style={{ color: 'var(--text-2)' }}>나의 주간 평균 수익</p>
-                <p className="font-bold text-base" style={{ color: 'var(--orange-light)' }}>{formatMeso(comparison.myWeeklyAvg)}</p>
-              </div>
-              <div className="info-box rounded-xl p-3">
-                <p className="text-xs mb-1" style={{ color: 'var(--text-2)' }}>전체 유저 평균</p>
-                <p className="font-bold text-base" style={{ color: 'var(--text)' }}>{formatMeso(comparison.allUsersWeeklyAvg)}</p>
-              </div>
-            </div>
-
-            {/* 비교 바 */}
-            <div>
-              <p className="text-xs mb-2" style={{ color: 'var(--text-2)' }}>평균 대비 비율</p>
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs w-8" style={{ color: 'var(--orange-light)' }}>나</span>
-                  <div className="flex-1 rounded-full h-2 overflow-hidden" style={{ backgroundColor: 'var(--border-2)' }}>
-                    <div
-                      className="h-2 rounded-full"
-                      style={{
-                        width: `${Math.min(100, (comparison.myWeeklyAvg / Math.max(comparison.myWeeklyAvg, comparison.allUsersWeeklyAvg)) * 100)}%`,
-                        background: 'linear-gradient(90deg, #f97316, #fb923c)',
-                      }}
-                    />
-                  </div>
-                  <span className="text-xs w-16 text-right" style={{ color: 'var(--orange-light)' }}>{formatMeso(comparison.myWeeklyAvg)}</span>
+          <>
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="week" tick={{ fill: 'var(--text-3)', fontSize: 11 }} />
+                <YAxis tick={{ fill: 'var(--text-3)', fontSize: 11 }} tickFormatter={(v) => formatMeso(v)} width={55} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12 }}
+                  labelStyle={{ color: 'var(--text)', fontWeight: 600 }}
+                  formatter={(v) => [(v as number).toLocaleString() + ' 메소']}
+                />
+                <Line type="monotone" dataKey="보스"   stroke="#E87E1E" strokeWidth={2.5} dot={{ r: 3, fill: '#E87E1E' }} />
+                <Line type="monotone" dataKey="사냥"   stroke="#16A34A" strokeWidth={2.5} dot={{ r: 3, fill: '#16A34A' }} />
+                <Line type="monotone" dataKey="경매장" stroke="#3B82F6" strokeWidth={2.5} dot={{ r: 3, fill: '#3B82F6' }} />
+              </LineChart>
+            </ResponsiveContainer>
+            <div className="flex justify-center gap-5 mt-2">
+              {[{ label: '보스', color: '#E87E1E' }, { label: '사냥', color: '#16A34A' }, { label: '경매장', color: '#3B82F6' }].map((l) => (
+                <div key={l.label} className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-2)' }}>
+                  <span className="w-3 h-3 rounded-full" style={{ backgroundColor: l.color, display: 'inline-block' }} />
+                  {l.label}
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs w-8" style={{ color: 'var(--text-2)' }}>평균</span>
-                  <div className="flex-1 rounded-full h-2 overflow-hidden" style={{ backgroundColor: 'var(--border-2)' }}>
-                    <div
-                      className="h-2 rounded-full"
-                      style={{
-                        width: `${Math.min(100, (comparison.allUsersWeeklyAvg / Math.max(comparison.myWeeklyAvg, comparison.allUsersWeeklyAvg)) * 100)}%`,
-                        backgroundColor: 'var(--border-2)',
-                      }}
-                    />
-                  </div>
-                  <span className="text-xs w-16 text-right" style={{ color: 'var(--text-2)' }}>{formatMeso(comparison.allUsersWeeklyAvg)}</span>
-                </div>
-              </div>
+              ))}
             </div>
-          </div>
+          </>
         )}
       </Card>
 
-      {/* 기능 #7: 경험치 계산기 */}
-      <Card title="레벨업 경험치 계산기" icon="⬆️">
-        <p className="text-xs mb-4" style={{ color: 'var(--text-2)' }}>
-          현재 레벨과 시간당 경험치를 입력하면, 레벨업까지 필요한 시간을 계산해드립니다.
-        </p>
-        <form onSubmit={handleExpCalc} className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              label="현재 레벨"
-              type="number"
-              placeholder="예: 260"
-              value={expForm.currentLevel}
-              onChange={(e) => setExpForm((p) => ({ ...p, currentLevel: e.target.value }))}
-              min={1}
-              max={300}
-            />
-            <Input
-              label="현재 경험치 (%)"
-              type="number"
-              placeholder="예: 45.5"
-              value={expForm.currentExpPercent}
-              onChange={(e) => setExpForm((p) => ({ ...p, currentExpPercent: e.target.value }))}
-              min={0}
-              max={99}
-              step={0.01}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              label="시간당 평균 획득 경험치"
-              type="number"
-              placeholder="예: 2000000000"
-              value={expForm.avgExpPerHour}
-              onChange={(e) => setExpForm((p) => ({ ...p, avgExpPerHour: e.target.value }))}
-              min={1}
-            />
-            <Input
-              label="목표 레벨 (선택)"
-              type="number"
-              placeholder="비우면 다음 레벨"
-              value={expForm.targetLevel}
-              onChange={(e) => setExpForm((p) => ({ ...p, targetLevel: e.target.value }))}
-              min={1}
-              max={300}
-            />
-          </div>
-          <Button type="submit" loading={expLoading} className="w-full">
-            계산하기
-          </Button>
-        </form>
+      {/* Pie chart */}
+      {pieData.length > 0 && (
+        <Card title="최근 4주 수익 비율" icon="🥧">
+          <ResponsiveContainer width="100%" height={200}>
+            <PieChart>
+              <Pie
+                data={pieData}
+                cx="50%" cy="50%"
+                outerRadius={75}
+                dataKey="value"
+                label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                labelLine={false}
+                fontSize={11}
+              >
+                {pieData.map((_, i) => (
+                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip formatter={(v) => [(v as number).toLocaleString() + ' 메소']} />
+            </PieChart>
+          </ResponsiveContainer>
+        </Card>
+      )}
 
-        {expResult && (
-          <div
-            className="mt-4 p-4 rounded-xl space-y-3"
-            style={{ backgroundColor: 'var(--bg)', border: '1px solid var(--border)' }}
-          >
-            <h3 className="font-semibold text-sm" style={{ color: 'var(--text)' }}>
-              Lv.{expResult.currentLevel} → Lv.{expResult.targetLevel} 계산 결과
-            </h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="text-center">
-                <p className="text-xs mb-1" style={{ color: 'var(--text-2)' }}>필요 경험치</p>
-                <p className="font-bold text-sm" style={{ color: 'var(--orange-light)' }}>{expResult.requiredExp.toLocaleString()}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-xs mb-1" style={{ color: 'var(--text-2)' }}>예상 소요 시간</p>
-                <p className="font-bold text-sm" style={{ color: 'var(--orange-light)' }}>
-                  {expResult.estimatedHours > 0 && `${expResult.estimatedHours}시간 `}
-                  {expResult.estimatedMinutes}분
-                </p>
-              </div>
-            </div>
-            {expResult.estimatedHours > 0 && (
-              <div className="text-center">
-                <p className="text-xs" style={{ color: 'var(--text-3)' }}>
-                  하루 4시간 기준 약 {Math.ceil(expResult.estimatedHours / 4)}일 소요
-                </p>
-              </div>
+      {/* Goals section */}
+      <div className="flex items-center justify-between">
+        <h2 className="font-bold font-diary" style={{ color: 'var(--text)' }}>🎯 목표 아이템</h2>
+        <Button size="sm" onClick={() => setShowGoalForm((v) => !v)}>
+          {showGoalForm ? '취소' : '+ 목표 추가'}
+        </Button>
+      </div>
+
+      {showGoalForm && (
+        <Card>
+          <form onSubmit={handleAddGoal} className="space-y-3">
+            <Input
+              label="목표 아이템"
+              placeholder="예: 드래곤 로어"
+              value={goalForm.itemName}
+              onChange={(e) => setGoalForm((p) => ({ ...p, itemName: e.target.value }))}
+              autoFocus
+            />
+            <Input
+              label="목표 금액 (메소)"
+              type="number"
+              placeholder="예: 5000000000"
+              value={goalForm.targetAmount}
+              onChange={(e) => setGoalForm((p) => ({ ...p, targetAmount: e.target.value }))}
+              min={1}
+            />
+            {goalForm.targetAmount && (
+              <p className="text-xs pl-1" style={{ color: 'var(--text-2)' }}>
+                = {formatMeso(Number(goalForm.targetAmount))}
+              </p>
             )}
-          </div>
-        )}
-      </Card>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="ghost" size="sm" onClick={() => setShowGoalForm(false)}>취소</Button>
+              <Button type="submit" size="sm" loading={goalSubmitting}>추가하기</Button>
+            </div>
+          </form>
+        </Card>
+      )}
 
-      {/* 기능 #9 관련 안내 */}
-      <Card title="데이터 활용 안내" icon="ℹ️">
-        <div className="space-y-2 text-xs" style={{ color: 'var(--text-2)' }}>
-          <p>• 수익 비교는 서비스에 등록된 모든 유저의 <span style={{ color: 'var(--text)' }}>익명화된</span> 데이터를 기반으로 합니다.</p>
-          <p>• 개인 정보는 공유되지 않으며, 통계 평균값만 활용됩니다.</p>
-          <p>• 더 많은 가계부를 기록할수록 정확한 비교가 가능합니다.</p>
-        </div>
-      </Card>
+      {activeGoals.length === 0 && !showGoalForm && (
+        <Card>
+          <div className="text-center py-6">
+            <p className="text-2xl mb-2">🎯</p>
+            <p className="text-sm" style={{ color: 'var(--text-3)' }}>목표 아이템을 추가해보세요!</p>
+          </div>
+        </Card>
+      )}
+
+      {activeGoals.map((goal) => {
+        const est = estimates[goal.id]
+        const pct = est ? Math.min(100, est.progressPercent) : 0
+        return (
+          <Card key={goal.id}>
+            <div className="flex items-start justify-between mb-3">
+              <div className="min-w-0 mr-3">
+                <p className="font-bold" style={{ color: 'var(--text)' }}>{goal.itemName}</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>
+                  목표: {formatMeso(goal.targetAmount)}
+                </p>
+              </div>
+              <div className="flex gap-1.5 shrink-0">
+                <button
+                  onClick={() => handleAchieve(goal.id)}
+                  className="text-xs px-2.5 py-1 rounded-lg font-medium"
+                  style={{ backgroundColor: 'rgba(22,163,74,0.1)', color: 'var(--green)', border: '1px solid rgba(22,163,74,0.2)' }}
+                >
+                  달성 ✓
+                </button>
+                <button
+                  onClick={() => handleDelete(goal.id)}
+                  className="text-xs px-2 py-1 rounded-lg"
+                  style={{ color: 'var(--text-3)', border: '1px solid var(--border)' }}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <div className="progress-track mb-3">
+              <div className="progress-fill" style={{ width: `${pct}%` }} />
+            </div>
+
+            {est ? (
+              <>
+                <div className="grid grid-cols-3 gap-2 mb-2">
+                  <div className="info-box text-center">
+                    <p className="text-xs mb-0.5" style={{ color: 'var(--text-3)' }}>진행률</p>
+                    <p className="font-bold text-sm" style={{ color: 'var(--primary)' }}>{pct.toFixed(1)}%</p>
+                  </div>
+                  <div className="info-box text-center">
+                    <p className="text-xs mb-0.5" style={{ color: 'var(--text-3)' }}>남은 금액</p>
+                    <p className="font-bold text-sm" style={{ color: 'var(--text)' }}>{formatMeso(est.remaining)}</p>
+                  </div>
+                  <div className="info-box text-center">
+                    <p className="text-xs mb-0.5" style={{ color: 'var(--text-3)' }}>예상 기간</p>
+                    <p className="font-bold text-sm" style={{ color: 'var(--text)' }}>
+                      {est.weeksRemaining > 0 ? `약 ${est.weeksRemaining}주` : '거의 완료!'}
+                    </p>
+                  </div>
+                </div>
+                {est.estimatedDate && est.weeksRemaining > 0 && (
+                  <p className="text-xs" style={{ color: 'var(--text-2)' }}>
+                    🗓 예상 달성일: {est.estimatedDate.split('T')[0]}
+                    &nbsp;·&nbsp;주간 평균 순수익 {formatMeso(est.avgWeeklyNet)}
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+                주간 수익 데이터가 쌓이면 예측이 표시됩니다.
+              </p>
+            )}
+          </Card>
+        )
+      })}
+
+      {achievedGoals.length > 0 && (
+        <Card title="달성한 목표 🏆" icon="✅">
+          <div className="space-y-1.5">
+            {achievedGoals.map((g) => (
+              <div key={g.id} className="list-row">
+                <div className="flex items-center gap-2">
+                  <span>🏆</span>
+                  <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>{g.itemName}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm" style={{ color: 'var(--text-2)' }}>{formatMeso(g.targetAmount)}</span>
+                  <button onClick={() => handleDelete(g.id)} className="text-xs" style={{ color: 'var(--text-3)' }}>✕</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
     </div>
   )
 }

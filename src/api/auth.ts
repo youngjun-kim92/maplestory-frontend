@@ -16,4 +16,7 @@ export const authApi = {
 
   updateMesoBalance: (data: MesoBalanceRequest) =>
     client.put<UserResponse>('/auth/meso-balance', data),
+
+  reset: () =>
+    client.delete('/auth/reset'),
 }

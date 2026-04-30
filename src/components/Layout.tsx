@@ -102,7 +102,7 @@ export default function Layout() {
         style={{
           backgroundColor: 'var(--surface)',
           borderTop: '1.5px solid var(--border)',
-          boxShadow: '0 -2px 12px rgba(61,43,31,0.08)',
+          boxShadow: 'var(--shadow)',
         }}
       >
         {navItems.map((item) => (
