@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from 'recharts'
 import { ledgerApi } from '../api/ledger'
 import { authApi } from '../api/auth'
 import { bossApi } from '../api/boss'
@@ -79,6 +79,9 @@ export default function DashboardPage() {
     solErdaFragments: '',
   })
   const [editSubmitting, setEditSubmitting] = useState(false)
+
+  // 달력 일별 데이터 (해당 월 전체 주 fetch)
+  const [calendarDayMap, setCalendarDayMap] = useState<Map<string, { income: number; expense: number; erda: number }>>(new Map())
 
   const weekStartStr = toDateString(weekStart)
   const weekEnd = new Date(weekStart)
@@ -252,28 +255,42 @@ export default function DashboardPage() {
     [allWeeks]
   )
 
-  // 일별 집계 (수입 + 지출 + 솔 에르다 조각)
-  const dayMap = useMemo(() => {
-    const map = new Map<string, { income: number; expense: number; erda: number }>()
-    for (const entry of (ledger?.entries ?? [])) {
-      const d = entry.entryDate.slice(0, 10)
-      const cur = map.get(d) ?? { income: 0, expense: 0, erda: 0 }
-      if ((entry.type ?? '').toLowerCase() === 'income') {
-        cur.income += entry.amount
-      } else {
-        cur.expense += entry.amount
-      }
-      cur.erda += entry.solErdaFragments ?? 0
-      map.set(d, { ...cur })
-    }
-    return map
-  }, [ledger?.entries])
-
   useEffect(() => {
     if (showCalendar) {
       setCalendarViewDate({ year: weekStart.getFullYear(), month: weekStart.getMonth() })
     }
   }, [showCalendar, weekStart])
+
+  // 달력 열리거나 월 바뀔 때: 해당 월의 모든 주 데이터 fetch
+  useEffect(() => {
+    if (!showCalendar) return
+    let cancelled = false
+    const rows = buildMonthCalendar(calendarViewDate.year, calendarViewDate.month)
+    const weekStarts = [...new Set(
+      rows.flatMap(row => {
+        const firstDay = row.find(d => d !== null)
+        return firstDay ? [toDateString(getWeekStart(firstDay))] : []
+      })
+    )]
+    Promise.all(weekStarts.map(ws => ledgerApi.getWeeklyLedger(ws)))
+      .then(results => {
+        if (cancelled) return
+        const map = new Map<string, { income: number; expense: number; erda: number }>()
+        for (const result of results) {
+          for (const entry of result.data.entries) {
+            const d = entry.entryDate.slice(0, 10)
+            const cur = map.get(d) ?? { income: 0, expense: 0, erda: 0 }
+            if ((entry.type ?? '').toLowerCase() === 'income') cur.income += entry.amount
+            else cur.expense += entry.amount
+            cur.erda += entry.solErdaFragments ?? 0
+            map.set(d, cur)
+          }
+        }
+        setCalendarDayMap(map)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [showCalendar, calendarViewDate.year, calendarViewDate.month])
 
   const weeklyErdaFragments = entries.reduce((s, e) => s + (e.solErdaFragments ?? 0), 0)
 
@@ -383,14 +400,16 @@ export default function DashboardPage() {
                     {row.map((day, colIdx) => {
                       const isToday = day ? toDateString(day) === todayStr : false
                       const dayStr = day ? toDateString(day) : ''
-                      const dayData = dayStr ? dayMap.get(dayStr) : undefined
+                      const dayData = dayStr ? calendarDayMap.get(dayStr) : undefined
                       return (
-                        <div key={colIdx} className="flex flex-col items-center py-1 min-h-[3.2rem]">
+                        <div key={colIdx} className="flex flex-col items-center py-1.5 min-h-[4.5rem]">
                           {day && (
                             <>
                               <span
-                                className="text-xs leading-none"
                                 style={{
+                                  fontSize: '11px',
+                                  lineHeight: 1,
+                                  fontWeight: isToday ? 700 : 500,
                                   color: isToday || isSelected
                                     ? 'var(--primary)'
                                     : colIdx === 0
@@ -398,26 +417,25 @@ export default function DashboardPage() {
                                       : colIdx === 6
                                         ? '#93c5fd'
                                         : 'var(--text)',
-                                  fontWeight: isToday ? 700 : undefined,
                                 }}
                               >{day.getDate()}</span>
                               {isToday && (
                                 <span className="w-1 h-1 rounded-full mt-0.5" style={{ backgroundColor: 'var(--primary)' }} />
                               )}
-                              {/* 일별 요약 — 항상 표시 */}
-                              <div className="flex flex-col items-center mt-0.5 gap-px">
+                              {/* 일별 요약 */}
+                              <div className="flex flex-col items-center mt-1 gap-0.5 w-full px-0.5">
                                 {dayData && dayData.income > 0 && (
-                                  <span style={{ fontSize: '7px', lineHeight: 1.3, color: 'var(--green)', fontWeight: 600 }}>
+                                  <span style={{ fontSize: '9px', lineHeight: 1.2, color: 'var(--green)', fontWeight: 600, textAlign: 'center' }}>
                                     +{formatMeso(dayData.income)}
                                   </span>
                                 )}
                                 {dayData && dayData.expense > 0 && (
-                                  <span style={{ fontSize: '7px', lineHeight: 1.3, color: 'var(--red)', fontWeight: 600 }}>
+                                  <span style={{ fontSize: '9px', lineHeight: 1.2, color: 'var(--red)', fontWeight: 600, textAlign: 'center' }}>
                                     -{formatMeso(dayData.expense)}
                                   </span>
                                 )}
                                 {dayData && dayData.erda > 0 && (
-                                  <span style={{ fontSize: '7px', lineHeight: 1.3, color: '#c4b5fd', fontWeight: 600 }}>
+                                  <span style={{ fontSize: '8.5px', lineHeight: 1.2, color: '#c4b5fd', fontWeight: 600, textAlign: 'center' }}>
                                     🔹{dayData.erda}
                                   </span>
                                 )}
@@ -680,9 +698,10 @@ export default function DashboardPage() {
                     }}
                     cursor={{ fill: 'var(--primary-dim)' }}
                   />
-                  <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: '10px' }} />
-                  <Bar dataKey="수입" fill="#4ade80" radius={[3, 3, 0, 0]} maxBarSize={22} />
-                  <Bar dataKey="지출" fill="#f87171" radius={[3, 3, 0, 0]} maxBarSize={22} />
+                  <CartesianGrid strokeDasharray="2 4" stroke="rgba(240,246,252,0.06)" vertical={false} />
+                  <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: '10px', color: 'var(--text-2)' }} />
+                  <Bar dataKey="수입" fill="#3fb950" radius={[3, 3, 0, 0]} maxBarSize={22} />
+                  <Bar dataKey="지출" fill="#f85149" radius={[3, 3, 0, 0]} maxBarSize={22} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -867,7 +886,7 @@ export default function DashboardPage() {
                       </td>
                       <td className="px-3 py-2.5 text-right">
                         {(w.totalSolErdaFragments ?? 0) > 0
-                          ? <span className="text-xs font-semibold" style={{ color: '#c4b5fd' }}>{w.totalSolErdaFragments}개</span>
+                          ? <span className="text-xs font-semibold" style={{ color: '#c4b5fd' }}>{w.totalSolErdaFragments ?? 0}개</span>
                           : <span style={{ color: 'var(--text-3)', fontSize: '10px' }}>—</span>
                         }
                       </td>
@@ -1057,12 +1076,13 @@ function EntryTableRow({
         <div className="flex items-center justify-end gap-1">
           <button
             onClick={onEdit}
-            title="수정"
-            className="w-5 h-5 flex items-center justify-center rounded text-xs"
-            style={{ color: 'var(--text-3)' }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--primary)')}
-            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-3)')}
-          >✏</button>
+            className="text-xs px-2 py-0.5 rounded-md font-semibold"
+            style={{
+              color: 'var(--primary)',
+              backgroundColor: 'var(--primary-dim)',
+              border: '1px solid var(--primary-glow)',
+            }}
+          >수정</button>
           <button
             onClick={onDelete}
             title="삭제"

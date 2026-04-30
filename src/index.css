@@ -5,37 +5,37 @@
   /* Brand */
   --primary: #f97316;
   --primary-light: #fb923c;
-  --primary-dim: rgba(249, 115, 22, 0.1);
-  --primary-glow: rgba(249, 115, 22, 0.28);
+  --primary-dim: rgba(249, 115, 22, 0.12);
+  --primary-glow: rgba(249, 115, 22, 0.22);
 
   /* Backward compat aliases */
   --orange: #f97316;
   --orange-light: #fb923c;
-  --orange-dim: rgba(249, 115, 22, 0.1);
-  --orange-glow: rgba(249, 115, 22, 0.28);
+  --orange-dim: rgba(249, 115, 22, 0.12);
+  --orange-glow: rgba(249, 115, 22, 0.22);
 
   /* Backgrounds */
-  --bg: #0c0c0c;
-  --surface: #141414;
-  --surface-2: #1e1e1e;
+  --bg: #0d1117;
+  --surface: #161b22;
+  --surface-2: #21262d;
 
   /* Borders */
-  --border: rgba(255, 255, 255, 0.07);
-  --border-2: rgba(255, 255, 255, 0.14);
+  --border: rgba(240, 246, 252, 0.1);
+  --border-2: rgba(240, 246, 252, 0.16);
 
   /* Text */
-  --text: #e2e8f0;
-  --text-2: #94a3b8;
-  --text-3: #64748b;
+  --text: #c9d1d9;
+  --text-2: #8b949e;
+  --text-3: #6e7681;
 
   /* Status */
-  --green: #4ade80;
-  --red: #f87171;
+  --green: #3fb950;
+  --red: #f85149;
 
   /* Shadows */
-  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.5);
-  --shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
-  --shadow-md: 0 4px 24px rgba(0, 0, 0, 0.7);
+  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.35);
+  --shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 4px 24px rgba(0, 0, 0, 0.55);
 }
 
 body {
@@ -43,8 +43,8 @@ body {
   font-family: 'Noto Sans KR', 'Pretendard', system-ui, sans-serif;
   background-color: var(--bg);
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+    linear-gradient(rgba(240, 246, 252, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(240, 246, 252, 0.018) 1px, transparent 1px);
   background-size: 40px 40px;
   color: var(--text);
   -webkit-font-smoothing: antialiased;
@@ -271,8 +271,8 @@ body {
   min-height: 100vh;
   background-color: var(--bg);
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+    linear-gradient(rgba(240, 246, 252, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(240, 246, 252, 0.018) 1px, transparent 1px);
   background-size: 40px 40px;
 }
 
