@@ -1,5 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useTheme } from '../contexts/ThemeContext'
 
 const navItems = [
   { to: '/dashboard',  label: '대시보드', icon: '📊' },
@@ -12,6 +13,7 @@ const navItems = [
 export default function Layout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const { theme, toggleTheme } = useTheme()
 
   const handleLogout = () => {
     logout()
@@ -52,6 +54,17 @@ export default function Layout() {
                 <span className="font-semibold" style={{ color: 'var(--primary)' }}>{user.nickname}</span>
               </div>
             )}
+            <button
+              onClick={toggleTheme}
+              title={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
+              className="w-8 h-8 flex items-center justify-center rounded-xl transition-all text-base"
+              style={{
+                backgroundColor: 'var(--surface-2)',
+                border: '1.5px solid var(--border)',
+              }}
+            >
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
             <button
               onClick={handleLogout}
               className="text-xs px-3 py-1.5 rounded-xl transition-all"
