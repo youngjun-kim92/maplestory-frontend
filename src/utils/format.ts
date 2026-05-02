@@ -1,26 +1,7 @@
 export function formatMeso(amount: number): string {
   if (amount === 0) return '0'
   const isNeg = amount < 0
-  const abs = Math.abs(amount)
-
-  let result: string
-  if (abs >= 1_000_000_000_000) {
-    const jo = (abs / 1_000_000_000_000).toFixed(2)
-    result = `${jo}조`
-  } else if (abs >= 100_000_000) {
-    const eok = Math.floor(abs / 100_000_000)
-    const rem = Math.floor((abs % 100_000_000) / 10_000)
-    result = rem > 0 ? `${eok}억 ${rem.toLocaleString()}만` : `${eok}억`
-  } else if (abs >= 10_000_000) {
-    const man = Math.floor(abs / 10_000)
-    result = `${man.toLocaleString()}만`
-  } else if (abs >= 10_000) {
-    const man = Math.floor(abs / 10_000)
-    result = `${man}만`
-  } else {
-    result = abs.toLocaleString()
-  }
-
+  const result = Math.abs(amount).toLocaleString()
   return isNeg ? `-${result}` : result
 }
 

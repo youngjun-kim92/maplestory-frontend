@@ -1,11 +1,18 @@
 import { useState, useEffect, useCallback } from 'react'
 import { charactersApi } from '../api/characters'
 import { useAuth } from '../contexts/AuthContext'
-import type { CharacterROI, CharacterStatsResponse, MapleCharacter } from '../types'
+import type { CharacterROI, CharacterStatsResponse, MapleCharacter, MvpGrade } from '../types'
+import { MVP_GRADE_LABELS } from '../types'
 import { formatMeso } from '../utils/format'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
+import Select from '../components/ui/Select'
+
+const MVP_GRADE_OPTIONS = [
+  { value: '', label: 'MVP 등급 선택' },
+  ...Object.entries(MVP_GRADE_LABELS).map(([v, l]) => ({ value: v, label: l })),
+]
 
 const JOB_GROUPS = [
   { group: '모험가 - 전사', jobs: ['히어로', '팔라딘', '다크나이트'] },
@@ -43,18 +50,18 @@ export default function CharactersPage() {
   const totalFragments = characters.reduce((s, c) => s + (c.solErdaFragments ?? 0), 0)
 
   const [form, setForm] = useState({
-    name: '', jobClass: '', level: '', isMain: false, initialInvestment: '', solErdaFragments: '',
+    name: '', jobClass: '', level: '', isMain: false, initialInvestment: '', solErdaFragments: '', mvpGrade: '' as MvpGrade | '',
   })
 
   // 일괄 등록 상태
   const [showBulkModal, setShowBulkModal] = useState(false)
-  const [bulkRows, setBulkRows] = useState<{ name: string; jobClass: string; level: string; isMain: boolean }[]>(
-    [{ name: '', jobClass: '', level: '', isMain: false }]
+  const [bulkRows, setBulkRows] = useState<{ name: string; jobClass: string; level: string; isMain: boolean; mvpGrade: string }[]>(
+    [{ name: '', jobClass: '', level: '', isMain: false, mvpGrade: '' }]
   )
   const [bulkSubmitting, setBulkSubmitting] = useState(false)
 
   const addBulkRow = () =>
-    setBulkRows((p) => [...p, { name: '', jobClass: '', level: '', isMain: false }])
+    setBulkRows((p) => [...p, { name: '', jobClass: '', level: '', isMain: false, mvpGrade: '' }])
 
   const removeBulkRow = (i: number) =>
     setBulkRows((p) => p.filter((_, idx) => idx !== i))
@@ -74,10 +81,11 @@ export default function CharactersPage() {
           jobClass: r.jobClass || undefined,
           level: r.level ? Number(r.level) : undefined,
           isMain: r.isMain,
+          mvpGrade: (r.mvpGrade || undefined) as MvpGrade | undefined,
         }))
       )
       setShowBulkModal(false)
-      setBulkRows([{ name: '', jobClass: '', level: '', isMain: false }])
+      setBulkRows([{ name: '', jobClass: '', level: '', isMain: false, mvpGrade: '' }])
       await Promise.all([fetchCharacters(), refreshUser()])
     } finally {
       setBulkSubmitting(false)
@@ -115,13 +123,13 @@ export default function CharactersPage() {
   }, [characters]) // eslint-disable-line
 
   const resetForm = () => {
-    setForm({ name: '', jobClass: '', level: '', isMain: false, initialInvestment: '', solErdaFragments: '' })
+    setForm({ name: '', jobClass: '', level: '', isMain: false, initialInvestment: '', solErdaFragments: '', mvpGrade: '' })
     setShowForm(false)
     setEditingId(null)
   }
 
   const openAddForm = () => {
-    setForm({ name: '', jobClass: '', level: '', isMain: characters.length === 0, initialInvestment: '', solErdaFragments: '' })
+    setForm({ name: '', jobClass: '', level: '', isMain: characters.length === 0, initialInvestment: '', solErdaFragments: '', mvpGrade: '' })
     setEditingId(null)
     setShowForm(true)
   }
@@ -134,6 +142,7 @@ export default function CharactersPage() {
       isMain: char.isMain,
       initialInvestment: char.initialInvestment ? String(char.initialInvestment) : '',
       solErdaFragments: char.solErdaFragments ? String(char.solErdaFragments) : '',
+      mvpGrade: (char.mvpGrade as MvpGrade | '') ?? '',
     })
     setEditingId(char.id)
     setShowForm(true)
@@ -162,6 +171,7 @@ export default function CharactersPage() {
         isMain: form.isMain,
         initialInvestment: form.initialInvestment ? Number(form.initialInvestment) : undefined,
         solErdaFragments: form.solErdaFragments ? Number(form.solErdaFragments) : undefined,
+        mvpGrade: (form.mvpGrade || undefined) as MvpGrade | undefined,
       }
       if (editingId) {
         await charactersApi.updateCharacter(editingId, payload)
@@ -240,8 +250,8 @@ export default function CharactersPage() {
             <form onSubmit={handleBulkSubmit} className="flex flex-col flex-1 overflow-hidden">
               <div className="overflow-y-auto flex-1 p-4 space-y-2">
                 {/* 테이블 헤더 */}
-                <div className="grid gap-2 px-1 mb-1" style={{ gridTemplateColumns: '1fr 1.2fr 80px 60px 32px' }}>
-                  {['캐릭터명 *', '직업', '레벨', '메인', ''].map((h) => (
+                <div className="grid gap-2 px-1 mb-1" style={{ gridTemplateColumns: '1fr 1.2fr 70px 100px 50px 32px' }}>
+                  {['캐릭터명 *', '직업', '레벨', 'MVP등급', '메인', ''].map((h) => (
                     <span key={h} className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>
                       {h}
                     </span>
@@ -249,7 +259,7 @@ export default function CharactersPage() {
                 </div>
 
                 {bulkRows.map((row, i) => (
-                  <div key={i} className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr 1.2fr 80px 60px 32px' }}>
+                  <div key={i} className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr 1.2fr 70px 100px 50px 32px' }}>
                     <input
                       className="form-field text-sm"
                       placeholder="닉네임"
@@ -279,6 +289,16 @@ export default function CharactersPage() {
                       value={row.level}
                       onChange={(e) => updateBulkRow(i, 'level', e.target.value)}
                     />
+                    <select
+                      className="form-field text-sm"
+                      value={row.mvpGrade}
+                      onChange={(e) => updateBulkRow(i, 'mvpGrade', e.target.value)}
+                    >
+                      <option value="">등급</option>
+                      {Object.entries(MVP_GRADE_LABELS).map(([v, l]) => (
+                        <option key={v} value={v}>{l}</option>
+                      ))}
+                    </select>
                     <div className="flex justify-center">
                       <input
                         type="checkbox"
@@ -451,6 +471,12 @@ export default function CharactersPage() {
                   </p>
                 )}
               </div>
+              <Select
+                label="MVP 등급 (선택)"
+                options={MVP_GRADE_OPTIONS}
+                value={form.mvpGrade}
+                onChange={(e) => setForm((p) => ({ ...p, mvpGrade: e.target.value as MvpGrade | '' }))}
+              />
             </div>
             {form.initialInvestment && (
               <p className="text-xs pl-1" style={{ color: 'var(--text-2)' }}>

@@ -4,9 +4,13 @@ import { ThemeProvider } from './contexts/ThemeContext'
 import Layout from './components/Layout'
 import LandingPage from './pages/LandingPage'
 import DashboardPage from './pages/DashboardPage'
-import InputPage from './pages/InputPage'
+import BossPage from './pages/BossPage'
+import HuntingPage from './pages/HuntingPage'
+import LedgerPage from './pages/LedgerPage'
 import GoalsPage from './pages/GoalsPage'
 import CharactersPage from './pages/CharactersPage'
+import FavoritesPage from './pages/FavoritesPage'
+import StatsPage from './pages/StatsPage'
 import SettingsPage from './pages/SettingsPage'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -45,9 +49,13 @@ export default function App() {
             }
           >
             <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/input" element={<InputPage />} />
-            <Route path="/goals" element={<GoalsPage />} />
+            <Route path="/boss" element={<BossPage />} />
+            <Route path="/hunting" element={<HuntingPage />} />
+            <Route path="/ledger" element={<LedgerPage />} />
             <Route path="/characters" element={<CharactersPage />} />
+            <Route path="/favorites" element={<FavoritesPage />} />
+            <Route path="/goals" element={<GoalsPage />} />
+            <Route path="/stats" element={<StatsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

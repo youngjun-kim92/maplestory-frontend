@@ -1,10 +1,8 @@
 const QUICK_AMOUNTS = [
-  { label: '+1천만', value: 10_000_000 },
-  { label: '+5천만', value: 50_000_000 },
   { label: '+1억',   value: 100_000_000 },
-  { label: '+3억',   value: 300_000_000 },
-  { label: '+5억',   value: 500_000_000 },
-  { label: '+10억',  value: 1_000_000_000 },
+  { label: '+5천만', value: 50_000_000 },
+  { label: '+1천만', value: 10_000_000 },
+  { label: '+1백만', value: 1_000_000 },
 ]
 
 export default function QuickAmountButtons({ onAdd }: { onAdd: (v: number) => void }) {

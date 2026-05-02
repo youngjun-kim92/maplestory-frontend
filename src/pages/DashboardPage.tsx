@@ -70,7 +70,7 @@ export default function DashboardPage() {
   const [drops, setDrops] = useState<BossDrop[]>([])
   const [dropsLoading, setDropsLoading] = useState(true)
   const [sellingId, setSellingId] = useState<number | null>(null)
-  const [sellForm, setSellForm] = useState({ saleAmount: '', saleDate: toDateString() })
+  const [sellForm, setSellForm] = useState({ saleAmount: '', saleDate: toDateString(), isPcCafe: false })
   const [sellSubmitting, setSellSubmitting] = useState(false)
 
   const [showCalendar, setShowCalendar] = useState(false)
@@ -154,9 +154,9 @@ export default function DashboardPage() {
     if (!amount || amount < 1) return
     setSellSubmitting(true)
     try {
-      await bossApi.sellDrop(sellingId, { saleAmount: amount, saleDate: sellForm.saleDate })
+      await bossApi.sellDrop(sellingId, { saleAmount: amount, saleDate: sellForm.saleDate, isPcCafe: sellForm.isPcCafe })
       setSellingId(null)
-      setSellForm({ saleAmount: '', saleDate: toDateString() })
+      setSellForm({ saleAmount: '', saleDate: toDateString(), isPcCafe: false })
       await fetchDrops()
       await fetchLedger()
       await fetchAllWeeks()
@@ -807,7 +807,7 @@ export default function DashboardPage() {
                   )}
                   {drop.status === 'listed' && (
                     <button
-                      onClick={() => { setSellingId(drop.id); setSellForm({ saleAmount: '', saleDate: toDateString() }) }}
+                      onClick={() => { setSellingId(drop.id); setSellForm({ saleAmount: '', saleDate: toDateString(), isPcCafe: false }) }}
                       className="text-xs px-2.5 py-1.5 rounded-lg shrink-0 font-medium"
                       style={{ backgroundColor: 'var(--primary-dim)', color: 'var(--primary)', border: '1px solid var(--primary-glow)' }}
                     >판매 처리</button>
@@ -840,9 +840,34 @@ export default function DashboardPage() {
                     <QuickAmountButtons
                       onAdd={(v) => setSellForm((p) => ({ ...p, saleAmount: String((Number(p.saleAmount) || 0) + v) }))}
                     />
-                    {sellForm.saleAmount && (
-                      <p className="text-xs" style={{ color: 'var(--text-2)' }}>= {formatMeso(Number(sellForm.saleAmount))}</p>
-                    )}
+                    {(() => {
+                      const saleAmt = Number(sellForm.saleAmount)
+                      const dropChar = drop.characterId ? characters.find(c => c.id === drop.characterId) : null
+                      const isDiscounted = sellForm.isPcCafe || ['SILVER','GOLD','DIAMOND','RED','BLACK'].includes(dropChar?.mvpGrade ?? '')
+                      const feeRate = isDiscounted ? 0.03 : 0.05
+                      const net = saleAmt * (1 - feeRate)
+                      return saleAmt > 0 ? (
+                        <div className="space-y-1 text-xs" style={{ color: 'var(--text-2)' }}>
+                          <p>입력: {formatMeso(saleAmt)} 메소</p>
+                          <p>수수료: {(feeRate * 100).toFixed(0)}% {isDiscounted ? '(실버+ MVP / PC방)' : '(일반)'}</p>
+                          <p className="font-semibold" style={{ color: 'var(--green)' }}>
+                            예상 실수령: {formatMeso(Math.floor(net))} 메소
+                          </p>
+                        </div>
+                      ) : null
+                    })()}
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={sellForm.isPcCafe}
+                        onChange={(e) => setSellForm((p) => ({ ...p, isPcCafe: e.target.checked }))}
+                        className="w-3.5 h-3.5"
+                        style={{ accentColor: 'var(--primary)' }}
+                      />
+                      <span className="text-xs" style={{ color: 'var(--text-2)' }}>
+                        PC방 접속 중 (수수료 3% 적용)
+                      </span>
+                    </label>
                     <div className="flex gap-2">
                       <Button type="submit" size="sm" loading={sellSubmitting} className="flex-1">판매 완료 처리</Button>
                       <Button type="button" variant="ghost" size="sm" onClick={() => setSellingId(null)}>취소</Button>

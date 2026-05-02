@@ -1,14 +1,19 @@
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { useState } from 'react'
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
+import { charactersApi } from '../api/characters'
 
 const navItems = [
-  { to: '/dashboard',  label: '대시보드', icon: '📊', desc: '주간 수익·지출 현황' },
-  { to: '/input',      label: '기록하기', icon: '✏️', desc: '보스·수익·지출 입력' },
-  { to: '/goals',      label: '목표',     icon: '🎯', desc: '목표 아이템 달성 예측' },
-  { to: '/characters', label: '캐릭터',   icon: '🧙', desc: '캐릭터 관리·손익분기점' },
-  { to: '/settings',   label: '설정',     icon: '⚙️', desc: '솔 에르다 가격·메소 설정' },
+  { to: '/dashboard',  label: '대시보드',  icon: '📊', desc: '주간 수익·지출 현황' },
+  { to: '/boss',       label: '보스 처치', icon: '⚔️', desc: '보스 킬 기록·결정석 수익' },
+  { to: '/hunting',    label: '사냥',      icon: '🌲', desc: '사냥 세션·시간당 수익' },
+  { to: '/ledger',     label: '가계부',    icon: '📒', desc: '수입·지출 직접 기록' },
+  { to: '/characters', label: '캐릭터',    icon: '🧙', desc: '캐릭터 관리·손익분기점' },
+  { to: '/favorites',  label: '즐겨찾기',  icon: '⭐', desc: '보스·도핑 템플릿 관리' },
+  { to: '/goals',      label: '목표',      icon: '🎯', desc: '목표 아이템 달성 예측' },
+  { to: '/stats',      label: '통계',      icon: '📈', desc: '사냥·보스 추이 분석' },
+  { to: '/settings',   label: '설정',      icon: '⚙️', desc: '솔 에르다 가격·메소 설정' },
 ]
 
 const ONBOARDING_KEY = 'onboarding_v1'
@@ -24,8 +29,15 @@ const ONBOARDING_STEPS = [
 export default function Layout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const { theme, toggleTheme } = useTheme()
   const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem(ONBOARDING_KEY))
+  const [hasNoChars, setHasNoChars] = useState(false)
+  const [charBannerDismissed, setCharBannerDismissed] = useState(false)
+
+  useEffect(() => {
+    charactersApi.getCharacters().then((r) => setHasNoChars(r.data.length === 0)).catch(() => {})
+  }, [location.pathname])
   const [onboardingStep, setOnboardingStep] = useState(0)
 
   const closeOnboarding = () => {
@@ -152,6 +164,39 @@ export default function Layout() {
         {/* Main */}
         <main className="flex-1 p-4 md:p-6 pb-24 md:pb-8 overflow-auto">
           <div className="max-w-6xl mx-auto w-full fade-in">
+            {/* 캐릭터 0개 배너 */}
+            {hasNoChars && !charBannerDismissed && location.pathname !== '/characters' && (
+              <div
+                className="mb-4 flex items-center justify-between gap-3 px-4 py-3 rounded-xl"
+                style={{
+                  backgroundColor: 'var(--primary-dim)',
+                  border: '1.5px solid var(--primary-glow)',
+                }}
+              >
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: 'var(--primary)' }}>
+                    🧙 먼저 캐릭터를 등록해주세요
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>
+                    보스/사냥 기록에 캐릭터가 필요합니다.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => navigate('/characters')}
+                    className="text-xs px-3 py-1.5 rounded-lg font-semibold"
+                    style={{ backgroundColor: 'var(--primary)', color: '#fff' }}
+                  >
+                    캐릭터 등록하기 →
+                  </button>
+                  <button
+                    onClick={() => setCharBannerDismissed(true)}
+                    className="text-xs w-6 h-6 flex items-center justify-center rounded"
+                    style={{ color: 'var(--text-3)' }}
+                  >✕</button>
+                </div>
+              </div>
+            )}
             <Outlet />
           </div>
         </main>

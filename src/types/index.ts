@@ -146,6 +146,7 @@ export interface BossDrop {
 export interface BossDropSellRequest {
   saleAmount: number
   saleDate: string
+  isPcCafe?: boolean
 }
 
 // ====== 보스 타입 ======
@@ -247,6 +248,18 @@ export interface GoalEstimate {
 }
 
 // ====== 캐릭터 타입 ======
+export type MvpGrade = 'NORMAL' | 'BRONZE' | 'SILVER' | 'GOLD' | 'DIAMOND' | 'RED' | 'BLACK'
+
+export const MVP_GRADE_LABELS: Record<MvpGrade, string> = {
+  NORMAL:  '일반',
+  BRONZE:  '브론즈',
+  SILVER:  '실버',
+  GOLD:    '골드',
+  DIAMOND: '다이아',
+  RED:     '레드',
+  BLACK:   '블랙',
+}
+
 export interface MapleCharacter {
   id: number
   name: string
@@ -255,6 +268,7 @@ export interface MapleCharacter {
   isMain: boolean
   initialInvestment: number
   solErdaFragments: number
+  mvpGrade?: MvpGrade
 }
 
 export interface CharacterRequest {
@@ -264,6 +278,7 @@ export interface CharacterRequest {
   isMain?: boolean
   initialInvestment?: number
   solErdaFragments?: number
+  mvpGrade?: MvpGrade
 }
 
 export interface CharacterROI {
