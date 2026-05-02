@@ -83,16 +83,20 @@ export default function BossPage() {
     setForm((p) => ({ ...p, bossName: '', difficulty: '' }))
   }
 
+  const [charError, setCharError] = useState('')
+
   const handleSubmit = async (e: { preventDefault(): void }) => {
     e.preventDefault()
     if (!form.bossName || !form.difficulty) return
+    if (!form.characterId) { setCharError('캐릭터를 선택해주세요.'); return }
+    setCharError('')
     setSubmitting(true)
     try {
       await bossApi.recordBossKill({
         bossName: form.bossName,
         difficulty: form.difficulty,
         killDate: form.killDate,
-        characterId: form.characterId ? Number(form.characterId) : null,
+        characterId: Number(form.characterId),
       })
       setShowForm(false)
       setForm((p) => ({ ...p, bossName: '', difficulty: '' }))
@@ -211,21 +215,31 @@ export default function BossPage() {
                 value={form.killDate}
                 onChange={(e) => setForm((p) => ({ ...p, killDate: e.target.value }))}
               />
-              {characters.length > 0 && (
+              {characters.length > 0 ? (
                 <Select
-                  label="캐릭터 (선택)"
+                  label="캐릭터 *"
                   options={[
-                    { value: '', label: '선택 안함' },
-                    ...characters.map((c) => ({ value: String(c.id), label: c.name })),
+                    { value: '', label: '캐릭터를 선택하세요 *' },
+                    ...characters.map((c) => ({ value: String(c.id), label: c.isMain ? `⭐ ${c.name}` : c.name })),
                   ]}
                   value={form.characterId}
-                  onChange={(e) => setForm((p) => ({ ...p, characterId: e.target.value }))}
+                  onChange={(e) => { setForm((p) => ({ ...p, characterId: e.target.value })); setCharError('') }}
+                  error={charError}
                 />
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold tracking-wide uppercase" style={{ color: 'var(--text-2)' }}>캐릭터 *</label>
+                  <div className="form-field flex items-center justify-between" style={{ color: 'var(--text-3)' }}>
+                    <span className="text-xs">등록된 캐릭터가 없습니다</span>
+                    <a href="/characters" className="text-xs underline" style={{ color: 'var(--primary)' }}>캐릭터 등록 →</a>
+                  </div>
+                </div>
               )}
             </div>
+            {charError && <p className="text-xs" style={{ color: 'var(--red)' }}>{charError}</p>}
             <div className="flex justify-end gap-2">
               <Button type="button" variant="ghost" onClick={() => setShowForm(false)}>취소</Button>
-              <Button type="submit" loading={submitting} disabled={!form.bossName || !form.difficulty}>
+              <Button type="submit" loading={submitting} disabled={!form.bossName || !form.difficulty || characters.length === 0}>
                 기록하기
               </Button>
             </div>
