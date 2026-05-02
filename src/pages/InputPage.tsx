@@ -10,6 +10,7 @@ import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import Select from '../components/ui/Select'
+import QuickAmountButtons from '../components/ui/QuickAmountButtons'
 
 
 const RESET_TABS = [
@@ -551,6 +552,9 @@ function GeneralSection({ characters }: { characters: MapleCharacter[] }) {
                   value={form.amount}
                   onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))}
                   min={1}
+                />
+                <QuickAmountButtons
+                  onAdd={(v) => setForm((p) => ({ ...p, amount: String((Number(p.amount) || 0) + v) }))}
                 />
                 {form.amount && Number(form.amount) > 0 && (
                   <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-2)' }}>

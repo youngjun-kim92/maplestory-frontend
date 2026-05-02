@@ -23,9 +23,21 @@ import {
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import Select from '../components/ui/Select'
+import QuickAmountButtons from '../components/ui/QuickAmountButtons'
 
 const DAY_HEADERS = ['일', '월', '화', '수', '목', '금', '토']
 const MONTH_KO = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월']
+
+const CATEGORY_COLORS: Record<string, { bg: string; color: string }> = {
+  boss:        { bg: 'rgba(249,115,22,0.12)',  color: 'var(--primary)' },
+  hunting:     { bg: 'rgba(63,185,80,0.12)',   color: 'var(--green)' },
+  auction:     { bg: 'rgba(251,191,36,0.12)',  color: '#fbbf24' },
+  sol_erda:    { bg: 'rgba(167,139,250,0.12)', color: '#a78bfa' },
+  cube:        { bg: 'rgba(96,165,250,0.12)',  color: '#60a5fa' },
+  starforce:   { bg: 'rgba(250,204,21,0.12)',  color: '#facc15' },
+  spell_trace: { bg: 'rgba(52,211,153,0.12)',  color: '#34d399' },
+  other:       { bg: 'rgba(139,148,158,0.12)', color: 'var(--text-2)' },
+}
 
 function buildMonthCalendar(year: number, month: number): (Date | null)[][] {
   const firstDay = new Date(year, month, 1)
@@ -313,12 +325,21 @@ export default function DashboardPage() {
         </div>
         <div className="flex items-center gap-1">
           <button
-            className="week-nav-btn text-base"
+            className="week-nav-btn flex items-center gap-1"
             onClick={() => setShowCalendar((v) => !v)}
             title="달력으로 보기"
             style={showCalendar ? { backgroundColor: 'var(--primary-dim)', color: 'var(--primary)', border: '1px solid var(--primary-glow)' } : {}}
-          >📅</button>
-          <button className="week-nav-btn" onClick={() => goWeek(-1)}>◀</button>
+          >
+            <span className="text-base">📅</span>
+            <span className="hidden sm:inline text-xs font-normal" style={{ color: showCalendar ? 'var(--primary)' : 'var(--text-2)' }}>
+              {weekStart.getMonth() + 1}월
+            </span>
+          </button>
+          <button
+            className="week-nav-btn"
+            onClick={() => goWeek(-1)}
+            title={(() => { const d = new Date(weekStart); d.setDate(d.getDate() - 7); return `이전 주 (${d.getMonth() + 1}/${d.getDate()})` })()}
+          >◀</button>
           {!isThisWeek && (
             <button className="week-nav-btn text-xs" onClick={() => { setWeekStart(getWeekStart()); setShowCalendar(false) }}>
               이번 주
@@ -328,6 +349,7 @@ export default function DashboardPage() {
             className="week-nav-btn"
             onClick={() => goWeek(1)}
             disabled={isThisWeek}
+            title={isThisWeek ? '이번 주가 최신입니다' : (() => { const d = new Date(weekStart); d.setDate(d.getDate() + 7); return `다음 주 (${d.getMonth() + 1}/${d.getDate()})` })()}
             style={isThisWeek ? { opacity: 0.3, cursor: 'not-allowed' } : {}}
           >▶</button>
         </div>
@@ -815,6 +837,9 @@ export default function DashboardPage() {
                         onChange={(e) => setSellForm((p) => ({ ...p, saleDate: e.target.value }))}
                       />
                     </div>
+                    <QuickAmountButtons
+                      onAdd={(v) => setSellForm((p) => ({ ...p, saleAmount: String((Number(p.saleAmount) || 0) + v) }))}
+                    />
                     {sellForm.saleAmount && (
                       <p className="text-xs" style={{ color: 'var(--text-2)' }}>= {formatMeso(Number(sellForm.saleAmount))}</p>
                     )}
@@ -1032,6 +1057,7 @@ function EntryTableRow({
   const label = CATEGORY_LABELS[categoryKey] ?? entry.category
   const isIncome = (entry.type ?? '').toLowerCase() === 'income'
   const erdaCount = entry.solErdaFragments ?? 0
+  const catColors = CATEGORY_COLORS[categoryKey] ?? CATEGORY_COLORS.other
 
   return (
     <tr
@@ -1058,15 +1084,27 @@ function EntryTableRow({
             <p className="text-sm font-medium truncate" style={{ color: 'var(--text)' }}>
               {entry.description || label}
             </p>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
-              {formatDateKo(entry.entryDate)}
-              {entry.characterName && ` · ${entry.characterName}`}
-            </p>
+            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+              <span className="text-xs" style={{ color: 'var(--text-3)' }}>
+                {formatDateKo(entry.entryDate)}
+                {entry.characterName && ` · ${entry.characterName}`}
+              </span>
+              <span
+                className="text-xs px-1.5 py-0.5 rounded font-medium"
+                style={{ backgroundColor: catColors.bg, color: catColors.color }}
+              >
+                {label}
+              </span>
+            </div>
           </div>
         </div>
       </td>
       <td className="px-3 py-2.5 text-right whitespace-nowrap">
-        <span className="font-bold text-sm" style={{ color: isIncome ? 'var(--green)' : 'var(--red)' }}>
+        <span
+          className="font-bold text-sm"
+          style={{ color: isIncome ? 'var(--green)' : 'var(--red)' }}
+          title={entry.amount.toLocaleString() + ' 메소'}
+        >
           {isIncome ? '+' : '-'}{formatMeso(entry.amount)}
         </span>
       </td>
