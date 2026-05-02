@@ -46,6 +46,44 @@ export default function CharactersPage() {
     name: '', jobClass: '', level: '', isMain: false, initialInvestment: '', solErdaFragments: '',
   })
 
+  // 일괄 등록 상태
+  const [showBulkModal, setShowBulkModal] = useState(false)
+  const [bulkRows, setBulkRows] = useState<{ name: string; jobClass: string; level: string; isMain: boolean }[]>(
+    [{ name: '', jobClass: '', level: '', isMain: false }]
+  )
+  const [bulkSubmitting, setBulkSubmitting] = useState(false)
+
+  const addBulkRow = () =>
+    setBulkRows((p) => [...p, { name: '', jobClass: '', level: '', isMain: false }])
+
+  const removeBulkRow = (i: number) =>
+    setBulkRows((p) => p.filter((_, idx) => idx !== i))
+
+  const updateBulkRow = (i: number, field: string, value: string | boolean) =>
+    setBulkRows((p) => p.map((r, idx) => idx === i ? { ...r, [field]: value } : r))
+
+  const handleBulkSubmit = async (e: { preventDefault(): void }) => {
+    e.preventDefault()
+    const valid = bulkRows.filter((r) => r.name.trim())
+    if (valid.length === 0) return
+    setBulkSubmitting(true)
+    try {
+      await charactersApi.bulkCreateCharacters(
+        valid.map((r) => ({
+          name: r.name.trim(),
+          jobClass: r.jobClass || undefined,
+          level: r.level ? Number(r.level) : undefined,
+          isMain: r.isMain,
+        }))
+      )
+      setShowBulkModal(false)
+      setBulkRows([{ name: '', jobClass: '', level: '', isMain: false }])
+      await Promise.all([fetchCharacters(), refreshUser()])
+    } finally {
+      setBulkSubmitting(false)
+    }
+  }
+
   const fetchCharacters = useCallback(async () => {
     setLoading(true)
     try {
@@ -161,10 +199,143 @@ export default function CharactersPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold font-heading" style={{ color: 'var(--text)' }}>🧙 캐릭터 관리</h1>
-        <Button size="sm" onClick={showForm ? resetForm : openAddForm}>
-          {showForm ? '취소' : '+ 캐릭터 추가'}
-        </Button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowBulkModal(true)}
+            className="text-xs px-3 py-1.5 rounded-xl font-medium transition-all"
+            style={{
+              color: 'var(--text-2)',
+              backgroundColor: 'var(--surface-2)',
+              border: '1.5px solid var(--border)',
+            }}
+          >
+            일괄 등록
+          </button>
+          <Button size="sm" onClick={showForm ? resetForm : openAddForm}>
+            {showForm ? '취소' : '+ 캐릭터 추가'}
+          </Button>
+        </div>
       </div>
+
+      {/* 일괄 등록 모달 */}
+      {showBulkModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.8)' }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowBulkModal(false) }}
+        >
+          <div
+            className="rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col"
+            style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-md)' }}
+          >
+            <div className="flex items-center justify-between p-5 pb-3" style={{ borderBottom: '1px solid var(--border)' }}>
+              <h2 className="font-bold text-base" style={{ color: 'var(--text)' }}>📋 캐릭터 일괄 등록</h2>
+              <button
+                onClick={() => setShowBulkModal(false)}
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-sm"
+                style={{ color: 'var(--text-3)', backgroundColor: 'var(--surface-2)' }}
+              >✕</button>
+            </div>
+
+            <form onSubmit={handleBulkSubmit} className="flex flex-col flex-1 overflow-hidden">
+              <div className="overflow-y-auto flex-1 p-4 space-y-2">
+                {/* 테이블 헤더 */}
+                <div className="grid gap-2 px-1 mb-1" style={{ gridTemplateColumns: '1fr 1.2fr 80px 60px 32px' }}>
+                  {['캐릭터명 *', '직업', '레벨', '메인', ''].map((h) => (
+                    <span key={h} className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>
+                      {h}
+                    </span>
+                  ))}
+                </div>
+
+                {bulkRows.map((row, i) => (
+                  <div key={i} className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr 1.2fr 80px 60px 32px' }}>
+                    <input
+                      className="form-field text-sm"
+                      placeholder="닉네임"
+                      value={row.name}
+                      onChange={(e) => updateBulkRow(i, 'name', e.target.value)}
+                    />
+                    <select
+                      className="form-field text-sm"
+                      value={row.jobClass}
+                      onChange={(e) => updateBulkRow(i, 'jobClass', e.target.value)}
+                    >
+                      <option value="">직업 선택</option>
+                      {JOB_GROUPS.map((g) => (
+                        <optgroup key={g.group} label={g.group}>
+                          {g.jobs.map((j) => (
+                            <option key={j} value={j}>{j}</option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                    <input
+                      className="form-field text-sm"
+                      type="number"
+                      placeholder="레벨"
+                      min={1}
+                      max={300}
+                      value={row.level}
+                      onChange={(e) => updateBulkRow(i, 'level', e.target.value)}
+                    />
+                    <div className="flex justify-center">
+                      <input
+                        type="checkbox"
+                        checked={row.isMain}
+                        onChange={(e) => updateBulkRow(i, 'isMain', e.target.checked)}
+                        className="w-4 h-4 cursor-pointer"
+                        style={{ accentColor: 'var(--primary)' }}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeBulkRow(i)}
+                      disabled={bulkRows.length === 1}
+                      className="w-7 h-7 flex items-center justify-center rounded-lg text-xs transition-all"
+                      style={{
+                        color: bulkRows.length === 1 ? 'var(--text-3)' : 'var(--red)',
+                        backgroundColor: 'var(--surface-2)',
+                        opacity: bulkRows.length === 1 ? 0.4 : 1,
+                      }}
+                    >✕</button>
+                  </div>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={addBulkRow}
+                  className="w-full py-2 rounded-xl text-sm font-medium transition-all mt-1"
+                  style={{
+                    color: 'var(--primary)',
+                    border: '1.5px dashed var(--primary-glow)',
+                    backgroundColor: 'var(--primary-dim)',
+                  }}
+                >
+                  + 행 추가
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between p-4 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
+                <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+                  {bulkRows.filter((r) => r.name.trim()).length}명 등록 예정
+                </p>
+                <div className="flex gap-2">
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setShowBulkModal(false)}>취소</Button>
+                  <Button
+                    type="submit"
+                    size="sm"
+                    loading={bulkSubmitting}
+                    disabled={bulkRows.every((r) => !r.name.trim())}
+                  >
+                    일괄 등록
+                  </Button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* 캐릭터별 수입/지출 통계 */}
       {characterStats.length > 0 && (

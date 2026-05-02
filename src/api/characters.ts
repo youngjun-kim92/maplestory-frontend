@@ -17,6 +17,9 @@ export const charactersApi = {
   getCharacterROI: (id: number) =>
     client.get<CharacterROI>(`/characters/${id}/roi`),
 
+  bulkCreateCharacters: (data: CharacterRequest[]) =>
+    client.post<MapleCharacter[]>('/characters/bulk', data),
+
   getCharacterStats: () =>
     client.get<CharacterStatsResponse[]>('/characters/stats'),
 }
