@@ -1,19 +1,45 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
 
 const navItems = [
-  { to: '/dashboard',  label: '대시보드', icon: '📊' },
-  { to: '/input',      label: '기록하기', icon: '✏️' },
-  { to: '/goals',      label: '목표',     icon: '🎯' },
-  { to: '/characters', label: '캐릭터',   icon: '🧙' },
-  { to: '/settings',   label: '설정',     icon: '⚙️' },
+  { to: '/dashboard',  label: '대시보드', icon: '📊', desc: '주간 수익·지출 현황' },
+  { to: '/input',      label: '기록하기', icon: '✏️', desc: '보스·수익·지출 입력' },
+  { to: '/goals',      label: '목표',     icon: '🎯', desc: '목표 아이템 달성 예측' },
+  { to: '/characters', label: '캐릭터',   icon: '🧙', desc: '캐릭터 관리·손익분기점' },
+  { to: '/settings',   label: '설정',     icon: '⚙️', desc: '솔 에르다 가격·메소 설정' },
+]
+
+const ONBOARDING_KEY = 'onboarding_v1'
+
+const ONBOARDING_STEPS = [
+  { icon: '✏️', title: '기록하기', desc: '보스 처치 후 결정석 수익을 기록하고, 사냥·경매장·지출도 입력해 보세요.' },
+  { icon: '📊', title: '대시보드', desc: '주간 수익/지출 현황, 달력으로 날짜별 데이터를 한눈에 확인합니다.' },
+  { icon: '🎯', title: '목표', desc: '원하는 아이템 가격을 등록하면 달성 예상 날짜를 자동 계산해 드려요.' },
+  { icon: '🧙', title: '캐릭터', desc: '캐릭터별 투자 대비 수익(ROI)과 솔 에르다 조각 현황을 관리합니다.' },
+  { icon: '⚙️', title: '설정', desc: '솔 에르다 조각 개당 가격과 현재 보유 메소를 설정해 주세요.' },
 ]
 
 export default function Layout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
+  const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem(ONBOARDING_KEY))
+  const [onboardingStep, setOnboardingStep] = useState(0)
+
+  const closeOnboarding = () => {
+    localStorage.setItem(ONBOARDING_KEY, '1')
+    setShowOnboarding(false)
+  }
+
+  const nextStep = () => {
+    if (onboardingStep < ONBOARDING_STEPS.length - 1) {
+      setOnboardingStep((s) => s + 1)
+    } else {
+      closeOnboarding()
+    }
+  }
 
   const handleLogout = () => {
     logout()
@@ -87,7 +113,7 @@ export default function Layout() {
           style={{ backgroundColor: 'var(--surface)', borderRight: '1.5px solid var(--border)' }}
         >
           {navItems.map((item) => (
-            <div key={item.to} className="px-2">
+            <div key={item.to} className="px-2 relative group">
               <NavLink
                 to={item.to}
                 className={({ isActive }) =>
@@ -97,6 +123,25 @@ export default function Layout() {
                 <span className="text-xl w-6 text-center shrink-0 leading-none">{item.icon}</span>
                 <span className="hidden lg:block">{item.label}</span>
               </NavLink>
+              {/* 아이콘만 보이는 너비(md~lg)에서 hover 툴팁 */}
+              <div
+                className="hidden md:block lg:hidden absolute left-full top-1/2 -translate-y-1/2 ml-2 z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <div
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap"
+                  style={{
+                    backgroundColor: 'var(--surface-2)',
+                    border: '1px solid var(--border-2)',
+                    color: 'var(--text)',
+                    boxShadow: 'var(--shadow)',
+                  }}
+                >
+                  {item.label}
+                  <span className="block text-xs font-normal mt-0.5" style={{ color: 'var(--text-3)' }}>
+                    {item.desc}
+                  </span>
+                </div>
+              </div>
             </div>
           ))}
           <div className="mt-auto px-3 pb-3 hidden lg:block">
@@ -132,6 +177,61 @@ export default function Layout() {
           </NavLink>
         ))}
       </nav>
+
+      {/* 온보딩 모달 */}
+      {showOnboarding && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.75)' }}
+        >
+          <div
+            className="rounded-2xl p-6 w-full max-w-sm space-y-4"
+            style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-md)' }}
+          >
+            <div className="text-center">
+              <p className="text-4xl mb-1">{ONBOARDING_STEPS[onboardingStep].icon}</p>
+              <h2 className="font-bold text-lg" style={{ color: 'var(--text)' }}>
+                {onboardingStep === 0 ? '🍁 MaplePlanner에 오신 것을 환영합니다!' : ONBOARDING_STEPS[onboardingStep].title}
+              </h2>
+            </div>
+            <p className="text-sm text-center leading-relaxed" style={{ color: 'var(--text-2)' }}>
+              {ONBOARDING_STEPS[onboardingStep].desc}
+            </p>
+
+            {/* 스텝 인디케이터 */}
+            <div className="flex justify-center gap-1.5">
+              {ONBOARDING_STEPS.map((_, i) => (
+                <div
+                  key={i}
+                  className="rounded-full transition-all"
+                  style={{
+                    width: i === onboardingStep ? '20px' : '6px',
+                    height: '6px',
+                    backgroundColor: i === onboardingStep ? 'var(--primary)' : 'var(--border-2)',
+                  }}
+                />
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={closeOnboarding}
+                className="flex-1 py-2 rounded-xl text-sm font-medium"
+                style={{ color: 'var(--text-3)', backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)' }}
+              >
+                건너뛰기
+              </button>
+              <button
+                onClick={nextStep}
+                className="flex-1 py-2 rounded-xl text-sm font-semibold text-white"
+                style={{ background: 'linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%)' }}
+              >
+                {onboardingStep < ONBOARDING_STEPS.length - 1 ? '다음 →' : '시작하기 🍁'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
