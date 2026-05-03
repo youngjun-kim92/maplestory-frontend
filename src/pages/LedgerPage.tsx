@@ -3,29 +3,18 @@ import { ledgerApi } from '../api/ledger'
 import { authApi } from '../api/auth'
 import { charactersApi } from '../api/characters'
 import { useAuth } from '../contexts/AuthContext'
-import type { EntryCategory, EntryType, LedgerEntry, MapleCharacter, WeeklyLedger } from '../types'
-import { formatMeso, formatDate, CATEGORY_LABELS, toDateString } from '../utils/format'
+import type { EntryCategory, LedgerEntry, MapleCharacter, WeeklyLedger } from '../types'
+import { formatMeso, formatDate, CATEGORY_LABELS, toDateString, toKoreanAmount } from '../utils/format'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import Select from '../components/ui/Select'
+import QuickAmountButtons from '../components/ui/QuickAmountButtons'
 
-const TYPE_OPTIONS = [
-  { value: 'income' as const, label: '수입' },
-  { value: 'expense' as const, label: '지출' },
-]
-
-const INCOME_CATEGORIES = [
-  { value: 'boss', label: '보스' },
-  { value: 'hunting', label: '사냥' },
-  { value: 'trade', label: '거래' },
-  { value: 'other', label: '기타 수입' },
-]
-
-const EXPENSE_CATEGORIES = [
-  { value: 'cube', label: '큐브' },
-  { value: 'starforce', label: '스타포스' },
-  { value: 'other', label: '기타 지출' },
+const ENHANCE_CATEGORIES: { value: EntryCategory; label: string }[] = [
+  { value: 'cube',              label: '큐브' },
+  { value: 'starforce',         label: '스타포스' },
+  { value: 'additional_option', label: '추가옵션' },
 ]
 
 export default function LedgerPage() {
@@ -33,15 +22,13 @@ export default function LedgerPage() {
   const [ledger, setLedger] = useState<WeeklyLedger | null>(null)
   const [characters, setCharacters] = useState<MapleCharacter[]>([])
   const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [showMesoForm, setShowMesoForm] = useState(false)
   const [mesoForm, setMesoForm] = useState({ inventoryMeso: '', storageMeso: '' })
   const [mesoSubmitting, setMesoSubmitting] = useState(false)
 
   const [form, setForm] = useState({
-    type: 'income' as EntryType,
-    category: 'boss' as EntryCategory,
+    category: 'cube' as EntryCategory,
     amount: '',
     description: '',
     entryDate: toDateString(),
@@ -60,15 +47,13 @@ export default function LedgerPage() {
 
   useEffect(() => {
     fetchLedger()
-    charactersApi.getCharacters().then((r) => setCharacters(r.data))
+    charactersApi.getCharacters().then((r) => {
+      const chars = r.data
+      setCharacters(chars)
+      const main = chars.find((c) => c.isMain) ?? chars[0]
+      if (main) setForm((p) => ({ ...p, characterId: String(main.id) }))
+    })
   }, [fetchLedger])
-
-  const categoryOptions = form.type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
-
-  const handleTypeChange = (type: EntryType) => {
-    const defaultCat = type === 'income' ? 'boss' : 'cube'
-    setForm((p) => ({ ...p, type, category: defaultCat as EntryCategory }))
-  }
 
   const handleSubmit = async (e: { preventDefault(): void }) => {
     e.preventDefault()
@@ -76,7 +61,7 @@ export default function LedgerPage() {
     setSubmitting(true)
     try {
       await ledgerApi.addEntry({
-        type: form.type,
+        type: 'expense',
         category: form.category,
         amount: Number(form.amount),
         description: form.description,
@@ -84,7 +69,6 @@ export default function LedgerPage() {
         characterId: form.characterId ? Number(form.characterId) : null,
       })
       setForm((p) => ({ ...p, amount: '', description: '' }))
-      setShowForm(false)
       await fetchLedger()
       await refreshUser()
     } finally {
@@ -115,6 +99,8 @@ export default function LedgerPage() {
     }
   }
 
+  const expenseEntries = ledger?.entries.filter((e) => e.type === 'expense') ?? []
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -125,48 +111,25 @@ export default function LedgerPage() {
 
   return (
     <div className="space-y-4">
-      {/* 헤더 */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold" style={{ color: 'var(--text)' }}>주간 가계부</h1>
-          {ledger && (
-            <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>
-              📅 {ledger.weekStart} 주 (목요일 기준)
-            </p>
-          )}
-        </div>
-        <Button onClick={() => setShowForm((v) => !v)} size="sm">
-          {showForm ? '취소' : '+ 기록 추가'}
-        </Button>
+      <div>
+        <h1 className="text-xl font-bold" style={{ color: 'var(--text)' }}>🔩 메소 강화</h1>
+        {ledger && (
+          <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>
+            📅 {ledger.weekStart} 주 (목요일 기준) · 수입은 대시보드에서 확인하세요
+          </p>
+        )}
       </div>
 
-      {/* 주간 요약 카드 */}
+      {/* 주간 요약 */}
       {ledger && (
-        <div className="grid grid-cols-3 gap-3">
-          <div className="stat-card stat-card-income">
-            <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-2)' }}>
-              총 수입
-            </p>
-            <p className="font-bold text-lg" style={{ color: 'var(--green)' }}>
-              {formatMeso(ledger.summary.totalIncome)}
-            </p>
-          </div>
+        <div className="grid grid-cols-2 gap-3">
           <div className="stat-card stat-card-expense">
-            <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-2)' }}>
-              총 지출
-            </p>
-            <p className="font-bold text-lg" style={{ color: 'var(--red)' }}>
-              {formatMeso(ledger.summary.totalExpense)}
-            </p>
+            <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-2)' }}>이번 주 지출</p>
+            <p className="font-bold text-lg" style={{ color: 'var(--red)' }}>{formatMeso(ledger.summary.totalExpense)}</p>
           </div>
           <div className={`stat-card ${ledger.summary.netProfit >= 0 ? 'stat-card-net-pos' : 'stat-card-net-neg'}`}>
-            <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-2)' }}>
-              순수익
-            </p>
-            <p
-              className="font-bold text-lg"
-              style={{ color: ledger.summary.netProfit >= 0 ? 'var(--orange-light)' : 'var(--red)' }}
-            >
+            <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-2)' }}>순수익</p>
+            <p className="font-bold text-lg" style={{ color: ledger.summary.netProfit >= 0 ? 'var(--orange-light)' : 'var(--red)' }}>
               {ledger.summary.netProfit >= 0 ? '+' : ''}{formatMeso(ledger.summary.netProfit)}
             </p>
           </div>
@@ -202,22 +165,28 @@ export default function LedgerPage() {
         ) : (
           <form onSubmit={handleMesoSubmit} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
-              <Input
-                label="인벤토리 메소"
-                type="number"
-                placeholder="예: 500000000"
-                value={mesoForm.inventoryMeso}
-                onChange={(e) => setMesoForm((p) => ({ ...p, inventoryMeso: e.target.value }))}
-                min={0}
-              />
-              <Input
-                label="창고 메소"
-                type="number"
-                placeholder="예: 2000000000"
-                value={mesoForm.storageMeso}
-                onChange={(e) => setMesoForm((p) => ({ ...p, storageMeso: e.target.value }))}
-                min={0}
-              />
+              <div>
+                <Input
+                  label="인벤토리 메소"
+                  type="number"
+                  placeholder="예: 500000000"
+                  value={mesoForm.inventoryMeso}
+                  onChange={(e) => setMesoForm((p) => ({ ...p, inventoryMeso: e.target.value }))}
+                  min={0}
+                />
+                <QuickAmountButtons onAdd={(v) => setMesoForm((p) => ({ ...p, inventoryMeso: String((Number(p.inventoryMeso) || 0) + v) }))} />
+              </div>
+              <div>
+                <Input
+                  label="창고 메소"
+                  type="number"
+                  placeholder="예: 2000000000"
+                  value={mesoForm.storageMeso}
+                  onChange={(e) => setMesoForm((p) => ({ ...p, storageMeso: e.target.value }))}
+                  min={0}
+                />
+                <QuickAmountButtons onAdd={(v) => setMesoForm((p) => ({ ...p, storageMeso: String((Number(p.storageMeso) || 0) + v) }))} />
+              </div>
             </div>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="ghost" onClick={() => setShowMesoForm(false)}>취소</Button>
@@ -227,115 +196,96 @@ export default function LedgerPage() {
         )}
       </Card>
 
-      {/* 항목 추가 폼 */}
-      {showForm && (
-        <Card title="새 항목 추가" icon="✏️">
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-2)' }}>
-                  타입
-                </p>
-                <div className="flex gap-2">
-                  {TYPE_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => handleTypeChange(opt.value as EntryType)}
-                      className="flex-1 py-2 rounded-xl text-sm font-medium transition-all"
-                      style={
-                        form.type === opt.value
-                          ? opt.value === 'income'
-                            ? { backgroundColor: 'rgba(52,211,153,0.15)', color: 'var(--green)', border: '1px solid rgba(52,211,153,0.3)' }
-                            : { backgroundColor: 'rgba(248,113,113,0.15)', color: 'var(--red)', border: '1px solid rgba(248,113,113,0.3)' }
-                          : { backgroundColor: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border-2)' }
-                      }
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <Select
-                label="카테고리"
-                options={categoryOptions}
-                value={form.category}
-                onChange={(e) => setForm((p) => ({ ...p, category: e.target.value as EntryCategory }))}
-              />
+      {/* 메소 강화 입력 폼 */}
+      <Card title="메소 강화 지출" icon="🔩">
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-2)' }}>카테고리</p>
+            <div className="flex flex-wrap gap-2">
+              {ENHANCE_CATEGORIES.map((cat) => (
+                <label
+                  key={cat.value}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg cursor-pointer select-none transition-all text-sm font-medium"
+                  style={
+                    form.category === cat.value
+                      ? { backgroundColor: 'var(--primary-dim)', color: 'var(--primary)', border: '1.5px solid var(--primary-glow)' }
+                      : { backgroundColor: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }
+                  }
+                >
+                  <input
+                    type="radio"
+                    name="enhance-category"
+                    value={cat.value}
+                    checked={form.category === cat.value}
+                    onChange={() => setForm((p) => ({ ...p, category: cat.value }))}
+                    className="sr-only"
+                  />
+                  {cat.label}
+                </label>
+              ))}
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Input
-                label="금액 (메소)"
-                type="number"
-                placeholder="예: 100000000"
-                value={form.amount}
-                onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))}
-                min={1}
-              />
-              <Input
-                label="날짜"
-                type="date"
-                value={form.entryDate}
-                onChange={(e) => setForm((p) => ({ ...p, entryDate: e.target.value }))}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Input
-                label="메모 (선택)"
-                placeholder="간단한 메모"
-                value={form.description}
-                onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
-              />
-              {characters.length > 0 && (
-                <Select
-                  label="캐릭터 (선택)"
-                  options={[
-                    { value: '', label: '선택 안함' },
-                    ...characters.map((c) => ({ value: String(c.id), label: c.name })),
-                  ]}
-                  value={form.characterId}
-                  onChange={(e) => setForm((p) => ({ ...p, characterId: e.target.value }))}
-                />
-              )}
-            </div>
-            <div className="flex justify-end gap-2 pt-1">
-              <Button type="button" variant="ghost" onClick={() => setShowForm(false)}>
-                취소
-              </Button>
-              <Button type="submit" loading={submitting}>
-                추가하기
-              </Button>
-            </div>
-          </form>
-        </Card>
-      )}
+          </div>
+          <div>
+            <Input
+              label="금액 (메소)"
+              type="number"
+              placeholder="예: 100000000"
+              value={form.amount}
+              onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))}
+              min={1}
+            />
+            <QuickAmountButtons onAdd={(v) => setForm((p) => ({ ...p, amount: String((Number(p.amount) || 0) + v) }))} />
+            {toKoreanAmount(form.amount) && (
+              <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-3)' }}>{toKoreanAmount(form.amount)}</p>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="날짜"
+              type="date"
+              value={form.entryDate}
+              onChange={(e) => setForm((p) => ({ ...p, entryDate: e.target.value }))}
+            />
+            <Input
+              label="메모 (선택)"
+              placeholder="간단한 메모"
+              value={form.description}
+              onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
+            />
+          </div>
+          {characters.length > 0 && (
+            <Select
+              label="캐릭터 (선택)"
+              options={[
+                { value: '', label: '선택 안함' },
+                ...characters.map((c) => ({ value: String(c.id), label: c.name })),
+              ]}
+              value={form.characterId}
+              onChange={(e) => setForm((p) => ({ ...p, characterId: e.target.value }))}
+            />
+          )}
+          <div className="flex justify-end">
+            <Button type="submit" loading={submitting}>기록하기</Button>
+          </div>
+        </form>
+      </Card>
 
-      {/* 가계부 항목 목록 */}
-      <Card title="이번 주 기록" icon="📋">
-        {!ledger?.entries.length ? (
+      {/* 메소 강화 목록 */}
+      <Card title="이번 주 메소 강화 내역" icon="📋">
+        {expenseEntries.length === 0 ? (
           <p className="text-sm text-center py-6" style={{ color: 'var(--text-3)' }}>
-            이번 주 기록이 없습니다. 첫 항목을 추가해보세요!
+            이번 주 지출 기록이 없습니다.
           </p>
         ) : (
           <div className="space-y-1.5">
-            {ledger.entries.map((entry: LedgerEntry) => (
+            {expenseEntries.map((entry: LedgerEntry) => (
               <div key={entry.id} className="list-row">
                 <div className="flex items-center gap-3 min-w-0">
-                  <span
-                    className="text-xs font-bold px-2 py-0.5 rounded-lg shrink-0"
-                    style={
-                      entry.type === 'income'
-                        ? { backgroundColor: 'rgba(52,211,153,0.12)', color: 'var(--green)' }
-                        : { backgroundColor: 'rgba(248,113,113,0.12)', color: 'var(--red)' }
-                    }
-                  >
-                    {entry.type === 'income' ? '수입' : '지출'}
-                  </span>
                   <span
                     className="text-xs px-2 py-0.5 rounded-lg shrink-0"
                     style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-2)' }}
                   >
-                    {CATEGORY_LABELS[entry.category]}
+                    {CATEGORY_LABELS[entry.category] ?? entry.category}
                   </span>
                   <div className="min-w-0">
                     <span className="text-sm truncate block" style={{ color: 'var(--text)' }}>
@@ -348,11 +298,8 @@ export default function LedgerPage() {
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <div className="text-right">
-                    <p
-                      className="font-semibold text-sm"
-                      style={{ color: entry.type === 'income' ? 'var(--green)' : 'var(--red)' }}
-                    >
-                      {entry.type === 'income' ? '+' : '-'}{formatMeso(entry.amount)}
+                    <p className="font-semibold text-sm" style={{ color: 'var(--red)' }}>
+                      -{formatMeso(entry.amount)}
                     </p>
                     <p className="text-xs" style={{ color: 'var(--text-3)' }}>{formatDate(entry.entryDate)}</p>
                   </div>
@@ -362,9 +309,7 @@ export default function LedgerPage() {
                     style={{ color: 'var(--text-3)' }}
                     onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--red)')}
                     onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-3)')}
-                  >
-                    ✕
-                  </button>
+                  >✕</button>
                 </div>
               </div>
             ))}

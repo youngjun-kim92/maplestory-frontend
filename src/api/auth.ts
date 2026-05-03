@@ -1,5 +1,5 @@
 import client from './client'
-import type { AuthResponse, LoginRequest, MesoBalanceRequest, RegisterRequest, UserResponse } from '../types'
+import type { AuthResponse, LoginRequest, MesoBalanceRequest, MvpGrade, RegisterRequest, UserResponse } from '../types'
 
 export const authApi = {
   register: (data: RegisterRequest) =>
@@ -16,6 +16,9 @@ export const authApi = {
 
   updateMesoBalance: (data: MesoBalanceRequest) =>
     client.put<UserResponse>('/auth/meso-balance', data),
+
+  updateMvpGrade: (grade: MvpGrade | string) =>
+    client.put('/auth/mvp-grade', undefined, { params: { grade } }),
 
   reset: () =>
     client.delete('/auth/reset'),

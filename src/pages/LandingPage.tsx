@@ -79,8 +79,12 @@ export default function LandingPage() {
   )
 }
 
+const SAVED_NICKNAME_KEY = 'savedNickname'
+
 function LoginForm({ onSuccess }: { onSuccess: (token: string) => void }) {
-  const [form, setForm] = useState({ nickname: '', password: '' })
+  const savedNickname = localStorage.getItem(SAVED_NICKNAME_KEY) ?? ''
+  const [form, setForm] = useState({ nickname: savedNickname, password: '' })
+  const [remember, setRemember] = useState(!!savedNickname)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -91,6 +95,8 @@ function LoginForm({ onSuccess }: { onSuccess: (token: string) => void }) {
     setLoading(true)
     try {
       const res = await authApi.login(form)
+      if (remember) localStorage.setItem(SAVED_NICKNAME_KEY, form.nickname)
+      else localStorage.removeItem(SAVED_NICKNAME_KEY)
       onSuccess(res.data.token)
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
@@ -116,6 +122,16 @@ function LoginForm({ onSuccess }: { onSuccess: (token: string) => void }) {
         value={form.password}
         onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
       />
+      <label className="flex items-center gap-2 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={remember}
+          onChange={(e) => setRemember(e.target.checked)}
+          className="w-3.5 h-3.5"
+          style={{ accentColor: 'var(--primary)' }}
+        />
+        <span className="text-xs" style={{ color: 'var(--text-2)' }}>아이디 기억하기</span>
+      </label>
       {error && (
         <p className="text-xs font-medium" style={{ color: 'var(--red)' }}>{error}</p>
       )}

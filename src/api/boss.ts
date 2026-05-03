@@ -1,5 +1,7 @@
 import client from './client'
-import type { BossDrop, BossDropItem, BossDropSellRequest, BossKill, BossKillRequest, BossMaster, BossStats, ResetType } from '../types'
+import type { BossDrop, BossDropItem, BossDropSellRequest, BossKill, BossKillRequest, BossMaster, BossStats, DopingItem, ResetType } from '../types'
+
+let _dopingCache: DopingItem[] | null = null
 
 // 백엔드 데이터 오류 보정: (보스명, 난이도) → 올바른 resetType
 const RESET_TYPE_OVERRIDES: Record<string, Record<string, ResetType>> = {
@@ -28,6 +30,13 @@ export const bossApi = {
       ...res,
       data: applyResetTypeOverrides(res.data),
     })),
+
+  getDopingList: async (): Promise<{ data: DopingItem[] }> => {
+    if (_dopingCache) return { data: _dopingCache }
+    const res = await client.get<DopingItem[]>('/boss/doping/list')
+    _dopingCache = res.data
+    return res
+  },
 
   recordBossKill: (data: BossKillRequest) =>
     client.post<BossKill>('/boss/kill', data),

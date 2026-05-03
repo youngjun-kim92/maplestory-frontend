@@ -44,15 +44,30 @@ export function getWeekStart(date: Date = new Date()): Date {
   return d
 }
 
+export function toKoreanAmount(n: string | number): string {
+  const num = Number(n)
+  if (!num || isNaN(num) || num === 0) return ''
+  const uk = Math.floor(num / 100000000)
+  const man = Math.floor((num % 100000000) / 10000)
+  const rest = num % 10000
+  const parts: string[] = []
+  if (uk > 0) parts.push(uk + '억')
+  if (man > 0) parts.push(man + '만')
+  if (rest > 0) parts.push(String(rest))
+  return parts.join(' ')
+}
+
 export const CATEGORY_LABELS: Record<string, string> = {
   boss: '보스',
   hunting: '사냥',
   trade: '거래',
   auction: '경매장',
-  sol_erda: '솔 에르다 조각',
+  sol_erda: '솔에르다',
   cube: '큐브',
   starforce: '스타포스',
   spell_trace: '주문서',
+  additional_option: '추가옵션',
+  doping: '도핑',
   other: '기타',
 }
 
@@ -77,5 +92,7 @@ export const CATEGORY_ICONS: Record<string, string> = {
   cube: '🎲',
   starforce: '⭐',
   spell_trace: '📜',
+  additional_option: '🪄',
+  doping: '💊',
   other: '💫',
 }

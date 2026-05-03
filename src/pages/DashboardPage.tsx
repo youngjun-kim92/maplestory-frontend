@@ -7,7 +7,7 @@ import { bossApi } from '../api/boss'
 import { charactersApi } from '../api/characters'
 import { useAuth } from '../contexts/AuthContext'
 import type {
-  BossDrop, EntryCategory, EntryType, LedgerEntry,
+  BossDrop, CharacterStatsResponse, EntryCategory, EntryType, LedgerEntry, LedgerStat,
   MapleCharacter, WeeklyLedger, WeeklySummary,
 } from '../types'
 import {
@@ -66,6 +66,11 @@ export default function DashboardPage() {
   const [showMesoForm, setShowMesoForm] = useState(false)
   const [mesoForm, setMesoForm] = useState({ inventoryMeso: '', storageMeso: '' })
   const [mesoSubmitting, setMesoSubmitting] = useState(false)
+
+  const [catStats, setCatStats] = useState<LedgerStat[]>([])
+  const [statsLoading, setStatsLoading] = useState(true)
+
+  const [charStats, setCharStats] = useState<CharacterStatsResponse[]>([])
 
   const [drops, setDrops] = useState<BossDrop[]>([])
   const [dropsLoading, setDropsLoading] = useState(true)
@@ -138,6 +143,18 @@ export default function DashboardPage() {
   useEffect(() => { fetchDrops() }, [fetchDrops])
   useEffect(() => {
     charactersApi.getCharacters().then((r) => setCharacters(r.data))
+  }, [])
+
+  useEffect(() => {
+    charactersApi.getCharacterStats().then((r) => setCharStats(r.data)).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    setStatsLoading(true)
+    ledgerApi.getCategoryStats(4)
+      .then((res) => setCatStats(res.data))
+      .catch(() => {})
+      .finally(() => setStatsLoading(false))
   }, [])
 
   const handleListDrop = async (dropId: number) => {
@@ -245,20 +262,23 @@ export default function DashboardPage() {
     }
   }
 
+
   const allEntries = ledger?.entries ?? []
   const entries =
     selectedCharId === 'all'
       ? allEntries
       : allEntries.filter((e) => e.characterId === selectedCharId)
 
-  const cumulativeIncome = allWeeks.reduce((s, w) => s + w.totalIncome, 0)
-  const cumulativeExpense = allWeeks.reduce((s, w) => s + w.totalExpense, 0)
+  const safeNum = (v: number | null | undefined) => (v == null || isNaN(v) ? 0 : v)
+
+  const cumulativeIncome = allWeeks.reduce((s, w) => s + safeNum(w.totalIncome), 0)
+  const cumulativeExpense = allWeeks.reduce((s, w) => s + safeNum(w.totalExpense), 0)
   const cumulativeNet = cumulativeIncome - cumulativeExpense
 
   const chartData = [...allWeeks].slice(-8).map((w) => ({
     week: w.weekStart.slice(5).replace('-', '/'),
-    수입: w.totalIncome,
-    지출: w.totalExpense,
+    수입: safeNum(w.totalIncome),
+    지출: safeNum(w.totalExpense),
   }))
 
   const currentRealWeek = toDateString(getWeekStart())
@@ -584,20 +604,26 @@ export default function DashboardPage() {
               >
                 <p className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>💰 보유 메소 업데이트</p>
                 <div className="grid grid-cols-2 gap-3">
-                  <Input
-                    label="인벤토리 메소"
-                    type="number"
-                    value={mesoForm.inventoryMeso}
-                    onChange={(e) => setMesoForm((p) => ({ ...p, inventoryMeso: e.target.value }))}
-                    min={0}
-                  />
-                  <Input
-                    label="창고 메소"
-                    type="number"
-                    value={mesoForm.storageMeso}
-                    onChange={(e) => setMesoForm((p) => ({ ...p, storageMeso: e.target.value }))}
-                    min={0}
-                  />
+                  <div>
+                    <Input
+                      label="인벤토리 메소"
+                      type="number"
+                      value={mesoForm.inventoryMeso}
+                      onChange={(e) => setMesoForm((p) => ({ ...p, inventoryMeso: e.target.value }))}
+                      min={0}
+                    />
+                    <QuickAmountButtons onAdd={(v) => setMesoForm((p) => ({ ...p, inventoryMeso: String((Number(p.inventoryMeso) || 0) + v) }))} />
+                  </div>
+                  <div>
+                    <Input
+                      label="창고 메소"
+                      type="number"
+                      value={mesoForm.storageMeso}
+                      onChange={(e) => setMesoForm((p) => ({ ...p, storageMeso: e.target.value }))}
+                      min={0}
+                    />
+                    <QuickAmountButtons onAdd={(v) => setMesoForm((p) => ({ ...p, storageMeso: String((Number(p.storageMeso) || 0) + v) }))} />
+                  </div>
                 </div>
                 <div className="flex justify-end gap-2">
                   <Button type="button" variant="ghost" size="sm" onClick={() => setShowMesoForm(false)}>취소</Button>
@@ -666,7 +692,7 @@ export default function DashboardPage() {
               <p className="text-3xl mb-2">📝</p>
               <p className="text-sm" style={{ color: 'var(--text-3)' }}>아직 기록이 없어요</p>
               <button
-                onClick={() => navigate('/input')}
+                onClick={() => navigate('/boss')}
                 className="mt-3 text-sm underline"
                 style={{ color: 'var(--primary)' }}
               >첫 기록 추가하기</button>
@@ -842,19 +868,26 @@ export default function DashboardPage() {
                     />
                     {(() => {
                       const saleAmt = Number(sellForm.saleAmount)
-                      const dropChar = drop.characterId ? characters.find(c => c.id === drop.characterId) : null
-                      const isDiscounted = sellForm.isPcCafe || ['SILVER','GOLD','DIAMOND','RED','BLACK'].includes(dropChar?.mvpGrade ?? '')
+                      const isSilverPlus = ['SILVER','GOLD','DIAMOND','RED','BLACK'].includes(user?.mvpGrade ?? '')
+                      const isDiscounted = sellForm.isPcCafe || isSilverPlus
                       const feeRate = isDiscounted ? 0.03 : 0.05
                       const net = saleAmt * (1 - feeRate)
-                      return saleAmt > 0 ? (
+                      if (!saleAmt) return null
+                      return (
                         <div className="space-y-1 text-xs" style={{ color: 'var(--text-2)' }}>
-                          <p>입력: {formatMeso(saleAmt)} 메소</p>
-                          <p>수수료: {(feeRate * 100).toFixed(0)}% {isDiscounted ? '(실버+ MVP / PC방)' : '(일반)'}</p>
+                          {!user?.mvpGrade || user.mvpGrade === 'NORMAL' ? (
+                            <p style={{ color: 'var(--text-3)' }}>
+                              MVP 등급 미설정 — 수수료 5% 적용.{' '}
+                              <a href="/settings" className="underline" style={{ color: 'var(--primary)' }}>설정에서 변경 →</a>
+                            </p>
+                          ) : (
+                            <p>MVP: {user.mvpGrade} · 수수료 {(feeRate * 100).toFixed(0)}%{isDiscounted ? ' (실버+ / PC방)' : ''}</p>
+                          )}
                           <p className="font-semibold" style={{ color: 'var(--green)' }}>
                             예상 실수령: {formatMeso(Math.floor(net))} 메소
                           </p>
                         </div>
-                      ) : null
+                      )
                     })()}
                     <label className="flex items-center gap-2 cursor-pointer select-none">
                       <input
@@ -958,9 +991,134 @@ export default function DashboardPage() {
         )}
       </div>
 
+      {/* 수익 구성 비율 */}
+      <div className="rounded-xl overflow-hidden" style={panelStyle}>
+        <div className="dark-panel-header">
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>📊 수익 구성 비율 (최근 4주)</h3>
+        </div>
+        {statsLoading ? (
+          <p className="text-sm text-center py-6 animate-pulse" style={{ color: 'var(--text-3)' }}>불러오는 중...</p>
+        ) : (() => {
+          const incomeStats = catStats.filter((s) => s.type === 'income')
+          const byCategory = Object.fromEntries(incomeStats.map((s) => [s.category, safeNum(s.total)]))
+          const bossAuction = safeNum(byCategory['boss']) + safeNum(byCategory['auction'])
+          const huntingSolErda = safeNum(byCategory['hunting']) + safeNum(byCategory['sol_erda'])
+          const totalIncome = Object.values(byCategory).reduce((a, b) => a + b, 0)
+          const bossAuctionPct = totalIncome > 0 ? (bossAuction / totalIncome) * 100 : 0
+          const huntingSolErdaPct = totalIncome > 0 ? (huntingSolErda / totalIncome) * 100 : 0
+          if (totalIncome === 0) {
+            return <p className="text-xs text-center py-6" style={{ color: 'var(--text-3)' }}>데이터 없음</p>
+          }
+          return (
+            <div className="p-4 space-y-4">
+              {[
+                { label: '⚔️ 보스 + 경매장', value: bossAuction, pct: bossAuctionPct, color: 'var(--primary)', gradient: 'linear-gradient(90deg, var(--primary) 0%, var(--primary-light) 100%)' },
+                { label: '🌲 사냥 + 솔 에르다', value: huntingSolErda, pct: huntingSolErdaPct, color: 'var(--green)', gradient: 'var(--green)' },
+              ].map((row) => (
+                <div key={row.label}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>{row.label}</span>
+                    <span className="text-xs font-bold" style={{ color: row.color }}>{row.pct.toFixed(1)}%</span>
+                  </div>
+                  <div className="rounded-full h-3 overflow-hidden" style={{ backgroundColor: 'var(--surface-2)' }}>
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{ width: `${row.pct}%`, background: row.gradient }}
+                    />
+                  </div>
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>{formatMeso(row.value)}</p>
+                </div>
+              ))}
+            </div>
+          )
+        })()}
+      </div>
+
+      {/* 캐릭터 현황 */}
+      {characters.length > 0 && (
+        <div className="rounded-xl overflow-hidden" style={panelStyle}>
+          <div className="dark-panel-header">
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>🧙 캐릭터 현황</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ backgroundColor: 'var(--surface-2)', position: 'sticky', top: 0 }}>
+                  {['캐릭터', '직업', '레벨', '🔮 솔 에르다 조각'].map((h) => (
+                    <th key={h} className="px-3 py-2 text-left text-xs font-medium" style={thStyle}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {characters.map((c, i) => (
+                  <tr
+                    key={c.id}
+                    className="table-row"
+                    style={{ borderBottom: i === characters.length - 1 ? 'none' : '1px solid var(--border)' }}
+                  >
+                    <td className="px-3 py-2.5 font-medium" style={{ color: 'var(--text)' }}>
+                      {c.isMain ? '⭐ ' : ''}{c.name}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--text-3)' }}>{c.jobClass ?? '—'}</td>
+                    <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--text-3)' }}>{c.level > 0 ? `Lv.${c.level}` : '—'}</td>
+                    <td className="px-3 py-2.5">
+                      <span className="text-sm font-semibold" style={{ color: '#c4b5fd' }}>
+                        {(c.solErdaFragments ?? 0).toLocaleString()}개
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* 캐릭터별 수입/지출 */}
+      {charStats.length > 0 && (
+        <div className="rounded-xl overflow-hidden" style={panelStyle}>
+          <div className="dark-panel-header">
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>📊 캐릭터별 수입/지출</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ backgroundColor: 'var(--surface-2)', position: 'sticky', top: 0 }}>
+                  {['캐릭터', '누적 수입', '누적 지출', '순이익'].map((h) => (
+                    <th key={h} className="px-3 py-2 text-left text-xs font-medium" style={thStyle}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {charStats.map((s, i) => (
+                  <tr
+                    key={s.characterId}
+                    className="table-row"
+                    style={{ borderBottom: i === charStats.length - 1 ? 'none' : '1px solid var(--border)' }}
+                  >
+                    <td className="px-3 py-2.5 font-medium" style={{ color: 'var(--text)' }}>
+                      {s.isMain ? '⭐ ' : ''}{s.characterName}
+                    </td>
+                    <td className="px-3 py-2.5 font-semibold" style={{ color: 'var(--green)' }}>
+                      {formatMeso(s.totalIncome)}
+                    </td>
+                    <td className="px-3 py-2.5 font-semibold" style={{ color: 'var(--red)' }}>
+                      {formatMeso(s.totalExpense)}
+                    </td>
+                    <td className="px-3 py-2.5 font-bold" style={{ color: s.netProfit >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                      {s.netProfit >= 0 ? '+' : ''}{formatMeso(s.netProfit)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* FAB */}
       <button
-        onClick={() => navigate('/input')}
+        onClick={() => navigate('/boss')}
         className="fixed bottom-20 md:bottom-8 right-4 md:right-8 w-14 h-14 rounded-full flex items-center justify-center text-2xl z-40 transition-all hover:scale-110 active:scale-95"
         style={{
           background: 'linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%)',

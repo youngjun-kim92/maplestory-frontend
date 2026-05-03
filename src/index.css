@@ -213,7 +213,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem;
+  padding: 0.375rem 0.5rem;
   border-radius: 0.75rem;
   transition: background-color 0.12s;
   background-color: var(--surface-2);
@@ -221,8 +221,13 @@ body {
 .list-row:hover { background-color: rgba(249, 115, 22, 0.08); }
 
 /* ── Table rows ── */
-.table-row { transition: background-color 0.1s; }
+.table-row { transition: background-color 0.1s; height: 36px; }
 .table-row:hover { background-color: var(--surface-2); }
+.table-row td, .table-row th { padding: 4px 8px; }
+.table-head th { padding: 4px 8px; }
+
+/* ── Section spacing ── */
+.section { margin-bottom: 0.5rem; }
 
 /* ── Info box ── */
 .info-box {
@@ -235,7 +240,7 @@ body {
 /* ── Stat cards ── */
 .stat-card {
   border-radius: 1rem;
-  padding: 1rem;
+  padding: 0.625rem 0.75rem;
   background-color: var(--surface);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-sm);
@@ -248,7 +253,7 @@ body {
 /* ── KPI cards ── */
 .kpi-card {
   border-radius: 0.875rem;
-  padding: 0.875rem 1rem;
+  padding: 0.5rem 0.75rem;
   background-color: var(--surface);
   border: 1px solid var(--border);
   border-left-width: 3px;
@@ -265,7 +270,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 1rem;
+  padding: 0.5rem 0.75rem;
   border-bottom: 1px solid var(--border);
 }
 
@@ -293,9 +298,17 @@ body {
   box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
 }
 .form-field::-webkit-calendar-picker-indicator {
-  opacity: 0.4;
+  opacity: 0.7;
   cursor: pointer;
-  filter: invert(1);
+  filter: invert(1); /* dark mode: white icon */
+}
+[data-theme="light"] .form-field::-webkit-calendar-picker-indicator {
+  filter: invert(0); /* light mode: dark icon */
+}
+
+select.form-field {
+  padding-right: 2rem;
+  cursor: pointer;
 }
 
 /* ── Auth / Landing background ── */

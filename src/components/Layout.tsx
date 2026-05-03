@@ -4,17 +4,22 @@ import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
 import { charactersApi } from '../api/characters'
 
-const navItems = [
-  { to: '/dashboard',  label: '대시보드',  icon: '📊', desc: '주간 수익·지출 현황' },
-  { to: '/boss',       label: '보스 처치', icon: '⚔️', desc: '보스 킬 기록·결정석 수익' },
-  { to: '/hunting',    label: '사냥',      icon: '🌲', desc: '사냥 세션·시간당 수익' },
-  { to: '/ledger',     label: '가계부',    icon: '📒', desc: '수입·지출 직접 기록' },
-  { to: '/characters', label: '캐릭터',    icon: '🧙', desc: '캐릭터 관리·손익분기점' },
-  { to: '/favorites',  label: '즐겨찾기',  icon: '⭐', desc: '보스·도핑 템플릿 관리' },
-  { to: '/goals',      label: '목표',      icon: '🎯', desc: '목표 아이템 달성 예측' },
-  { to: '/stats',      label: '통계',      icon: '📈', desc: '사냥·보스 추이 분석' },
-  { to: '/settings',   label: '설정',      icon: '⚙️', desc: '솔 에르다 가격·메소 설정' },
+type NavItem =
+  | { type: 'link'; to: string; label: string; icon: string; desc: string; indent?: boolean }
+  | { type: 'group'; label: string }
+
+const NAV_ITEMS: NavItem[] = [
+  { type: 'link',  to: '/dashboard',  label: '대시보드',  icon: '📊', desc: '주간 수익·지출·통계 현황' },
+  { type: 'group', label: '기록하기' },
+  { type: 'link',  to: '/boss',       label: '보스 처치', icon: '⚔️', desc: '보스 킬 기록·결정석 수익', indent: true },
+  { type: 'link',  to: '/hunting',    label: '사냥',      icon: '🌲', desc: '사냥 세션·시간당 수익', indent: true },
+  { type: 'link',  to: '/ledger',     label: '메소 강화', icon: '🔩', desc: '큐브·스타포스·추가옵션 기록', indent: true },
+  { type: 'link',  to: '/auction',    label: '경매장',    icon: '🏪', desc: '경매장 수입·지출 기록', indent: true },
+  { type: 'link',  to: '/characters', label: '캐릭터',    icon: '🧙', desc: '캐릭터 관리·손익분기점' },
+  { type: 'link',  to: '/settings',   label: '설정',      icon: '⚙️', desc: 'MVP 등급·솔에르다·메소' },
 ]
+
+const navLinks = NAV_ITEMS.filter((n): n is Extract<NavItem, { type: 'link' }> => n.type === 'link')
 
 const ONBOARDING_KEY = 'onboarding_v1'
 
@@ -121,48 +126,50 @@ export default function Layout() {
       <div className="flex flex-1">
         {/* Sidebar (desktop) */}
         <nav
-          className="hidden md:flex flex-col w-16 lg:w-56 py-3 gap-0.5 sticky top-14 h-[calc(100vh-3.5rem)] overflow-y-auto"
+          className="hidden md:flex flex-col w-16 lg:w-[200px] py-3 gap-0.5 sticky top-14 h-[calc(100vh-3.5rem)] overflow-y-auto"
           style={{ backgroundColor: 'var(--surface)', borderRight: '1.5px solid var(--border)' }}
         >
-          {navItems.map((item) => (
-            <div key={item.to} className="px-2 relative group">
-              <NavLink
-                to={item.to}
-                className={({ isActive }) =>
-                  `nav-sidebar ${isActive ? 'nav-sidebar-active' : ''}`
-                }
-              >
-                <span className="text-xl w-6 text-center shrink-0 leading-none">{item.icon}</span>
-                <span className="hidden lg:block">{item.label}</span>
-              </NavLink>
-              {/* 아이콘만 보이는 너비(md~lg)에서 hover 툴팁 */}
-              <div
-                className="hidden md:block lg:hidden absolute left-full top-1/2 -translate-y-1/2 ml-2 z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity"
-              >
-                <div
-                  className="px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap"
-                  style={{
-                    backgroundColor: 'var(--surface-2)',
-                    border: '1px solid var(--border-2)',
-                    color: 'var(--text)',
-                    boxShadow: 'var(--shadow)',
-                  }}
+          {NAV_ITEMS.map((item, idx) => {
+            if (item.type === 'group') {
+              return (
+                <div key={idx} className="px-3 pt-3 pb-0.5 hidden lg:block">
+                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
+                    {item.label}
+                  </p>
+                </div>
+              )
+            }
+            return (
+              <div key={item.to} className={`relative group ${item.indent ? 'pl-3 pr-2' : 'px-2'}`}>
+                <NavLink
+                  to={item.to}
+                  className={({ isActive }) =>
+                    `nav-sidebar ${isActive ? 'nav-sidebar-active' : ''}`
+                  }
                 >
-                  {item.label}
-                  <span className="block text-xs font-normal mt-0.5" style={{ color: 'var(--text-3)' }}>
-                    {item.desc}
-                  </span>
+                  <span className="text-xl w-6 text-center shrink-0 leading-none">{item.icon}</span>
+                  <span className="hidden lg:block">{item.label}</span>
+                </NavLink>
+                {/* 아이콘만 보이는 너비(md~lg)에서 hover 툴팁 */}
+                <div className="hidden md:block lg:hidden absolute left-full top-1/2 -translate-y-1/2 ml-2 z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap"
+                    style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border-2)', color: 'var(--text)', boxShadow: 'var(--shadow)' }}
+                  >
+                    {item.label}
+                    <span className="block text-xs font-normal mt-0.5" style={{ color: 'var(--text-3)' }}>{item.desc}</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
           <div className="mt-auto px-3 pb-3 hidden lg:block">
             <p style={{ color: 'var(--text-3)', fontSize: '10px', textAlign: 'center' }}>made by 콩만</p>
           </div>
         </nav>
 
         {/* Main */}
-        <main className="flex-1 p-4 md:p-6 pb-24 md:pb-8 overflow-auto">
+        <main className="flex-1 p-2 md:p-4 pb-24 md:pb-8 overflow-auto">
           <div className="max-w-6xl mx-auto w-full fade-in">
             {/* 캐릭터 0개 배너 */}
             {hasNoChars && !charBannerDismissed && location.pathname !== '/characters' && (
@@ -211,7 +218,7 @@ export default function Layout() {
           boxShadow: 'var(--shadow)',
         }}
       >
-        {navItems.map((item) => (
+        {navLinks.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}

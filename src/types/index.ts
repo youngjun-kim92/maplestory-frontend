@@ -12,6 +12,7 @@ export interface UserResponse {
   storageMeso: number
   totalMeso: number
   createdAt: string
+  mvpGrade?: MvpGrade
 }
 
 export interface LoginRequest {
@@ -41,6 +42,8 @@ export type EntryCategory =
   | 'cube'
   | 'starforce'
   | 'spell_trace'
+  | 'additional_option'
+  | 'doping'
   | 'other'
 
 export interface LedgerEntry {
@@ -172,6 +175,7 @@ export interface BossKill {
   characterId: number | null
   characterName: string | null
   createdAt: string
+  expenses?: Array<{ category: string; amount: number; description: string }>
 }
 
 export interface BossKillRequest {
@@ -189,11 +193,19 @@ export interface BossStats {
   totalRevenue: number
 }
 
+// ====== 도핑 타입 ======
+export interface DopingItem {
+  id: number
+  name: string
+  amount: number
+  effect: string
+}
+
 // ====== 사냥 타입 ======
 export interface HuntingSession {
   id: number
-  mapName: string
-  durationMinutes: number
+  mapName?: string
+  durationMinutes?: number
   income: number
   solErdaFragments: number
   solErdaValue: number
@@ -204,8 +216,6 @@ export interface HuntingSession {
 }
 
 export interface HuntingSessionRequest {
-  mapName: string
-  durationMinutes: number
   income: number
   solErdaFragments?: number
   sessionDate: string
@@ -268,7 +278,6 @@ export interface MapleCharacter {
   isMain: boolean
   initialInvestment: number
   solErdaFragments: number
-  mvpGrade?: MvpGrade
 }
 
 export interface CharacterRequest {
@@ -278,7 +287,6 @@ export interface CharacterRequest {
   isMain?: boolean
   initialInvestment?: number
   solErdaFragments?: number
-  mvpGrade?: MvpGrade
 }
 
 export interface CharacterROI {

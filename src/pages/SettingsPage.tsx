@@ -2,10 +2,14 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authApi } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
-import { formatMeso } from '../utils/format'
+import type { MvpGrade } from '../types'
+import { MVP_GRADE_LABELS } from '../types'
+import { formatMeso, toKoreanAmount } from '../utils/format'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
+import Select from '../components/ui/Select'
+import QuickAmountButtons from '../components/ui/QuickAmountButtons'
 
 export default function SettingsPage() {
   const { user, refreshUser } = useAuth()
@@ -39,6 +43,11 @@ export default function SettingsPage() {
   const [mesoSuccess, setMesoSuccess] = useState(false)
   const [mesoError, setMesoError] = useState<string | null>(null)
 
+  const [mvpGrade, setMvpGrade] = useState<string>(user?.mvpGrade ?? 'NORMAL')
+  const [mvpSubmitting, setMvpSubmitting] = useState(false)
+  const [mvpSuccess, setMvpSuccess] = useState(false)
+  const [mvpError, setMvpError] = useState<string | null>(null)
+
   // user 컨텍스트가 갱신되면 폼 값도 동기화
   useEffect(() => {
     if (user) {
@@ -47,8 +56,26 @@ export default function SettingsPage() {
         inventoryMeso: String(user.inventoryMeso ?? 0),
         storageMeso: String(user.storageMeso ?? 0),
       })
+      setMvpGrade(user.mvpGrade ?? 'NORMAL')
     }
   }, [user])
+
+  const handleMvpSubmit = async (e: { preventDefault(): void }) => {
+    e.preventDefault()
+    setMvpSubmitting(true)
+    setMvpSuccess(false)
+    setMvpError(null)
+    try {
+      await authApi.updateMvpGrade(mvpGrade as MvpGrade)
+      await refreshUser()
+      setMvpSuccess(true)
+      setTimeout(() => setMvpSuccess(false), 2500)
+    } catch (err: any) {
+      setMvpError(err?.response?.data?.message ?? '저장 실패')
+    } finally {
+      setMvpSubmitting(false)
+    }
+  }
 
   const handleSolSubmit = async (e: { preventDefault(): void }) => {
     e.preventDefault()
@@ -111,6 +138,36 @@ export default function SettingsPage() {
             </p>
           </div>
         </div>
+      </Card>
+
+      {/* MVP grade */}
+      <Card icon="🏆" title="MVP 등급">
+        <p className="text-xs mb-3" style={{ color: 'var(--text-2)' }}>
+          MVP 등급은 계정 단위로 설정됩니다. 실버 이상이면 경매장 수수료 3%, 일반·브론즈는 5%가 적용됩니다.
+        </p>
+        {mvpSuccess && (
+          <div className="mb-3 p-2.5 rounded-xl text-sm" style={{ backgroundColor: 'rgba(22,163,74,0.1)', color: 'var(--green)', border: '1px solid rgba(22,163,74,0.2)' }}>
+            ✅ 저장되었습니다.
+          </div>
+        )}
+        {mvpError && (
+          <div className="mb-3 p-2.5 rounded-xl text-sm" style={{ backgroundColor: 'rgba(220,38,38,0.08)', color: 'var(--red)', border: '1px solid rgba(220,38,38,0.2)' }}>
+            ❌ {mvpError}
+          </div>
+        )}
+        <form onSubmit={handleMvpSubmit} className="flex gap-2 items-end">
+          <Select
+            label="현재 MVP 등급"
+            options={Object.entries(MVP_GRADE_LABELS).map(([v, l]) => ({ value: v, label: l }))}
+            value={mvpGrade}
+            onChange={(e) => setMvpGrade(e.target.value)}
+            className="flex-1"
+          />
+          <Button type="submit" loading={mvpSubmitting} className="shrink-0">저장</Button>
+        </form>
+        <p className="text-xs mt-2" style={{ color: 'var(--text-3)' }}>
+          💡 PC방 접속 중일 때는 등급에 관계없이 수수료 3%가 적용됩니다.
+        </p>
       </Card>
 
       {/* Sol Erda price */}
@@ -210,10 +267,9 @@ export default function SettingsPage() {
                 onChange={(e) => setMesoForm((p) => ({ ...p, inventoryMeso: e.target.value }))}
                 min={0}
               />
-              {Number(mesoForm.inventoryMeso) > 0 && (
-                <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-2)' }}>
-                  = {formatMeso(Number(mesoForm.inventoryMeso))} 메소
-                </p>
+              <QuickAmountButtons onAdd={(v) => setMesoForm((p) => ({ ...p, inventoryMeso: String((Number(p.inventoryMeso) || 0) + v) }))} />
+              {toKoreanAmount(mesoForm.inventoryMeso) && (
+                <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-3)' }}>{toKoreanAmount(mesoForm.inventoryMeso)}</p>
               )}
             </div>
             <div>
@@ -224,10 +280,9 @@ export default function SettingsPage() {
                 onChange={(e) => setMesoForm((p) => ({ ...p, storageMeso: e.target.value }))}
                 min={0}
               />
-              {Number(mesoForm.storageMeso) > 0 && (
-                <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-2)' }}>
-                  = {formatMeso(Number(mesoForm.storageMeso))} 메소
-                </p>
+              <QuickAmountButtons onAdd={(v) => setMesoForm((p) => ({ ...p, storageMeso: String((Number(p.storageMeso) || 0) + v) }))} />
+              {toKoreanAmount(mesoForm.storageMeso) && (
+                <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-3)' }}>{toKoreanAmount(mesoForm.storageMeso)}</p>
               )}
             </div>
           </div>

@@ -15,12 +15,12 @@ export default function Card({ children, className = '', title, icon }: CardProp
         backgroundColor: 'var(--surface)',
         border: '1.5px solid var(--border)',
         boxShadow: 'var(--shadow)',
-        padding: '1.25rem',
+        padding: '0.5rem 0.75rem',
       }}
     >
       {(title || icon) && (
         <div
-          className="flex items-center gap-2 mb-4 pb-3"
+          className="flex items-center gap-2 mb-3 pb-2"
           style={{ borderBottom: '1px solid var(--border)' }}
         >
           {icon && <span className="text-lg">{icon}</span>}
