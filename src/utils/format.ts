@@ -53,8 +53,11 @@ export function toKoreanAmount(n: string | number): string {
   const parts: string[] = []
   if (uk > 0) parts.push(uk + '억')
   if (man > 0) parts.push(man + '만')
-  if (rest > 0) parts.push(String(rest))
-  return parts.join(' ')
+  if (rest > 0) {
+    const pad = uk > 0 || man > 0
+    parts.push(pad ? String(rest).padStart(4, '0') : String(rest))
+  }
+  return parts.join(' ') + '메소'
 }
 
 export const CATEGORY_LABELS: Record<string, string> = {

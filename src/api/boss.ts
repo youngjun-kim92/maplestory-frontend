@@ -34,7 +34,7 @@ export const bossApi = {
   getDopingList: async (): Promise<{ data: DopingItem[] }> => {
     if (_dopingCache) return { data: _dopingCache }
     const res = await client.get<DopingItem[]>('/boss/doping/list')
-    _dopingCache = res.data
+    if (res.data.length > 0) _dopingCache = res.data
     return res
   },
 

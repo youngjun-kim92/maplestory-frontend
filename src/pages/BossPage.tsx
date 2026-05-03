@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { bossApi } from '../api/boss'
 import { charactersApi } from '../api/characters'
-import { ledgerApi } from '../api/ledger'
 import { favoritesApi } from '../api/favorites'
 import type { FavoriteItem } from '../api/favorites'
 import { useAuth } from '../contexts/AuthContext'
@@ -24,7 +23,7 @@ const WEEKLY_BOSS_MAX_PER_CHAR = 12
 const WEEKLY_BOSS_MAX_TOTAL = 80
 
 export default function BossPage() {
-  const { user, refreshUser } = useAuth()
+  const { refreshUser } = useAuth()
 
   const [bossList, setBossList] = useState<BossMaster[]>([])
   const [weeklyKills, setWeeklyKills] = useState<BossKill[]>([])
@@ -36,6 +35,7 @@ export default function BossPage() {
   const [submitting, setSubmitting] = useState(false)
   const [savingFavsCharId, setSavingFavsCharId] = useState<string | null>(null)
   const [favCharId, setFavCharId] = useState('')
+  const [selectedListCharId, setSelectedListCharId] = useState('')
 
   const [form, setForm] = useState({
     bossName: '',
@@ -48,10 +48,7 @@ export default function BossPage() {
   const [charError, setCharError] = useState('')
   const [toast, setToast] = useState<{ message: string; type: 'error' | 'warning' } | null>(null)
 
-  // 도핑: 체크박스 (여러 개 선택 가능)
   const [selectedDopings, setSelectedDopings] = useState<number[]>([])
-
-  // ★ 즐겨찾기 팝업
   const [showFavPopup, setShowFavPopup] = useState(false)
 
   const fetchData = useCallback(async () => {
@@ -75,6 +72,7 @@ export default function BossPage() {
       const mainChar = charList.find((c) => c.isMain) ?? charList[0]
       if (mainChar) {
         setForm((p) => ({ ...p, characterId: String(mainChar.id) }))
+        setSelectedListCharId((prev) => prev || String(mainChar.id))
       }
     } finally {
       setLoading(false)
@@ -110,27 +108,18 @@ export default function BossPage() {
 
   const totalWeeklyCount = weeklyBossKillSet.length
 
-  const groupedKills = useMemo(() => {
-    const map = new Map<string, { characterId: number | null; characterName: string; kills: BossKill[]; weeklyCount: number }>()
-    for (const kill of weeklyKills) {
-      const key = String(kill.characterId ?? 'none')
-      if (!map.has(key)) {
-        map.set(key, { characterId: kill.characterId, characterName: kill.characterName ?? '캐릭터 미지정', kills: [], weeklyCount: 0 })
-      }
-      const g = map.get(key)!
-      g.kills.push(kill)
-      if (bossList.find((b) => b.bossName === kill.bossName && b.difficulty === kill.difficulty)?.resetType === 'weekly') {
-        g.weeklyCount++
-      }
-    }
-    return [...map.values()].sort((a, b) => {
-      const aMain = characters.find((c) => c.id === a.characterId)?.isMain ?? false
-      const bMain = characters.find((c) => c.id === b.characterId)?.isMain ?? false
-      if (aMain && !bMain) return -1
-      if (!aMain && bMain) return 1
-      return a.characterName.localeCompare(b.characterName, 'ko')
-    })
-  }, [weeklyKills, bossList, characters])
+  // 처치 목록: 선택된 캐릭터만 필터
+  const selectedListKills = useMemo(
+    () => weeklyKills.filter((k) => k.characterId === Number(selectedListCharId)),
+    [weeklyKills, selectedListCharId]
+  )
+
+  const selectedListWeeklyCount = useMemo(() => {
+    const weeklyKeys = new Set(
+      bossList.filter((b) => b.resetType === 'weekly').map((b) => `${b.bossName}|${b.difficulty}`)
+    )
+    return selectedListKills.filter((k) => weeklyKeys.has(`${k.bossName}|${k.difficulty}`)).length
+  }, [selectedListKills, bossList])
 
   const handleBossNameChange = (name: string) => {
     const diffs = filteredBossList.filter((b) => b.bossName === name).map((b) => b.difficulty)
@@ -150,30 +139,21 @@ export default function BossPage() {
     setCharError('')
     setSubmitting(true)
     try {
+      const expenses = selectedDopings.length > 0
+        ? selectedDopings
+            .map((id) => dopingItems.find((x) => x.id === id))
+            .filter((item): item is DopingItem => !!item)
+            .map((item) => ({ category: 'doping', amount: item.price, description: item.name }))
+        : []
+
       await bossApi.recordBossKill({
         bossName: form.bossName,
         difficulty: form.difficulty,
         killDate: form.killDate,
         partySize: form.partySize,
         characterId: Number(form.characterId),
+        expenses,
       })
-
-      if (selectedDopings.length > 0) {
-        await Promise.all(
-          selectedDopings.map((id) => {
-            const item = dopingItems.find((x) => x.id === id)
-            if (!item) return Promise.resolve()
-            return ledgerApi.addEntry({
-              type: 'expense',
-              category: 'doping',
-              amount: item.amount,
-              description: item.name,
-              entryDate: form.killDate,
-              characterId: Number(form.characterId),
-            })
-          })
-        )
-      }
 
       setSelectedDopings([])
       await fetchData()
@@ -215,31 +195,23 @@ export default function BossPage() {
     setSubmitting(true)
     try {
       await Promise.all(
-        validFavs.map((fav) =>
-          bossApi.recordBossKill({
+        validFavs.map((fav) => {
+          const dFav = dopingFavorites.find(
+            (d) => (d.bossName === fav.bossName || d.bossName === null) && d.amount
+          )
+          const expenses = dFav?.amount
+            ? [{ category: 'doping', amount: dFav.amount, description: dFav.label }]
+            : []
+          return bossApi.recordBossKill({
             bossName: fav.bossName!,
             difficulty: fav.difficulty!,
             killDate: form.killDate,
             partySize: fav.partySize ?? 1,
             characterId: Number(favCharId),
+            expenses,
           })
-        )
+        })
       )
-      const dopingEntries = validFavs.flatMap((fav) => {
-        const dFav = dopingFavorites.find(
-          (d) => (d.bossName === fav.bossName || d.bossName === null) && d.amount
-        )
-        if (!dFav?.amount) return []
-        return [ledgerApi.addEntry({
-          type: 'expense',
-          category: 'doping',
-          amount: dFav.amount,
-          description: dFav.label,
-          entryDate: form.killDate,
-          characterId: Number(favCharId),
-        })]
-      })
-      if (dopingEntries.length > 0) await Promise.all(dopingEntries)
       setShowFavPopup(false)
       await fetchData()
       await refreshUser()
@@ -294,6 +266,8 @@ export default function BossPage() {
   const totalWeeklyRevenue = weeklyKills.reduce((s, k) => s + k.crystalPrice, 0)
   const isWeeklyBossSelected = selectedBoss?.resetType === 'weekly'
   const maxPartySize = selectedBoss?.maxPartySize ?? 6
+
+  const selectedListChar = characters.find((c) => String(c.id) === selectedListCharId)
 
   if (loading) {
     return <div className="flex items-center justify-center py-20 text-orange-400 animate-pulse">불러오는 중...</div>
@@ -496,7 +470,7 @@ export default function BossPage() {
             />
           </div>
 
-          {/* 도핑 체크박스 섹션 */}
+          {/* 도핑 체크박스 */}
           {dopingItems.length > 0 && (
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-2)' }}>
@@ -529,7 +503,7 @@ export default function BossPage() {
                       />
                       <span>{item.name}</span>
                       <span className="text-xs ml-1" style={{ color: checked ? 'var(--primary)' : 'var(--text-3)' }}>
-                        {(Number(item.amount) || 0).toLocaleString()}
+                        {item.price.toLocaleString()}
                       </span>
                     </label>
                   )
@@ -547,85 +521,98 @@ export default function BossPage() {
         </form>
       </Card>
 
-      {/* ── 이번 주 처치 목록 (캐릭터별) ── */}
+      {/* ── 이번 주 처치 목록 ── */}
       <div>
         <p className="text-sm font-semibold mb-2" style={{ color: 'var(--text)' }}>📋 이번 주 보스 처치 목록</p>
-        {weeklyKills.length === 0 ? (
+
+        {/* 캐릭터 선택 드롭다운 */}
+        {characters.length > 0 && (
+          <div className="flex items-center gap-2 mb-2">
+            <select
+              className="form-field text-sm flex-1"
+              value={selectedListCharId}
+              onChange={(e) => setSelectedListCharId(e.target.value)}
+            >
+              {characters.map((c) => (
+                <option key={c.id} value={String(c.id)}>
+                  {c.isMain ? `⭐ ${c.name}` : c.name}
+                </option>
+              ))}
+            </select>
+            <span
+              className="text-xs px-2.5 py-1 rounded-full shrink-0 font-medium"
+              style={{
+                backgroundColor: selectedListWeeklyCount >= WEEKLY_BOSS_MAX_PER_CHAR
+                  ? 'rgba(220,38,38,0.12)'
+                  : 'rgba(63,185,80,0.12)',
+                color: selectedListWeeklyCount >= WEEKLY_BOSS_MAX_PER_CHAR ? 'var(--red)' : 'var(--green)',
+              }}
+            >
+              주간 {selectedListWeeklyCount}/{WEEKLY_BOSS_MAX_PER_CHAR}
+            </span>
+          </div>
+        )}
+
+        {selectedListKills.length === 0 ? (
           <div
             className="rounded-xl px-4 py-8 text-sm text-center"
             style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-3)' }}
           >
-            이번 주 처치 기록이 없습니다.
+            {selectedListChar
+              ? `${selectedListChar.name}의 이번 주 처치 기록이 없습니다.`
+              : '이번 주 처치 기록이 없습니다.'}
           </div>
         ) : (
-          <div className="space-y-3">
-            {groupedKills.map((group) => {
-              const groupKey = String(group.characterId ?? 'none')
-              const isSaving = savingFavsCharId === groupKey
-              const groupRevenue = group.kills.reduce((s, k) => s + k.crystalPrice, 0)
-              const isMain = characters.find((c) => c.id === group.characterId)?.isMain ?? false
-              return (
-                <div
-                  key={groupKey}
-                  className="rounded-xl overflow-hidden"
-                  style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)' }}
-                >
-                  {/* 캐릭터 헤더 */}
-                  <div
-                    className="flex items-center justify-between px-3 py-2"
-                    style={{ backgroundColor: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
-                        {isMain ? '⭐ ' : ''}{group.characterName}
-                      </span>
-                      <span
-                        className="text-xs px-2 py-0.5 rounded-full"
-                        style={{
-                          backgroundColor: group.weeklyCount >= WEEKLY_BOSS_MAX_PER_CHAR ? 'rgba(220,38,38,0.12)' : 'rgba(63,185,80,0.12)',
-                          color: group.weeklyCount >= WEEKLY_BOSS_MAX_PER_CHAR ? 'var(--red)' : 'var(--green)',
-                        }}
-                      >
-                        주간 {group.weeklyCount}/{WEEKLY_BOSS_MAX_PER_CHAR}
-                      </span>
+          <>
+            <div
+              className="rounded-xl overflow-hidden"
+              style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)' }}
+            >
+              {/* 수익 합계 헤더 */}
+              <div
+                className="flex items-center justify-between px-3 py-2"
+                style={{ backgroundColor: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}
+              >
+                <span className="text-xs" style={{ color: 'var(--text-2)' }}>
+                  {selectedListKills.length}회 처치
+                </span>
+                <span className="text-xs font-semibold" style={{ color: 'var(--primary)' }}>
+                  +{formatMeso(selectedListKills.reduce((s, k) => s + k.crystalPrice, 0))}
+                </span>
+              </div>
+              {/* 킬 목록 */}
+              <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+                {selectedListKills.map((kill) => (
+                  <div key={kill.id} className="flex items-center justify-between px-3 py-2">
+                    <div>
+                      <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>{kill.bossName}</span>
+                      <span className="text-xs ml-1.5" style={{ color: 'var(--text-2)' }}>{difficultyLabel(kill.difficulty)}</span>
+                      {kill.partySize && kill.partySize > 1 && (
+                        <span className="text-xs ml-1" style={{ color: 'var(--text-3)' }}>{kill.partySize}인</span>
+                      )}
                     </div>
-                    <span className="text-xs font-semibold" style={{ color: 'var(--primary)' }}>
-                      +{formatMeso(groupRevenue)}
-                    </span>
+                    <div className="text-right">
+                      <p className="font-semibold text-sm" style={{ color: 'var(--primary)' }}>+{formatMeso(kill.crystalPrice)}</p>
+                      <p className="text-xs" style={{ color: 'var(--text-3)' }}>{kill.killDate?.slice(5)}</p>
+                    </div>
                   </div>
-                  {/* 킬 목록 */}
-                  <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
-                    {group.kills.map((kill) => (
-                      <div key={kill.id} className="flex items-center justify-between px-3 py-2">
-                        <div>
-                          <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>{kill.bossName}</span>
-                          <span className="text-xs ml-1.5" style={{ color: 'var(--text-2)' }}>{difficultyLabel(kill.difficulty)}</span>
-                          {kill.partySize && kill.partySize > 1 && (
-                            <span className="text-xs ml-1" style={{ color: 'var(--text-3)' }}>{kill.partySize}인</span>
-                          )}
-                        </div>
-                        <div className="text-right">
-                          <p className="font-semibold text-sm" style={{ color: 'var(--primary)' }}>+{formatMeso(kill.crystalPrice)}</p>
-                          <p className="text-xs" style={{ color: 'var(--text-3)' }}>{kill.killDate?.slice(5)}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  {/* 즐겨찾기 저장 버튼 */}
-                  <div className="px-3 py-2" style={{ borderTop: '1px solid var(--border)' }}>
-                    <button
-                      onClick={() => handleSaveCharFavs(groupKey, group.kills)}
-                      disabled={isSaving}
-                      className="text-xs px-3 py-1.5 rounded-lg font-medium transition-all w-full"
-                      style={{ backgroundColor: 'rgba(251,191,36,0.1)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }}
-                    >
-                      {isSaving ? '저장 중...' : `⭐ ${group.characterName} 즐겨찾기로 저장`}
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+                ))}
+              </div>
+            </div>
+            {/* 즐겨찾기 저장 버튼 */}
+            <div className="mt-2">
+              <button
+                onClick={() => handleSaveCharFavs(selectedListCharId, selectedListKills)}
+                disabled={savingFavsCharId === selectedListCharId}
+                className="text-xs px-3 py-1.5 rounded-lg font-medium transition-all w-full"
+                style={{ backgroundColor: 'rgba(251,191,36,0.1)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }}
+              >
+                {savingFavsCharId === selectedListCharId
+                  ? '저장 중...'
+                  : `⭐ ${selectedListChar?.name ?? '이 캐릭터'} 즐겨찾기로 저장`}
+              </button>
+            </div>
+          </>
         )}
       </div>
 
@@ -649,7 +636,6 @@ export default function BossPage() {
               <p className="text-sm text-center py-4" style={{ color: 'var(--text-3)' }}>등록된 즐겨찾기가 없습니다.</p>
             ) : (
               <>
-                {/* 캐릭터 선택 */}
                 {characters.length > 0 && (
                   <div>
                     <label className="text-xs font-semibold uppercase tracking-wide mb-1 block" style={{ color: 'var(--text-2)' }}>

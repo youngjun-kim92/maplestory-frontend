@@ -3,7 +3,7 @@ import { huntingApi } from '../api/hunting'
 import { charactersApi } from '../api/characters'
 import { useAuth } from '../contexts/AuthContext'
 import type { HuntingSession, MapleCharacter } from '../types'
-import { formatMeso, formatDate, toDateString } from '../utils/format'
+import { formatMeso, formatDate, toDateString, toKoreanAmount } from '../utils/format'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
@@ -76,7 +76,7 @@ export default function HuntingPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <h1 className="text-xl font-bold" style={{ color: 'var(--text)' }}>🌲 사냥 기록</h1>
 
       {/* 주간 요약 */}
@@ -105,6 +105,9 @@ export default function HuntingPage() {
                 min={0}
               />
               <QuickAmountButtons onAdd={(v) => setForm((p) => ({ ...p, income: String((Number(p.income) || 0) + v) }))} />
+              {toKoreanAmount(form.income) && (
+                <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-3)' }}>{toKoreanAmount(form.income)}</p>
+              )}
             </div>
             <div>
               <Input

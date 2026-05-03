@@ -97,7 +97,7 @@ export default function AuctionPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <h1 className="text-xl font-bold" style={{ color: 'var(--text)' }}>🏪 경매장</h1>
 
       {success && (
@@ -181,27 +181,29 @@ export default function AuctionPage() {
             </label>
             {saleAmt > 0 && (
               <div
-                className="p-3 rounded-xl space-y-1 text-xs"
+                className="p-3 rounded-xl space-y-1.5 text-xs"
                 style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)' }}
               >
-                <p style={{ color: 'var(--text-2)' }}>
-                  수수료:{' '}
-                  {incomeForm.isPcCafe
-                    ? 'PC방 3%'
-                    : isSilverPlus
-                    ? `MVP ${user?.mvpGrade} 3%`
-                    : '일반/브론즈 5%'}
+                <p className="font-medium" style={{ color: 'var(--text-2)' }}>수수료 안내</p>
+                <p style={{ color: (incomeForm.isPcCafe || isSilverPlus) ? 'var(--green)' : 'var(--text-3)' }}>
+                  • PC방 또는 MVP 실버 이상 → 3%{(incomeForm.isPcCafe || isSilverPlus) ? ' ✓' : ''}
                 </p>
-                {!incomeForm.isPcCafe && !isSilverPlus && (
-                  <p style={{ color: 'var(--text-3)' }}>
-                    💡 실버 이상 MVP면 3% 적용.{' '}
-                    <a href="/settings" className="underline" style={{ color: 'var(--primary)' }}>설정 →</a>
-                  </p>
-                )}
+                <p style={{ color: (!incomeForm.isPcCafe && !isSilverPlus) ? 'var(--text-2)' : 'var(--text-3)' }}>
+                  • 일반 / 브론즈 → 5%{(!incomeForm.isPcCafe && !isSilverPlus) ? ' ✓' : ''}
+                </p>
                 <p className="font-semibold" style={{ color: 'var(--green)' }}>
                   예상 실수령: {formatMeso(net)} 메소
                   {toKoreanAmount(net) && <span style={{ color: 'var(--text-3)' }}> ({toKoreanAmount(net)})</span>}
                 </p>
+                {!incomeForm.isPcCafe && !isSilverPlus && (
+                  <a
+                    href="/settings"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-medium mt-0.5"
+                    style={{ backgroundColor: 'var(--primary-dim)', color: 'var(--primary)', border: '1px solid var(--primary-glow)' }}
+                  >
+                    MVP 등급 변경하기 →
+                  </a>
+                )}
               </div>
             )}
             <div className="flex justify-end">

@@ -110,7 +110,7 @@ export default function LedgerPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div>
         <h1 className="text-xl font-bold" style={{ color: 'var(--text)' }}>🔩 메소 강화</h1>
         {ledger && (

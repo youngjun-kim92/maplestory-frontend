@@ -2,6 +2,12 @@
 @import "tailwindcss";
 
 :root {
+  /* Spacing */
+  --spacing-xs: 2px;
+  --spacing-sm: 4px;
+  --spacing-md: 8px;
+  --spacing-lg: 12px;
+
   /* Brand */
   --primary: #f97316;
   --primary-light: #fb923c;
@@ -240,7 +246,7 @@ body {
 /* ── Stat cards ── */
 .stat-card {
   border-radius: 1rem;
-  padding: 0.625rem 0.75rem;
+  padding: 0.5rem 0.625rem;
   background-color: var(--surface);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-sm);
@@ -253,7 +259,7 @@ body {
 /* ── KPI cards ── */
 .kpi-card {
   border-radius: 0.875rem;
-  padding: 0.5rem 0.75rem;
+  padding: var(--spacing-sm) var(--spacing-md);
   background-color: var(--surface);
   border: 1px solid var(--border);
   border-left-width: 3px;

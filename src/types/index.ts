@@ -184,6 +184,7 @@ export interface BossKillRequest {
   killDate: string
   partySize?: number
   characterId?: number | null
+  expenses?: Array<{ category: string; amount: number; description: string }>
 }
 
 export interface BossStats {
@@ -197,7 +198,7 @@ export interface BossStats {
 export interface DopingItem {
   id: number
   name: string
-  amount: number
+  price: number
   effect: string
 }
 

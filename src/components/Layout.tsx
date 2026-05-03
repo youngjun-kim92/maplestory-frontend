@@ -169,7 +169,7 @@ export default function Layout() {
         </nav>
 
         {/* Main */}
-        <main className="flex-1 p-2 md:p-4 pb-24 md:pb-8 overflow-auto">
+        <main className="flex-1 p-2 md:p-3 pb-20 md:pb-6 overflow-auto">
           <div className="max-w-6xl mx-auto w-full fade-in">
             {/* 캐릭터 0개 배너 */}
             {hasNoChars && !charBannerDismissed && location.pathname !== '/characters' && (

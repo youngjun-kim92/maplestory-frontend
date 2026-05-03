@@ -20,7 +20,7 @@ export default function Card({ children, className = '', title, icon }: CardProp
     >
       {(title || icon) && (
         <div
-          className="flex items-center gap-2 mb-3 pb-2"
+          className="flex items-center gap-2 mb-2 pb-2"
           style={{ borderBottom: '1px solid var(--border)' }}
         >
           {icon && <span className="text-lg">{icon}</span>}
