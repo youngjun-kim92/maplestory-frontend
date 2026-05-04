@@ -170,6 +170,9 @@ export interface BossKill {
   bossName: string
   difficulty: string
   crystalPrice: number
+  income?: number
+  totalExpense?: number
+  resetType?: string
   killDate: string
   partySize: number | null
   characterId: number | null

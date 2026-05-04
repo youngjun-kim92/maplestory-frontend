@@ -2,8 +2,8 @@ import client from './client'
 import type { IncomeTrend, LedgerAddResponse, LedgerEntryRequest, LedgerStat, WeeklyLedger, WeeklySummary } from '../types'
 
 export const ledgerApi = {
-  getWeeklyLedger: (week?: string) =>
-    client.get<WeeklyLedger>('/ledger', { params: week ? { week } : {} }),
+  getWeeklyLedger: (params?: { week?: string; characterId?: number }) =>
+    client.get<WeeklyLedger>('/ledger', { params }),
 
   addEntry: (data: LedgerEntryRequest) =>
     client.post<LedgerAddResponse>('/ledger', data),

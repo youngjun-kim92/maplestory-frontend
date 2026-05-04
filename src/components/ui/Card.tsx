@@ -25,7 +25,7 @@ export default function Card({ children, className = '', title, icon }: CardProp
         >
           {icon && <span className="text-lg">{icon}</span>}
           {title && (
-            <h2 className="font-semibold text-sm" style={{ color: 'var(--text)' }}>
+            <h2 className="font-semibold text-base" style={{ color: 'var(--text)' }}>
               {title}
             </h2>
           )}

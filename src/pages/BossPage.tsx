@@ -20,13 +20,14 @@ const RESET_TYPE_TABS: { key: ResetType | 'all'; label: string }[] = [
 ]
 
 const WEEKLY_BOSS_MAX_PER_CHAR = 12
-const WEEKLY_BOSS_MAX_TOTAL = 80
+const WEEKLY_BOSS_MAX_TOTAL = 90
 
 export default function BossPage() {
   const { refreshUser } = useAuth()
 
   const [bossList, setBossList] = useState<BossMaster[]>([])
   const [weeklyKills, setWeeklyKills] = useState<BossKill[]>([])
+  const [allWeeklyKills, setAllWeeklyKills] = useState<BossKill[]>([])
   const [characters, setCharacters] = useState<MapleCharacter[]>([])
   const [bossFavorites, setBossFavorites] = useState<FavoriteItem[]>([])
   const [dopingFavorites, setDopingFavorites] = useState<FavoriteItem[]>([])
@@ -34,52 +35,76 @@ export default function BossPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [savingFavsCharId, setSavingFavsCharId] = useState<string | null>(null)
-  const [favCharId, setFavCharId] = useState('')
-  const [selectedListCharId, setSelectedListCharId] = useState('')
+  const [savingSingleFav, setSavingSingleFav] = useState(false)
+  const [selectedCharId, setSelectedCharId] = useState('')
 
   const [form, setForm] = useState({
     bossName: '',
     difficulty: '',
     killDate: toDateString(),
-    characterId: '',
     partySize: 1,
     resetFilter: 'all' as ResetType | 'all',
   })
   const [charError, setCharError] = useState('')
-  const [toast, setToast] = useState<{ message: string; type: 'error' | 'warning' } | null>(null)
+  const [toast, setToast] = useState<{ message: string; type: 'error' | 'warning' | 'success' } | null>(null)
 
   const [selectedDopings, setSelectedDopings] = useState<number[]>([])
   const [showFavPopup, setShowFavPopup] = useState(false)
+  const [editingKillId, setEditingKillId] = useState<number | null>(null)
+  const [editPartySize, setEditPartySize] = useState(1)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const [list, kills, chars, bFavs, dFavs, dopings] = await Promise.all([
+      const [list, chars, dopings] = await Promise.all([
         bossApi.getBossList(),
-        bossApi.getWeeklyBossKills(),
         charactersApi.getCharacters(),
-        favoritesApi.getAll('BOSS'),
-        favoritesApi.getAll('DOPING'),
         bossApi.getDopingList(),
       ])
       setBossList(list.data)
-      setWeeklyKills(kills.data)
       const charList = chars.data
       setCharacters(charList)
-      setBossFavorites(bFavs.data)
-      setDopingFavorites(dFavs.data)
       setDopingItems(dopings.data)
       const mainChar = charList.find((c) => c.isMain) ?? charList[0]
       if (mainChar) {
-        setForm((p) => ({ ...p, characterId: String(mainChar.id) }))
-        setSelectedListCharId((prev) => prev || String(mainChar.id))
+        setSelectedCharId((prev) => prev || String(mainChar.id))
       }
     } finally {
       setLoading(false)
     }
   }, [])
 
+  const fetchKills = useCallback(async (charId: string) => {
+    if (!charId) return
+    const res = await bossApi.getWeeklyBossKills({ characterId: Number(charId) })
+    setWeeklyKills(res.data)
+  }, [])
+
+  const fetchAllKills = useCallback(async () => {
+    const res = await bossApi.getWeeklyBossKills()
+    setAllWeeklyKills(res.data)
+  }, [])
+
+  const fetchFavorites = useCallback(async (charId: string) => {
+    if (!charId) return
+    const cid = Number(charId)
+    const [bFavs, dFavs] = await Promise.all([
+      favoritesApi.getAll('BOSS', { characterId: cid }),
+      favoritesApi.getAll('DOPING', { characterId: cid }),
+    ])
+    setBossFavorites(bFavs.data)
+    setDopingFavorites(dFavs.data)
+  }, [])
+
   useEffect(() => { fetchData() }, [fetchData])
+
+  useEffect(() => {
+    if (selectedCharId) {
+      fetchFavorites(selectedCharId)
+      fetchKills(selectedCharId)
+      fetchAllKills()
+    }
+  }, [selectedCharId, fetchFavorites, fetchKills, fetchAllKills])
 
   const filteredBossList = form.resetFilter === 'all'
     ? bossList
@@ -98,28 +123,38 @@ export default function BossPage() {
     const weeklyBossNames = new Set(
       bossList.filter((b) => b.resetType === 'weekly').map((b) => b.bossName + '|' + b.difficulty)
     )
-    return weeklyKills.filter((k) => weeklyBossNames.has(k.bossName + '|' + k.difficulty))
+    return weeklyKills.filter((k) =>
+      k.resetType ? k.resetType === 'weekly' : weeklyBossNames.has(k.bossName + '|' + k.difficulty)
+    )
   }, [bossList, weeklyKills])
 
-  const charWeeklyCount = useMemo(() => {
-    const charId = Number(form.characterId)
-    return weeklyBossKillSet.filter((k) => k.characterId === charId).length
-  }, [weeklyBossKillSet, form.characterId])
+  const charWeeklyCount = weeklyBossKillSet.length
 
-  const totalWeeklyCount = weeklyBossKillSet.length
-
-  // 처치 목록: 선택된 캐릭터만 필터
-  const selectedListKills = useMemo(
-    () => weeklyKills.filter((k) => k.characterId === Number(selectedListCharId)),
-    [weeklyKills, selectedListCharId]
-  )
-
-  const selectedListWeeklyCount = useMemo(() => {
-    const weeklyKeys = new Set(
-      bossList.filter((b) => b.resetType === 'weekly').map((b) => `${b.bossName}|${b.difficulty}`)
+  const allWeeklyBossKillSet = useMemo(() => {
+    const weeklyBossNames = new Set(
+      bossList.filter((b) => b.resetType === 'weekly').map((b) => b.bossName + '|' + b.difficulty)
     )
-    return selectedListKills.filter((k) => weeklyKeys.has(`${k.bossName}|${k.difficulty}`)).length
-  }, [selectedListKills, bossList])
+    return allWeeklyKills.filter((k) =>
+      k.resetType ? k.resetType === 'weekly' : weeklyBossNames.has(k.bossName + '|' + k.difficulty)
+    )
+  }, [bossList, allWeeklyKills])
+
+  const totalWeeklyCount = allWeeklyBossKillSet.length
+
+  const charWeeklyCountMap = useMemo(() => {
+    const map = new Map<number, { name: string; count: number }>()
+    for (const k of allWeeklyBossKillSet) {
+      if (k.characterId == null) continue
+      const existing = map.get(k.characterId)
+      if (existing) {
+        existing.count++
+      } else {
+        const char = characters.find((c) => c.id === k.characterId)
+        map.set(k.characterId, { name: char?.name ?? String(k.characterId), count: 1 })
+      }
+    }
+    return map
+  }, [allWeeklyBossKillSet, characters])
 
   const handleBossNameChange = (name: string) => {
     const diffs = filteredBossList.filter((b) => b.bossName === name).map((b) => b.difficulty)
@@ -135,7 +170,7 @@ export default function BossPage() {
   const handleSubmit = async (e: { preventDefault(): void }) => {
     e.preventDefault()
     if (!form.bossName || !form.difficulty) return
-    if (!form.characterId) { setCharError('캐릭터를 선택해주세요.'); return }
+    if (!selectedCharId) { setCharError('캐릭터를 선택해주세요.'); return }
     setCharError('')
     setSubmitting(true)
     try {
@@ -151,12 +186,13 @@ export default function BossPage() {
         difficulty: form.difficulty,
         killDate: form.killDate,
         partySize: form.partySize,
-        characterId: Number(form.characterId),
+        characterId: Number(selectedCharId),
         expenses,
       })
 
       setSelectedDopings([])
-      await fetchData()
+      await fetchKills(selectedCharId)
+      await fetchAllKills()
       await refreshUser()
     } catch (err: any) {
       const status = err?.response?.status
@@ -173,7 +209,7 @@ export default function BossPage() {
     }
   }
 
-  const applyFavorite = (fav: FavoriteItem) => {
+  const applyFavorite = async (fav: FavoriteItem) => {
     if (!fav.bossName) return
     const diffs = bossList.filter((b) => b.bossName === fav.bossName).map((b) => b.difficulty)
     const diff = fav.difficulty || diffs[0] || ''
@@ -184,11 +220,65 @@ export default function BossPage() {
       resetFilter: 'all',
       partySize: fav.partySize ?? 1,
     }))
-    setSelectedDopings([])
+
+    if (selectedCharId && fav.bossName) {
+      try {
+        const res = await favoritesApi.getAll('DOPING', {
+          characterId: Number(selectedCharId),
+          bossName: fav.bossName,
+        })
+        const dopingFavLabels = new Set(res.data.map((d) => d.label))
+        const matchingIds = dopingItems
+          .filter((item) => dopingFavLabels.has(item.name))
+          .map((item) => item.id)
+        setSelectedDopings(matchingIds)
+      } catch {
+        setSelectedDopings([])
+      }
+    } else {
+      setSelectedDopings([])
+    }
+  }
+
+  const handleSaveSingleBossFav = async () => {
+    if (!form.bossName || !form.difficulty || !selectedCharId) return
+    const charId = Number(selectedCharId)
+    setSavingSingleFav(true)
+    try {
+      await favoritesApi.create({
+        type: 'BOSS',
+        label: `${form.bossName} ${difficultyLabel(form.difficulty)}`,
+        bossName: form.bossName,
+        difficulty: form.difficulty,
+        partySize: form.partySize,
+        characterId: charId,
+      })
+      for (const dopingId of selectedDopings) {
+        const item = dopingItems.find((x) => x.id === dopingId)
+        if (item) {
+          await favoritesApi.create({
+            type: 'DOPING',
+            label: item.name,
+            bossName: form.bossName,
+            amount: item.price,
+            description: item.name,
+            characterId: charId,
+          })
+        }
+      }
+      await fetchFavorites(selectedCharId)
+      setToast({ message: '즐겨찾기에 저장되었습니다.', type: 'success' })
+    } catch (err: any) {
+      if (err?.response?.status === 400) {
+        setToast({ message: '즐겨찾기는 캐릭터당 최대 12개까지 저장할 수 있습니다.', type: 'error' })
+      }
+    } finally {
+      setSavingSingleFav(false)
+    }
   }
 
   const handleBulkRecord = async () => {
-    if (!favCharId) { alert('캐릭터를 선택해주세요.'); return }
+    if (!selectedCharId) { alert('캐릭터를 선택해주세요.'); return }
     const validFavs = bossFavorites.filter((f) => f.bossName && f.difficulty)
     if (validFavs.length === 0) return
     if (!confirm(`즐겨찾기 ${validFavs.length}개를 이번 주 기록에 추가하시겠습니까?`)) return
@@ -196,32 +286,35 @@ export default function BossPage() {
     try {
       await Promise.all(
         validFavs.map((fav) => {
-          const dFav = dopingFavorites.find(
-            (d) => (d.bossName === fav.bossName || d.bossName === null) && d.amount
-          )
-          const expenses = dFav?.amount
-            ? [{ category: 'doping', amount: dFav.amount, description: dFav.label }]
-            : []
+          const relatedDopings = dopingFavorites.filter((d) => d.bossName === fav.bossName && d.amount)
+          const expenses = relatedDopings.map((d) => ({
+            category: 'doping',
+            amount: d.amount!,
+            description: d.label,
+          }))
           return bossApi.recordBossKill({
             bossName: fav.bossName!,
             difficulty: fav.difficulty!,
             killDate: form.killDate,
             partySize: fav.partySize ?? 1,
-            characterId: Number(favCharId),
+            characterId: Number(selectedCharId),
             expenses,
           })
         })
       )
       setShowFavPopup(false)
-      await fetchData()
+      await fetchKills(selectedCharId)
+      await fetchAllKills()
       await refreshUser()
     } finally {
       setSubmitting(false)
     }
   }
 
-  const handleSaveCharFavs = async (groupKey: string, kills: BossKill[]) => {
+  const handleSaveCharFavs = async () => {
+    const kills = weeklyKills
     if (kills.length === 0) return
+    const charIdNum = Number(selectedCharId)
     const existingKeys = new Set(bossFavorites.map((f) => `${f.bossName}|${f.difficulty}`))
     const uniqueKillMap = new Map<string, BossKill>()
     for (const k of kills) {
@@ -231,7 +324,7 @@ export default function BossPage() {
     const unique = [...uniqueKillMap.values()]
     if (unique.length === 0) { alert('이미 모든 보스가 즐겨찾기에 저장되어 있습니다.'); return }
     if (!confirm(`${unique.length}개의 보스를 즐겨찾기로 저장하시겠습니까?`)) return
-    setSavingFavsCharId(groupKey)
+    setSavingFavsCharId(selectedCharId)
     try {
       await Promise.all(
         unique.map((k) =>
@@ -241,6 +334,7 @@ export default function BossPage() {
             bossName: k.bossName,
             difficulty: k.difficulty,
             partySize: k.partySize ?? 1,
+            characterId: charIdNum,
           })
         )
       )
@@ -248,10 +342,14 @@ export default function BossPage() {
       const dopingToSave = unique.flatMap((k) =>
         (k.expenses?.filter((e) => e.category === 'doping') ?? [])
           .filter((e) => !existingDopingKeys.has(`${k.bossName}|${e.description}`))
-          .map((e) => ({ type: 'DOPING' as const, label: e.description, bossName: k.bossName, amount: e.amount }))
+          .map((e) => ({ type: 'DOPING' as const, label: e.description, bossName: k.bossName, amount: e.amount, characterId: charIdNum }))
       )
       if (dopingToSave.length > 0) await Promise.all(dopingToSave.map((d) => favoritesApi.create(d)))
-      await fetchData()
+      await fetchFavorites(selectedCharId)
+    } catch (err: any) {
+      if (err?.response?.status === 400) {
+        setToast({ message: '즐겨찾기는 캐릭터당 최대 12개까지 저장할 수 있습니다.', type: 'error' })
+      }
     } finally {
       setSavingFavsCharId(null)
     }
@@ -260,14 +358,30 @@ export default function BossPage() {
   const handleDeleteFav = async (id: number) => {
     if (!confirm('즐겨찾기를 삭제하시겠습니까?')) return
     await favoritesApi.delete(id)
-    await fetchData()
+    if (selectedCharId) await fetchFavorites(selectedCharId)
   }
 
-  const totalWeeklyRevenue = weeklyKills.reduce((s, k) => s + k.crystalPrice, 0)
+  const handleDeleteKill = async (killId: number) => {
+    if (!confirm('이 기록을 삭제하시겠습니까?')) return
+    await bossApi.deleteBossKill(killId)
+    await fetchKills(selectedCharId)
+    await fetchAllKills()
+    await refreshUser()
+  }
+
+  const handleUpdateKill = async (killId: number, partySize: number) => {
+    await bossApi.updateBossKill(killId, { partySize })
+    setEditingKillId(null)
+    await fetchKills(selectedCharId)
+    await fetchAllKills()
+    await refreshUser()
+  }
+
+  const totalWeeklyRevenue = allWeeklyKills.reduce((s, k) => s + (k.income ?? k.crystalPrice), 0)
   const isWeeklyBossSelected = selectedBoss?.resetType === 'weekly'
   const maxPartySize = selectedBoss?.maxPartySize ?? 6
 
-  const selectedListChar = characters.find((c) => String(c.id) === selectedListCharId)
+  const selectedChar = characters.find((c) => String(c.id) === selectedCharId)
 
   if (loading) {
     return <div className="flex items-center justify-center py-20 text-orange-400 animate-pulse">불러오는 중...</div>
@@ -278,27 +392,56 @@ export default function BossPage() {
       {toast && (
         <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
       )}
-      <h1 className="text-xl font-bold" style={{ color: 'var(--text)' }}>⚔️ 보스 처치</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>⚔️ 보스 처치</h1>
+        {characters.length > 0 && (
+          <select
+            className="form-field text-sm min-w-[120px] max-w-[200px] w-auto"
+            value={selectedCharId}
+            onChange={(e) => setSelectedCharId(e.target.value)}
+          >
+            {characters.map((c) => (
+              <option key={c.id} value={String(c.id)} style={{ backgroundColor: 'var(--surface-2)' }}>
+                {c.isMain ? `⭐ ${c.name}` : c.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
 
       {/* 주간 수익 요약 */}
       <div
-        className="flex items-center justify-between px-4 py-3 rounded-xl"
+        className="px-4 py-3 rounded-xl space-y-2"
         style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)' }}
       >
-        <div>
-          <p className="text-xs" style={{ color: 'var(--text-2)' }}>이번 주 보스 수익</p>
-          <p className="font-bold text-xl mt-0.5" style={{ color: 'var(--primary)' }}>{formatMeso(totalWeeklyRevenue)}</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs" style={{ color: 'var(--text-2)' }}>이번 주 보스 수익</p>
+            <p className="font-bold text-xl mt-0.5" style={{ color: 'var(--primary)' }}>{formatMeso(totalWeeklyRevenue)}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs" style={{ color: 'var(--text-2)' }}>주간 보스 합계</p>
+            <p className="font-bold text-xl mt-0.5" style={{ color: totalWeeklyCount >= WEEKLY_BOSS_MAX_TOTAL ? 'var(--red)' : 'var(--text)' }}>
+              {totalWeeklyCount} / {WEEKLY_BOSS_MAX_TOTAL}
+            </p>
+          </div>
         </div>
-        <div className="text-right">
-          <p className="text-xs" style={{ color: 'var(--text-2)' }}>처치 횟수</p>
-          <p className="font-bold text-xl mt-0.5" style={{ color: 'var(--text)' }}>{weeklyKills.length}회</p>
-        </div>
-        <div className="text-right">
-          <p className="text-xs" style={{ color: 'var(--text-2)' }}>주간 보스</p>
-          <p className="font-bold text-xl mt-0.5" style={{ color: totalWeeklyCount >= WEEKLY_BOSS_MAX_TOTAL ? 'var(--red)' : 'var(--text)' }}>
-            {totalWeeklyCount} / {WEEKLY_BOSS_MAX_TOTAL}
-          </p>
-        </div>
+        {charWeeklyCountMap.size > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {[...charWeeklyCountMap.entries()].map(([charId, { name, count }]) => (
+              <span
+                key={charId}
+                className="text-xs px-2 py-0.5 rounded-full font-medium"
+                style={{
+                  backgroundColor: count >= WEEKLY_BOSS_MAX_PER_CHAR ? 'rgba(220,38,38,0.12)' : 'rgba(63,185,80,0.12)',
+                  color: count >= WEEKLY_BOSS_MAX_PER_CHAR ? 'var(--red)' : 'var(--green)',
+                }}
+              >
+                {name} {count}/{WEEKLY_BOSS_MAX_PER_CHAR}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── 즐겨찾기 섹션 ── */}
@@ -306,37 +449,49 @@ export default function BossPage() {
         <div className="flex items-center justify-between px-4 py-2.5" style={{ borderBottom: '1px solid var(--border)' }}>
           <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>⭐ 즐겨찾기</p>
         </div>
-        <div className="p-3">
+        <div className="p-3 space-y-2.5">
           {bossFavorites.length === 0 ? (
             <p className="text-sm text-center py-4" style={{ color: 'var(--text-3)' }}>
-              보스 처치 목록에서 "이번 주 즐겨찾기로 저장" 버튼으로 추가해보세요!
+              보스 처치 기록에서 "⭐ 즐겨찾기 저장" 버튼으로 추가해보세요!
             </p>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {bossFavorites.map((fav) => (
-                <div
-                  key={fav.id}
-                  className="relative rounded-xl p-3 cursor-pointer transition-all group"
-                  style={{ backgroundColor: 'var(--surface-2)', border: '1.5px solid var(--border)' }}
-                  onClick={() => applyFavorite(fav)}
-                >
-                  <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleDeleteFav(fav.id) }}
-                      className="text-xs px-1.5 py-0.5 rounded"
-                      style={{ backgroundColor: 'var(--surface)', color: 'var(--red)', border: '1px solid rgba(220,38,38,0.25)' }}
-                    >삭제</button>
+              {bossFavorites.map((fav) => {
+                const relatedDopings = dopingFavorites.filter((d) => d.bossName === fav.bossName)
+                return (
+                  <div
+                    key={fav.id}
+                    className="relative rounded-xl p-3 cursor-pointer transition-all group"
+                    style={{ backgroundColor: 'var(--surface-2)', border: '1.5px solid var(--border)' }}
+                    onClick={() => applyFavorite(fav)}
+                  >
+                    <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDeleteFav(fav.id) }}
+                        className="text-xs px-1.5 py-0.5 rounded"
+                        style={{ backgroundColor: 'var(--surface)', color: 'var(--red)', border: '1px solid rgba(220,38,38,0.25)' }}
+                      >삭제</button>
+                    </div>
+                    <p className="text-sm font-semibold pr-10 leading-tight" style={{ color: 'var(--text)' }}>{fav.label}</p>
+                    {fav.bossName && (
+                      <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
+                        {fav.bossName}
+                        {fav.difficulty && ` · ${difficultyLabel(fav.difficulty)}`}
+                        {fav.partySize && fav.partySize > 1 && ` · ${fav.partySize}인`}
+                      </p>
+                    )}
+                    {relatedDopings.length > 0 && (
+                      <div className="mt-1.5 space-y-0.5">
+                        {relatedDopings.map((d) => (
+                          <p key={d.id} className="text-xs" style={{ color: 'var(--text-3)' }}>
+                            💊 {d.label}{d.amount ? ` ${formatMeso(d.amount)}` : ''}
+                          </p>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <p className="text-sm font-semibold pr-10 leading-tight" style={{ color: 'var(--text)' }}>{fav.label}</p>
-                  {fav.bossName && (
-                    <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
-                      {fav.bossName}
-                      {fav.difficulty && ` · ${difficultyLabel(fav.difficulty)}`}
-                      {fav.partySize && fav.partySize > 1 && ` · ${fav.partySize}인`}
-                    </p>
-                  )}
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
@@ -348,7 +503,7 @@ export default function BossPage() {
           <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>보스 처치 기록</p>
           <button
             type="button"
-            onClick={() => { setFavCharId(form.characterId); setShowFavPopup(true) }}
+            onClick={() => setShowFavPopup(true)}
             className="text-xs px-3 py-1.5 rounded-lg font-semibold"
             style={{ backgroundColor: 'var(--primary-dim)', color: 'var(--primary)', border: '1px solid var(--primary-glow)' }}
           >
@@ -356,19 +511,7 @@ export default function BossPage() {
           </button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
-          {/* 캐릭터 선택 */}
-          {characters.length > 0 ? (
-            <Select
-              label="캐릭터 *"
-              options={[
-                { value: '', label: '캐릭터를 선택하세요 *' },
-                ...characters.map((c) => ({ value: String(c.id), label: c.isMain ? `⭐ ${c.name}` : c.name })),
-              ]}
-              value={form.characterId}
-              onChange={(e) => { setForm((p) => ({ ...p, characterId: e.target.value })); setCharError('') }}
-              error={charError}
-            />
-          ) : (
+          {characters.length === 0 && (
             <div className="p-3 rounded-xl text-sm" style={{ backgroundColor: 'var(--primary-dim)', border: '1px solid var(--primary-glow)' }}>
               <p style={{ color: 'var(--primary)' }}>
                 캐릭터를 먼저 등록해주세요.{' '}
@@ -377,8 +520,7 @@ export default function BossPage() {
             </div>
           )}
 
-          {/* 주간 보스 처치 제한 */}
-          {form.characterId && (
+          {selectedCharId && (
             <div className="flex items-center gap-4 px-3 py-2 rounded-lg text-xs" style={{ backgroundColor: 'var(--surface-2)' }}>
               <span style={{ color: 'var(--text-2)' }}>
                 이 캐릭터 주간 보스:
@@ -396,7 +538,6 @@ export default function BossPage() {
             </div>
           )}
 
-          {/* 보스 유형 필터 */}
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-2)' }}>보스 유형</p>
             <div className="flex gap-1.5 flex-wrap">
@@ -470,7 +611,6 @@ export default function BossPage() {
             />
           </div>
 
-          {/* 도핑 체크박스 */}
           {dopingItems.length > 0 && (
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-2)' }}>
@@ -513,7 +653,18 @@ export default function BossPage() {
           )}
 
           {charError && <p className="text-xs" style={{ color: 'var(--red)' }}>{charError}</p>}
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            {form.bossName && form.difficulty && (
+              <button
+                type="button"
+                onClick={handleSaveSingleBossFav}
+                disabled={savingSingleFav || !selectedCharId}
+                className="text-xs px-2.5 py-1.5 rounded-lg font-medium"
+                style={{ backgroundColor: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }}
+              >
+                {savingSingleFav ? '저장 중...' : '⭐ 즐겨찾기'}
+              </button>
+            )}
             <Button type="submit" loading={submitting} disabled={!form.bossName || !form.difficulty || characters.length === 0}>
               기록하기
             </Button>
@@ -525,94 +676,136 @@ export default function BossPage() {
       <div>
         <p className="text-sm font-semibold mb-2" style={{ color: 'var(--text)' }}>📋 이번 주 보스 처치 목록</p>
 
-        {/* 캐릭터 선택 드롭다운 */}
-        {characters.length > 0 && (
+        {weeklyKills.length > 0 && (
           <div className="flex items-center gap-2 mb-2">
-            <select
-              className="form-field text-sm flex-1"
-              value={selectedListCharId}
-              onChange={(e) => setSelectedListCharId(e.target.value)}
-            >
-              {characters.map((c) => (
-                <option key={c.id} value={String(c.id)}>
-                  {c.isMain ? `⭐ ${c.name}` : c.name}
-                </option>
-              ))}
-            </select>
             <span
               className="text-xs px-2.5 py-1 rounded-full shrink-0 font-medium"
               style={{
-                backgroundColor: selectedListWeeklyCount >= WEEKLY_BOSS_MAX_PER_CHAR
+                backgroundColor: charWeeklyCount >= WEEKLY_BOSS_MAX_PER_CHAR
                   ? 'rgba(220,38,38,0.12)'
                   : 'rgba(63,185,80,0.12)',
-                color: selectedListWeeklyCount >= WEEKLY_BOSS_MAX_PER_CHAR ? 'var(--red)' : 'var(--green)',
+                color: charWeeklyCount >= WEEKLY_BOSS_MAX_PER_CHAR ? 'var(--red)' : 'var(--green)',
               }}
             >
-              주간 {selectedListWeeklyCount}/{WEEKLY_BOSS_MAX_PER_CHAR}
+              주간 {charWeeklyCount}/{WEEKLY_BOSS_MAX_PER_CHAR}
             </span>
+            <button
+              onClick={() => handleSaveCharFavs()}
+              disabled={savingFavsCharId === selectedCharId}
+              className="text-xs px-2.5 py-1.5 rounded-lg font-medium transition-all ml-auto shrink-0"
+              style={{ backgroundColor: 'rgba(251,191,36,0.1)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }}
+            >
+              {savingFavsCharId === selectedCharId ? '저장 중...' : '⭐ 즐겨찾기 저장'}
+            </button>
           </div>
         )}
 
-        {selectedListKills.length === 0 ? (
+        {weeklyKills.length === 0 ? (
           <div
             className="rounded-xl px-4 py-8 text-sm text-center"
             style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-3)' }}
           >
-            {selectedListChar
-              ? `${selectedListChar.name}의 이번 주 처치 기록이 없습니다.`
+            {selectedChar
+              ? `${selectedChar.name}의 이번 주 처치 기록이 없습니다.`
               : '이번 주 처치 기록이 없습니다.'}
           </div>
         ) : (
-          <>
+          <div
+            className="rounded-xl overflow-hidden"
+            style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)' }}
+          >
             <div
-              className="rounded-xl overflow-hidden"
-              style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)' }}
+              className="flex items-center justify-between px-3 py-2"
+              style={{ backgroundColor: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}
             >
-              {/* 수익 합계 헤더 */}
-              <div
-                className="flex items-center justify-between px-3 py-2"
-                style={{ backgroundColor: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}
-              >
-                <span className="text-xs" style={{ color: 'var(--text-2)' }}>
-                  {selectedListKills.length}회 처치
-                </span>
-                <span className="text-xs font-semibold" style={{ color: 'var(--primary)' }}>
-                  +{formatMeso(selectedListKills.reduce((s, k) => s + k.crystalPrice, 0))}
-                </span>
-              </div>
-              {/* 킬 목록 */}
-              <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
-                {selectedListKills.map((kill) => (
-                  <div key={kill.id} className="flex items-center justify-between px-3 py-2">
-                    <div>
+              <span className="text-xs" style={{ color: 'var(--text-2)' }}>
+                {weeklyKills.length}회 처치
+              </span>
+              <span className="text-xs font-semibold" style={{ color: 'var(--primary)' }}>
+                +{formatMeso(weeklyKills.reduce((s, k) => s + (k.income ?? k.crystalPrice), 0))}
+              </span>
+            </div>
+            <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+              {weeklyKills.map((kill) => {
+                const income = kill.income ?? kill.crystalPrice
+                const expense = kill.totalExpense ?? 0
+                const net = income - expense
+                const isEditing = editingKillId === kill.id
+                return (
+                  <div key={kill.id} className="flex items-start justify-between px-3 py-2 gap-2">
+                    <div className="min-w-0">
                       <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>{kill.bossName}</span>
                       <span className="text-xs ml-1.5" style={{ color: 'var(--text-2)' }}>{difficultyLabel(kill.difficulty)}</span>
-                      {kill.partySize && kill.partySize > 1 && (
-                        <span className="text-xs ml-1" style={{ color: 'var(--text-3)' }}>{kill.partySize}인</span>
+                      {isEditing ? (
+                        <span className="inline-flex items-center gap-1 ml-1">
+                          <select
+                            value={editPartySize}
+                            onChange={(e) => setEditPartySize(Number(e.target.value))}
+                            className="text-xs px-1 py-0.5 rounded border"
+                            style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text)', borderColor: 'var(--border)' }}
+                          >
+                            {Array.from({ length: 6 }, (_, i) => i + 1).map((n) => (
+                              <option key={n} value={n}>{n}인</option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={() => handleUpdateKill(kill.id, editPartySize)}
+                            className="text-xs px-1.5 py-0.5 rounded font-medium"
+                            style={{ backgroundColor: 'rgba(63,185,80,0.15)', color: 'var(--green)', border: '1px solid rgba(63,185,80,0.3)' }}
+                          >저장</button>
+                          <button
+                            onClick={() => setEditingKillId(null)}
+                            className="text-xs px-1.5 py-0.5 rounded"
+                            style={{ color: 'var(--text-3)' }}
+                          >취소</button>
+                        </span>
+                      ) : (
+                        kill.partySize && kill.partySize > 1 && (
+                          <span className="text-xs ml-1" style={{ color: 'var(--text-3)' }}>{kill.partySize}인</span>
+                        )
+                      )}
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{kill.killDate?.slice(5)}</p>
+                    </div>
+                    <div className="flex items-start gap-2 shrink-0">
+                      <div className="text-right">
+                        <p className="font-semibold text-sm" style={{ color: 'var(--primary)' }}>
+                          +{formatMeso(income)}
+                        </p>
+                        {expense > 0 && (
+                          <p className="text-xs" style={{ color: 'var(--red)' }}>
+                            -{formatMeso(expense)}
+                          </p>
+                        )}
+                        {expense > 0 && (
+                          <p className="text-xs font-semibold" style={{ color: net >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                            {net >= 0 ? '+' : ''}{formatMeso(net)}
+                          </p>
+                        )}
+                      </div>
+                      {!isEditing && (
+                        <div className="flex flex-col gap-1 mt-0.5">
+                          <button
+                            onClick={() => { setEditingKillId(kill.id); setEditPartySize(kill.partySize ?? 1) }}
+                            className="text-xs px-1.5 py-0.5 rounded transition-colors"
+                            style={{ color: 'var(--text-3)', backgroundColor: 'var(--surface-2)' }}
+                            title="인원 수정"
+                          >✏️</button>
+                          <button
+                            onClick={() => handleDeleteKill(kill.id)}
+                            className="text-xs px-1.5 py-0.5 rounded transition-colors"
+                            style={{ color: 'var(--text-3)', backgroundColor: 'var(--surface-2)' }}
+                            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--red)')}
+                            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-3)')}
+                            title="삭제"
+                          >✕</button>
+                        </div>
                       )}
                     </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-sm" style={{ color: 'var(--primary)' }}>+{formatMeso(kill.crystalPrice)}</p>
-                      <p className="text-xs" style={{ color: 'var(--text-3)' }}>{kill.killDate?.slice(5)}</p>
-                    </div>
                   </div>
-                ))}
-              </div>
+                )
+              })}
             </div>
-            {/* 즐겨찾기 저장 버튼 */}
-            <div className="mt-2">
-              <button
-                onClick={() => handleSaveCharFavs(selectedListCharId, selectedListKills)}
-                disabled={savingFavsCharId === selectedListCharId}
-                className="text-xs px-3 py-1.5 rounded-lg font-medium transition-all w-full"
-                style={{ backgroundColor: 'rgba(251,191,36,0.1)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }}
-              >
-                {savingFavsCharId === selectedListCharId
-                  ? '저장 중...'
-                  : `⭐ ${selectedListChar?.name ?? '이 캐릭터'} 즐겨찾기로 저장`}
-              </button>
-            </div>
-          </>
+          </div>
         )}
       </div>
 
@@ -636,29 +829,10 @@ export default function BossPage() {
               <p className="text-sm text-center py-4" style={{ color: 'var(--text-3)' }}>등록된 즐겨찾기가 없습니다.</p>
             ) : (
               <>
-                {characters.length > 0 && (
-                  <div>
-                    <label className="text-xs font-semibold uppercase tracking-wide mb-1 block" style={{ color: 'var(--text-2)' }}>
-                      캐릭터 선택
-                    </label>
-                    <select
-                      className="form-field text-sm"
-                      value={favCharId}
-                      onChange={(e) => setFavCharId(e.target.value)}
-                    >
-                      <option value="">캐릭터를 선택하세요</option>
-                      {characters.map((c) => (
-                        <option key={c.id} value={String(c.id)}>
-                          {c.isMain ? `⭐ ${c.name}` : c.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
                 <Button
                   onClick={handleBulkRecord}
                   loading={submitting}
-                  disabled={!favCharId}
+                  disabled={!selectedCharId}
                   className="w-full"
                 >
                   이번 주 전체 입력 ({bossFavorites.filter(f => f.bossName && f.difficulty).length}개)

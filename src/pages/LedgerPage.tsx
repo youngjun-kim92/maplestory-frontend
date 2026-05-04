@@ -8,7 +8,6 @@ import { formatMeso, formatDate, CATEGORY_LABELS, toDateString, toKoreanAmount }
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
-import Select from '../components/ui/Select'
 import QuickAmountButtons from '../components/ui/QuickAmountButtons'
 
 const ENHANCE_CATEGORIES: { value: EntryCategory; label: string }[] = [
@@ -23,6 +22,7 @@ export default function LedgerPage() {
   const [characters, setCharacters] = useState<MapleCharacter[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [selectedCharId, setSelectedCharId] = useState<'all' | string>('all')
   const [showMesoForm, setShowMesoForm] = useState(false)
   const [mesoForm, setMesoForm] = useState({ inventoryMeso: '', storageMeso: '' })
   const [mesoSubmitting, setMesoSubmitting] = useState(false)
@@ -32,13 +32,13 @@ export default function LedgerPage() {
     amount: '',
     description: '',
     entryDate: toDateString(),
-    characterId: '',
   })
 
-  const fetchLedger = useCallback(async () => {
+  const fetchLedger = useCallback(async (charId: 'all' | string) => {
     setLoading(true)
     try {
-      const res = await ledgerApi.getWeeklyLedger()
+      const params = charId !== 'all' ? { characterId: Number(charId) } : undefined
+      const res = await ledgerApi.getWeeklyLedger(params)
       setLedger(res.data)
     } finally {
       setLoading(false)
@@ -46,14 +46,12 @@ export default function LedgerPage() {
   }, [])
 
   useEffect(() => {
-    fetchLedger()
-    charactersApi.getCharacters().then((r) => {
-      const chars = r.data
-      setCharacters(chars)
-      const main = chars.find((c) => c.isMain) ?? chars[0]
-      if (main) setForm((p) => ({ ...p, characterId: String(main.id) }))
-    })
-  }, [fetchLedger])
+    charactersApi.getCharacters().then((r) => setCharacters(r.data))
+  }, [])
+
+  useEffect(() => {
+    fetchLedger(selectedCharId)
+  }, [selectedCharId, fetchLedger])
 
   const handleSubmit = async (e: { preventDefault(): void }) => {
     e.preventDefault()
@@ -66,10 +64,10 @@ export default function LedgerPage() {
         amount: Number(form.amount),
         description: form.description,
         entryDate: form.entryDate,
-        characterId: form.characterId ? Number(form.characterId) : null,
+        characterId: selectedCharId !== 'all' ? Number(selectedCharId) : null,
       })
       setForm((p) => ({ ...p, amount: '', description: '' }))
-      await fetchLedger()
+      await fetchLedger(selectedCharId)
       await refreshUser()
     } finally {
       setSubmitting(false)
@@ -79,7 +77,7 @@ export default function LedgerPage() {
   const handleDelete = async (id: number) => {
     if (!confirm('이 항목을 삭제하시겠습니까?')) return
     await ledgerApi.deleteEntry(id)
-    await fetchLedger()
+    await fetchLedger(selectedCharId)
     await refreshUser()
   }
 
@@ -99,7 +97,10 @@ export default function LedgerPage() {
     }
   }
 
-  const expenseEntries = ledger?.entries.filter((e) => e.type === 'expense') ?? []
+  const EXCLUDED_CATEGORIES = new Set(['doping', 'boss', 'hunting', 'auction'])
+  const expenseEntries = ledger?.entries.filter(
+    (e) => e.type === 'expense' && !EXCLUDED_CATEGORIES.has(e.category)
+  ) ?? []
 
   if (loading) {
     return (
@@ -111,12 +112,28 @@ export default function LedgerPage() {
 
   return (
     <div className="space-y-3">
-      <div>
-        <h1 className="text-xl font-bold" style={{ color: 'var(--text)' }}>🔩 메소 강화</h1>
-        {ledger && (
-          <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>
-            📅 {ledger.weekStart} 주 (목요일 기준) · 수입은 대시보드에서 확인하세요
-          </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>🔩 메소 강화</h1>
+          {ledger && (
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>
+              📅 {ledger.weekStart} 주 (목요일 기준) · 수입은 대시보드에서 확인하세요
+            </p>
+          )}
+        </div>
+        {characters.length > 0 && (
+          <select
+            className="form-field text-sm min-w-[120px] max-w-[200px] w-auto"
+            value={selectedCharId}
+            onChange={(e) => setSelectedCharId(e.target.value)}
+          >
+            <option value="all">전체</option>
+            {characters.map((c) => (
+              <option key={c.id} value={String(c.id)} style={{ backgroundColor: 'var(--surface-2)' }}>
+                {c.isMain ? `⭐ ${c.name}` : c.name}
+              </option>
+            ))}
+          </select>
         )}
       </div>
 
@@ -253,17 +270,6 @@ export default function LedgerPage() {
               onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
             />
           </div>
-          {characters.length > 0 && (
-            <Select
-              label="캐릭터 (선택)"
-              options={[
-                { value: '', label: '선택 안함' },
-                ...characters.map((c) => ({ value: String(c.id), label: c.name })),
-              ]}
-              value={form.characterId}
-              onChange={(e) => setForm((p) => ({ ...p, characterId: e.target.value }))}
-            />
-          )}
           <div className="flex justify-end">
             <Button type="submit" loading={submitting}>기록하기</Button>
           </div>

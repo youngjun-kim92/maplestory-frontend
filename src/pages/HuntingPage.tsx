@@ -7,7 +7,6 @@ import { formatMeso, formatDate, toDateString, toKoreanAmount } from '../utils/f
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
-import Select from '../components/ui/Select'
 import QuickAmountButtons from '../components/ui/QuickAmountButtons'
 
 export default function HuntingPage() {
@@ -16,53 +15,53 @@ export default function HuntingPage() {
   const [characters, setCharacters] = useState<MapleCharacter[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
-  const [charError, setCharError] = useState('')
+  const [selectedCharId, setSelectedCharId] = useState('')
 
   const [form, setForm] = useState({
     income: '',
     solErdaFragments: '',
     sessionDate: toDateString(),
-    characterId: '',
   })
 
-  const fetchData = useCallback(async () => {
+  const fetchSessions = useCallback(async (charId: string) => {
+    const params = charId ? { characterId: Number(charId) } : undefined
+    const res = await huntingApi.getWeeklySessions(params)
+    setSessions(res.data)
+  }, [])
+
+  useEffect(() => {
     setLoading(true)
-    try {
-      const [sess, chars] = await Promise.all([
-        huntingApi.getWeeklySessions(),
-        charactersApi.getCharacters(),
-      ])
+    Promise.all([
+      huntingApi.getWeeklySessions(),
+      charactersApi.getCharacters(),
+    ]).then(([sess, chars]) => {
       setSessions(sess.data)
       const charList = chars.data
       setCharacters(charList)
       const mainChar = charList.find((c) => c.isMain) ?? charList[0]
-      if (mainChar) {
-        setForm((p) => ({ ...p, characterId: String(mainChar.id) }))
-      }
-    } finally {
-      setLoading(false)
-    }
+      if (mainChar) setSelectedCharId(String(mainChar.id))
+    }).finally(() => setLoading(false))
   }, [])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  useEffect(() => {
+    if (!loading && selectedCharId) fetchSessions(selectedCharId)
+  }, [selectedCharId, fetchSessions, loading])
 
   const erdaPrice = user?.solErdaFragmentPrice ?? 0
 
   const handleSubmit = async (e: { preventDefault(): void }) => {
     e.preventDefault()
-    if (!form.income) return
-    if (!form.characterId) { setCharError('캐릭터를 선택해주세요.'); return }
-    setCharError('')
+    if (!form.income || !selectedCharId) return
     setSubmitting(true)
     try {
       await huntingApi.recordSession({
         income: Number(form.income),
         solErdaFragments: form.solErdaFragments ? Number(form.solErdaFragments) : undefined,
         sessionDate: form.sessionDate,
-        characterId: Number(form.characterId),
+        characterId: Number(selectedCharId),
       })
       setForm((p) => ({ ...p, income: '', solErdaFragments: '' }))
-      await fetchData()
+      await fetchSessions(selectedCharId)
       await refreshUser()
     } finally {
       setSubmitting(false)
@@ -77,7 +76,24 @@ export default function HuntingPage() {
 
   return (
     <div className="space-y-3">
-      <h1 className="text-xl font-bold" style={{ color: 'var(--text)' }}>🌲 사냥 기록</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>🌲 사냥 기록</h1>
+        {characters.length > 0 ? (
+          <select
+            className="form-field text-sm min-w-[120px] max-w-[200px] w-auto"
+            value={selectedCharId}
+            onChange={(e) => setSelectedCharId(e.target.value)}
+          >
+            {characters.map((c) => (
+              <option key={c.id} value={String(c.id)} style={{ backgroundColor: 'var(--surface-2)' }}>
+                {c.isMain ? `⭐ ${c.name}` : c.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <a href="/characters" className="text-xs underline" style={{ color: 'var(--primary)' }}>캐릭터 등록 →</a>
+        )}
+      </div>
 
       {/* 주간 요약 */}
       <Card className="flex items-center justify-between">
@@ -138,37 +154,16 @@ export default function HuntingPage() {
               🔮 {form.solErdaFragments}개 × {erdaPrice.toLocaleString()}메소 = {formatMeso(Number(form.solErdaFragments) * erdaPrice)} 메소
             </p>
           )}
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              label="날짜"
-              type="date"
-              value={form.sessionDate}
-              onChange={(e) => setForm((p) => ({ ...p, sessionDate: e.target.value }))}
-            />
-            {characters.length > 0 ? (
-              <Select
-                label="캐릭터 *"
-                options={[
-                  { value: '', label: '캐릭터를 선택하세요 *' },
-                  ...characters.map((c) => ({ value: String(c.id), label: c.isMain ? `⭐ ${c.name}` : c.name })),
-                ]}
-                value={form.characterId}
-                onChange={(e) => { setForm((p) => ({ ...p, characterId: e.target.value })); setCharError('') }}
-                error={charError}
-              />
-            ) : (
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold tracking-wide uppercase" style={{ color: 'var(--text-2)' }}>캐릭터 *</label>
-                <div className="form-field flex items-center justify-between" style={{ color: 'var(--text-3)' }}>
-                  <span className="text-xs">등록된 캐릭터가 없습니다</span>
-                  <a href="/characters" className="text-xs underline" style={{ color: 'var(--primary)' }}>캐릭터 등록 →</a>
-                </div>
-              </div>
-            )}
-          </div>
-          {charError && <p className="text-xs" style={{ color: 'var(--red)' }}>{charError}</p>}
+          <Input
+            label="날짜"
+            type="date"
+            value={form.sessionDate}
+            onChange={(e) => setForm((p) => ({ ...p, sessionDate: e.target.value }))}
+          />
           <div className="flex justify-end">
-            <Button type="submit" loading={submitting} disabled={characters.length === 0}>기록하기</Button>
+            <Button type="submit" loading={submitting} disabled={!selectedCharId || characters.length === 0}>
+              기록하기
+            </Button>
           </div>
         </form>
       </Card>

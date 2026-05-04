@@ -41,8 +41,8 @@ export const bossApi = {
   recordBossKill: (data: BossKillRequest) =>
     client.post<BossKill>('/boss/kill', data),
 
-  getWeeklyBossKills: (week?: string) =>
-    client.get<BossKill[]>('/boss/weekly', { params: week ? { week } : {} }),
+  getWeeklyBossKills: (params?: { week?: string; characterId?: number }) =>
+    client.get<BossKill[]>('/boss/weekly', { params }),
 
   getBossStats: () =>
     client.get<BossStats[]>('/boss/stats'),
@@ -72,4 +72,10 @@ export const bossApi = {
   // 특정 킬의 드랍 목록
   getKillDrops: (killId: number) =>
     client.get<BossDrop[]>(`/boss/kills/${killId}/drops`),
+
+  deleteBossKill: (killId: number) =>
+    client.delete(`/boss/kills/${killId}`),
+
+  updateBossKill: (killId: number, data: { partySize: number }) =>
+    client.patch<BossKill>(`/boss/kills/${killId}`, data),
 }

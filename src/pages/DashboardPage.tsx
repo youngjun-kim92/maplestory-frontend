@@ -109,7 +109,7 @@ export default function DashboardPage() {
   const fetchLedger = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await ledgerApi.getWeeklyLedger(weekStartStr)
+      const res = await ledgerApi.getWeeklyLedger({ week: weekStartStr })
       setLedger(res.data)
     } finally {
       setLoading(false)
@@ -289,9 +289,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (showCalendar) {
-      setCalendarViewDate({ year: weekStart.getFullYear(), month: weekStart.getMonth() })
+      const today = new Date()
+      setCalendarViewDate({ year: today.getFullYear(), month: today.getMonth() })
     }
-  }, [showCalendar, weekStart])
+  }, [showCalendar])
 
   // 달력 열리거나 월 바뀔 때: 해당 월의 모든 주 데이터 fetch
   useEffect(() => {
@@ -304,7 +305,7 @@ export default function DashboardPage() {
         row.filter((d): d is Date => d !== null).map(d => toDateString(getWeekStart(d)))
       )
     )]
-    Promise.all(weekStarts.map(ws => ledgerApi.getWeeklyLedger(ws)))
+    Promise.all(weekStarts.map(ws => ledgerApi.getWeeklyLedger({ week: ws })))
       .then(results => {
         if (cancelled) return
         const map = new Map<string, { income: number; expense: number; erda: number }>()
@@ -338,7 +339,7 @@ export default function DashboardPage() {
       {/* 헤더 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold" style={{ color: 'var(--text)' }}>📊 대시보드</h1>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>📊 대시보드</h1>
           <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>
             {formatWeekRange(weekStartStr, toDateString(weekEnd))}
           </p>
@@ -352,7 +353,7 @@ export default function DashboardPage() {
           >
             <span className="text-base">📅</span>
             <span className="hidden sm:inline text-xs font-normal" style={{ color: showCalendar ? 'var(--primary)' : 'var(--text-2)' }}>
-              {weekStart.getMonth() + 1}월
+              오늘 {toDateString()}
             </span>
           </button>
           <button

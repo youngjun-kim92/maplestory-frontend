@@ -120,7 +120,7 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-3">
-      <h1 className="text-xl font-bold font-heading" style={{ color: 'var(--text)' }}>⚙️ 설정</h1>
+      <h1 className="text-2xl font-bold font-heading" style={{ color: 'var(--text)' }}>⚙️ 설정</h1>
 
       {/* Profile info */}
       <Card icon="👤" title="프로필">

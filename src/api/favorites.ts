@@ -11,6 +11,7 @@ export interface FavoriteItem {
   partySize: number | null
   amount: number | null
   description: string | null
+  characterId?: number | null
   createdAt: string
 }
 
@@ -22,12 +23,13 @@ export interface FavoriteRequest {
   partySize?: number | null
   amount?: number | null
   description?: string | null
+  characterId?: number | null
 }
 
 export const favoritesApi = {
-  getAll: (type: FavoriteType, bossName?: string) =>
+  getAll: (type: FavoriteType, params?: { bossName?: string; characterId?: number }) =>
     client.get<FavoriteItem[]>('/favorites', {
-      params: bossName ? { type, bossName } : { type },
+      params: { type, ...params },
     }),
 
   create: (data: FavoriteRequest) =>

@@ -1,52 +1,91 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { ledgerApi } from '../api/ledger'
 import { charactersApi } from '../api/characters'
 import { useAuth } from '../contexts/AuthContext'
-import type { MapleCharacter } from '../types'
-import { formatMeso, toDateString, toKoreanAmount } from '../utils/format'
+import type { LedgerEntry, MapleCharacter } from '../types'
+import { formatMeso, formatDate, toDateString, toKoreanAmount, CATEGORY_LABELS } from '../utils/format'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
-import Select from '../components/ui/Select'
 import QuickAmountButtons from '../components/ui/QuickAmountButtons'
+
+const AUCTION_CATEGORIES = new Set(['auction', 'sol_erda'])
 
 export default function AuctionPage() {
   const { user, refreshUser } = useAuth()
   const [tab, setTab] = useState<'income' | 'expense'>('income')
   const [characters, setCharacters] = useState<MapleCharacter[]>([])
+  const [selectedCharId, setSelectedCharId] = useState<'all' | string>('all')
+  const [incomeMode, setIncomeMode] = useState<'item' | 'sol_erda'>('item')
+  const [auctionEntries, setAuctionEntries] = useState<LedgerEntry[]>([])
 
   const [incomeForm, setIncomeForm] = useState({
-    itemName: '', saleAmount: '', saleDate: toDateString(), characterId: '', isPcCafe: false,
+    itemName: '', saleAmount: '', saleDate: toDateString(), isPcCafe: false,
+    solErdaQty: '',
   })
   const [incomeSubmitting, setIncomeSubmitting] = useState(false)
 
   const [expenseForm, setExpenseForm] = useState({
-    itemName: '', buyAmount: '', buyDate: toDateString(), characterId: '',
+    itemName: '', buyAmount: '', buyDate: toDateString(),
   })
   const [expenseSubmitting, setExpenseSubmitting] = useState(false)
 
   const [success, setSuccess] = useState<string | null>(null)
 
-  useEffect(() => {
-    charactersApi.getCharacters().then((r) => {
-      const chars = r.data
-      setCharacters(chars)
-      const main = chars.find((c) => c.isMain) ?? chars[0]
-      if (main) {
-        const id = String(main.id)
-        setIncomeForm((p) => ({ ...p, characterId: id }))
-        setExpenseForm((p) => ({ ...p, characterId: id }))
-      }
-    })
+  const fetchEntries = useCallback(async (charId: 'all' | string) => {
+    const params = charId !== 'all' ? { characterId: Number(charId) } : undefined
+    const res = await ledgerApi.getWeeklyLedger(params)
+    setAuctionEntries(res.data.entries.filter((e) => AUCTION_CATEGORIES.has(e.category)))
   }, [])
 
-  const saleAmt = Number(incomeForm.saleAmount) || 0
+  useEffect(() => {
+    charactersApi.getCharacters().then((r) => setCharacters(r.data))
+  }, [])
+
+  useEffect(() => {
+    fetchEntries(selectedCharId)
+  }, [selectedCharId, fetchEntries])
+
   const isSilverPlus = ['SILVER', 'GOLD', 'DIAMOND', 'RED', 'BLACK'].includes(user?.mvpGrade ?? '')
   const feeRate = incomeForm.isPcCafe ? 0.03 : (isSilverPlus ? 0.03 : 0.05)
+
+  const saleAmt = Number(incomeForm.saleAmount) || 0
   const net = Math.floor(saleAmt * (1 - feeRate))
+
+  const solErdaQty = Number(incomeForm.solErdaQty) || 0
+  const solErdaUnitPrice = user?.solErdaFragmentPrice ?? 0
+  const solErdaNet = solErdaQty > 0 && solErdaUnitPrice > 0
+    ? Math.floor(solErdaQty * solErdaUnitPrice * (1 - feeRate))
+    : 0
+
+  const charIdNum = selectedCharId !== 'all' ? Number(selectedCharId) : null
 
   const handleIncomeSubmit = async (e: { preventDefault(): void }) => {
     e.preventDefault()
+    if (incomeMode === 'sol_erda') {
+      if (!solErdaQty || solErdaQty < 1 || !solErdaNet) return
+      setIncomeSubmitting(true)
+      try {
+        const desc = `솔 에르다 조각 ${solErdaQty}개 경매장 판매 (수수료 ${(feeRate * 100).toFixed(0)}% 적용)`
+        await ledgerApi.addEntry({
+          type: 'income',
+          category: 'sol_erda',
+          amount: solErdaNet,
+          description: desc,
+          entryDate: incomeForm.saleDate,
+          characterId: charIdNum,
+          solErdaFragments: solErdaQty,
+        })
+        setIncomeForm((p) => ({ ...p, solErdaQty: '' }))
+        setSuccess('수입이 기록되었습니다.')
+        setTimeout(() => setSuccess(null), 2500)
+        await fetchEntries(selectedCharId)
+        await refreshUser()
+      } finally {
+        setIncomeSubmitting(false)
+      }
+      return
+    }
     if (!saleAmt || saleAmt < 1) return
     setIncomeSubmitting(true)
     try {
@@ -59,11 +98,12 @@ export default function AuctionPage() {
         amount: net,
         description: desc,
         entryDate: incomeForm.saleDate,
-        characterId: incomeForm.characterId ? Number(incomeForm.characterId) : null,
+        characterId: charIdNum,
       })
       setIncomeForm((p) => ({ ...p, itemName: '', saleAmount: '' }))
       setSuccess('수입이 기록되었습니다.')
       setTimeout(() => setSuccess(null), 2500)
+      await fetchEntries(selectedCharId)
       await refreshUser()
     } finally {
       setIncomeSubmitting(false)
@@ -85,20 +125,47 @@ export default function AuctionPage() {
         amount: amt,
         description: desc,
         entryDate: expenseForm.buyDate,
-        characterId: expenseForm.characterId ? Number(expenseForm.characterId) : null,
+        characterId: charIdNum,
       })
       setExpenseForm((p) => ({ ...p, itemName: '', buyAmount: '' }))
       setSuccess('지출이 기록되었습니다.')
       setTimeout(() => setSuccess(null), 2500)
+      await fetchEntries(selectedCharId)
       await refreshUser()
     } finally {
       setExpenseSubmitting(false)
     }
   }
 
+  const handleDeleteEntry = async (id: number) => {
+    if (!confirm('이 항목을 삭제하시겠습니까?')) return
+    await ledgerApi.deleteEntry(id)
+    await fetchEntries(selectedCharId)
+    await refreshUser()
+  }
+
+  const incomeEntries = auctionEntries.filter((e) => e.type === 'income')
+  const expenseEntries = auctionEntries.filter((e) => e.type === 'expense')
+
   return (
     <div className="space-y-3">
-      <h1 className="text-xl font-bold" style={{ color: 'var(--text)' }}>🏪 경매장</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>🏪 경매장</h1>
+        {characters.length > 0 && (
+          <select
+            className="form-field text-sm min-w-[120px] max-w-[200px] w-auto"
+            value={selectedCharId}
+            onChange={(e) => setSelectedCharId(e.target.value)}
+          >
+            <option value="all">전체</option>
+            {characters.map((c) => (
+              <option key={c.id} value={String(c.id)} style={{ backgroundColor: 'var(--surface-2)' }}>
+                {c.isMain ? `⭐ ${c.name}` : c.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
 
       {success && (
         <div
@@ -130,45 +197,106 @@ export default function AuctionPage() {
       {tab === 'income' ? (
         <Card title="경매장 판매 수입" icon="💰">
           <form onSubmit={handleIncomeSubmit} className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <Input
-                label="아이템명 (선택)"
-                placeholder="예: 앱솔 숄더"
-                value={incomeForm.itemName}
-                onChange={(e) => setIncomeForm((p) => ({ ...p, itemName: e.target.value }))}
-              />
-              <Input
-                label="날짜"
-                type="date"
-                value={incomeForm.saleDate}
-                onChange={(e) => setIncomeForm((p) => ({ ...p, saleDate: e.target.value }))}
-              />
+            {/* 판매 유형 탭 */}
+            <div className="flex gap-2">
+              {([['item', '🎁 아이템'], ['sol_erda', '🔮 솔 에르다 조각']] as const).map(([mode, label]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setIncomeMode(mode)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                  style={
+                    incomeMode === mode
+                      ? { backgroundColor: 'var(--primary-dim)', color: 'var(--primary)', border: '1.5px solid var(--primary-glow)' }
+                      : { backgroundColor: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }
+                  }
+                >{label}</button>
+              ))}
             </div>
-            <div>
-              <Input
-                label="판매 금액 (메소)"
-                type="number"
-                placeholder="예: 3500000000"
-                value={incomeForm.saleAmount}
-                onChange={(e) => setIncomeForm((p) => ({ ...p, saleAmount: e.target.value }))}
-                min={1}
-              />
-              <QuickAmountButtons onAdd={(v) => setIncomeForm((p) => ({ ...p, saleAmount: String((Number(p.saleAmount) || 0) + v) }))} />
-              {toKoreanAmount(incomeForm.saleAmount) && (
-                <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-3)' }}>{toKoreanAmount(incomeForm.saleAmount)}</p>
-              )}
-            </div>
-            {characters.length > 0 && (
-              <Select
-                label="캐릭터 (선택)"
-                options={[
-                  { value: '', label: '선택 안함' },
-                  ...characters.map((c) => ({ value: String(c.id), label: c.isMain ? `⭐ ${c.name}` : c.name })),
-                ]}
-                value={incomeForm.characterId}
-                onChange={(e) => setIncomeForm((p) => ({ ...p, characterId: e.target.value }))}
-              />
+
+            {incomeMode === 'sol_erda' ? (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Input
+                      label="수량"
+                      type="number"
+                      placeholder="예: 100"
+                      value={incomeForm.solErdaQty}
+                      onChange={(e) => setIncomeForm((p) => ({ ...p, solErdaQty: e.target.value }))}
+                      min={1}
+                    />
+                    <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                      {[10, 30, 50, 100].map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => setIncomeForm((p) => ({ ...p, solErdaQty: String((Number(p.solErdaQty) || 0) + n) }))}
+                          className="px-2 py-0.5 rounded-lg text-xs font-medium"
+                          style={{ backgroundColor: 'rgba(167,139,250,0.15)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.3)' }}
+                        >+{n}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <Input
+                    label="날짜"
+                    type="date"
+                    value={incomeForm.saleDate}
+                    onChange={(e) => setIncomeForm((p) => ({ ...p, saleDate: e.target.value }))}
+                  />
+                </div>
+                {solErdaQty > 0 && solErdaUnitPrice > 0 && (
+                  <div
+                    className="p-3 rounded-xl space-y-1 text-xs"
+                    style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)' }}
+                  >
+                    <p style={{ color: 'var(--text-3)' }}>
+                      {solErdaQty}개 × {solErdaUnitPrice.toLocaleString()} = {formatMeso(solErdaQty * solErdaUnitPrice)}
+                    </p>
+                    <p className="font-semibold" style={{ color: '#c4b5fd' }}>
+                      수수료 {(feeRate * 100).toFixed(0)}% 후 실수령: {formatMeso(solErdaNet)}
+                    </p>
+                  </div>
+                )}
+                {solErdaUnitPrice === 0 && (
+                  <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+                    💡 <a href="/settings" className="underline" style={{ color: 'var(--primary)' }}>설정</a>에서 솔 에르다 조각 단가를 입력하면 자동 계산됩니다.
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <Input
+                    label="아이템명 (선택)"
+                    placeholder="예: 앱솔 숄더"
+                    value={incomeForm.itemName}
+                    onChange={(e) => setIncomeForm((p) => ({ ...p, itemName: e.target.value }))}
+                  />
+                  <Input
+                    label="날짜"
+                    type="date"
+                    value={incomeForm.saleDate}
+                    onChange={(e) => setIncomeForm((p) => ({ ...p, saleDate: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Input
+                    label="판매 금액 (메소)"
+                    type="number"
+                    placeholder="예: 3500000000"
+                    value={incomeForm.saleAmount}
+                    onChange={(e) => setIncomeForm((p) => ({ ...p, saleAmount: e.target.value }))}
+                    min={1}
+                  />
+                  <QuickAmountButtons onAdd={(v) => setIncomeForm((p) => ({ ...p, saleAmount: String((Number(p.saleAmount) || 0) + v) }))} />
+                  {toKoreanAmount(incomeForm.saleAmount) && (
+                    <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-3)' }}>{toKoreanAmount(incomeForm.saleAmount)}</p>
+                  )}
+                </div>
+              </>
             )}
+
             <label className="flex items-center gap-2 cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -179,7 +307,7 @@ export default function AuctionPage() {
               />
               <span className="text-xs" style={{ color: 'var(--text-2)' }}>PC방 접속 중</span>
             </label>
-            {saleAmt > 0 && (
+            {incomeMode === 'item' && saleAmt > 0 && (
               <div
                 className="p-3 rounded-xl space-y-1.5 text-xs"
                 style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)' }}
@@ -242,23 +370,64 @@ export default function AuctionPage() {
                 <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-3)' }}>{toKoreanAmount(expenseForm.buyAmount)}</p>
               )}
             </div>
-            {characters.length > 0 && (
-              <Select
-                label="캐릭터 (선택)"
-                options={[
-                  { value: '', label: '선택 안함' },
-                  ...characters.map((c) => ({ value: String(c.id), label: c.isMain ? `⭐ ${c.name}` : c.name })),
-                ]}
-                value={expenseForm.characterId}
-                onChange={(e) => setExpenseForm((p) => ({ ...p, characterId: e.target.value }))}
-              />
-            )}
             <div className="flex justify-end">
               <Button type="submit" loading={expenseSubmitting}>기록하기</Button>
             </div>
           </form>
         </Card>
       )}
+
+      {/* 이번 주 경매장 내역 */}
+      <Card title="이번 주 경매장 내역" icon="📋">
+        {auctionEntries.length === 0 ? (
+          <p className="text-sm text-center py-6" style={{ color: 'var(--text-3)' }}>이번 주 경매장 기록이 없습니다.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {[...incomeEntries, ...expenseEntries].map((entry: LedgerEntry) => (
+              <div key={entry.id} className="list-row">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span
+                    className="text-xs px-2 py-0.5 rounded-lg shrink-0"
+                    style={
+                      entry.type === 'income'
+                        ? { backgroundColor: 'rgba(22,163,74,0.12)', color: 'var(--green)', border: '1px solid rgba(22,163,74,0.2)' }
+                        : { backgroundColor: 'var(--surface-2)', color: 'var(--text-2)' }
+                    }
+                  >
+                    {CATEGORY_LABELS[entry.category] ?? entry.category}
+                  </span>
+                  <div className="min-w-0">
+                    <span className="text-sm truncate block" style={{ color: 'var(--text)' }}>
+                      {entry.description || (entry.type === 'income' ? '경매장 수입' : '경매장 구매')}
+                    </span>
+                    {entry.characterName && (
+                      <span className="text-xs" style={{ color: 'var(--text-3)' }}>{entry.characterName}</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="text-right">
+                    <p
+                      className="font-semibold text-sm"
+                      style={{ color: entry.type === 'income' ? 'var(--green)' : 'var(--red)' }}
+                    >
+                      {entry.type === 'income' ? '+' : '-'}{formatMeso(entry.amount)}
+                    </p>
+                    <p className="text-xs" style={{ color: 'var(--text-3)' }}>{formatDate(entry.entryDate)}</p>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteEntry(entry.id)}
+                    className="text-sm transition-colors"
+                    style={{ color: 'var(--text-3)' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--red)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-3)')}
+                  >✕</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
     </div>
   )
 }

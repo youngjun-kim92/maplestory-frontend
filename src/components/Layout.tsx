@@ -170,7 +170,7 @@ export default function Layout() {
 
         {/* Main */}
         <main className="flex-1 p-2 md:p-3 pb-20 md:pb-6 overflow-auto">
-          <div className="max-w-6xl mx-auto w-full fade-in">
+          <div className="max-w-7xl mx-auto w-full fade-in">
             {/* 캐릭터 0개 배너 */}
             {hasNoChars && !charBannerDismissed && location.pathname !== '/characters' && (
               <div

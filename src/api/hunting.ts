@@ -5,8 +5,8 @@ export const huntingApi = {
   recordSession: (data: HuntingSessionRequest) =>
     client.post<HuntingSession>('/hunting/session', data),
 
-  getWeeklySessions: (week?: string) =>
-    client.get<HuntingSession[]>('/hunting/sessions', { params: week ? { week } : {} }),
+  getWeeklySessions: (params?: { week?: string; characterId?: number }) =>
+    client.get<HuntingSession[]>('/hunting/sessions', { params }),
 
   getHuntingStats: () =>
     client.get<HuntingStats[]>('/hunting/stats'),
