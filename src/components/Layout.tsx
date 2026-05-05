@@ -150,8 +150,8 @@ export default function Layout() {
                   <span className="text-xl w-6 text-center shrink-0 leading-none">{item.icon}</span>
                   <span className="hidden lg:block">{item.label}</span>
                 </NavLink>
-                {/* 사이드바 hover 툴팁 (md 이상 전체 너비) */}
-                <div className="hidden md:block absolute left-full top-1/2 -translate-y-1/2 ml-2 z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                {/* 사이드바 hover 툴팁 (접힌 상태 md only) */}
+                <div className="hidden md:block lg:hidden absolute left-full top-1/2 -translate-y-1/2 ml-2 z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
                   <div
                     className="px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap"
                     style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border-2)', color: 'var(--text)', boxShadow: 'var(--shadow)' }}

@@ -59,8 +59,6 @@ export default function BossPage() {
   const [checkedDrops, setCheckedDrops] = useState<Set<string>>(new Set())
   const [editingKillId, setEditingKillId] = useState<number | null>(null)
   const [editPartySize, setEditPartySize] = useState(1)
-  const [expandedDrops, setExpandedDrops] = useState<Set<number>>(new Set())
-  const [sellForm, setSellForm] = useState<{ dropId: number; amount: string; date: string } | null>(null)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -326,29 +324,6 @@ export default function BossPage() {
     await refreshUser()
   }
 
-  const toggleDropSection = (killId: number) => {
-    setExpandedDrops((prev) => {
-      const next = new Set(prev)
-      if (next.has(killId)) next.delete(killId)
-      else next.add(killId)
-      return next
-    })
-  }
-
-  const handleListDrop = async (dropId: number) => {
-    await bossApi.listDrop(dropId)
-    await fetchKills(selectedCharId)
-  }
-
-  const handleSellDrop = async (dropId: number, amount: string, date: string) => {
-    const saleAmount = Number(amount)
-    if (!saleAmount || saleAmount < 0) return
-    await bossApi.sellDrop(dropId, { saleAmount, saleDate: date })
-    setSellForm(null)
-    await fetchKills(selectedCharId)
-    await refreshUser()
-  }
-
   const totalWeeklyRevenue = allWeeklyKills.reduce((s, k) => s + (k.income ?? k.crystalPrice), 0)
   const isWeeklyBossSelected = selectedBoss?.resetType === 'weekly'
   const maxPartySize = selectedBoss?.maxPartySize ?? 6
@@ -446,16 +421,16 @@ export default function BossPage() {
                 return (
                   <div
                     key={fav.id}
-                    className="relative rounded-xl p-3 cursor-pointer transition-all group"
+                    className="relative rounded-xl p-3 cursor-pointer transition-all"
                     style={{ backgroundColor: 'var(--surface-2)', border: '1.5px solid var(--border)' }}
                     onClick={() => applyFavorite(fav)}
                   >
-                    <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="absolute top-1.5 right-1.5">
                       <button
                         onClick={(e) => { e.stopPropagation(); handleDeleteFav(fav.id) }}
-                        className="text-xs px-1.5 py-0.5 rounded"
+                        className="w-4 h-4 flex items-center justify-center rounded text-xs"
                         style={{ backgroundColor: 'var(--surface)', color: 'var(--red)', border: '1px solid rgba(220,38,38,0.25)' }}
-                      >삭제</button>
+                      >✕</button>
                     </div>
                     <p className="text-sm font-semibold pr-10 leading-tight" style={{ color: 'var(--text)' }}>{fav.label}</p>
                     {fav.bossName && (
@@ -752,8 +727,6 @@ export default function BossPage() {
                 const expense = kill.totalExpense ?? 0
                 const net = income - expense
                 const isEditing = editingKillId === kill.id
-                const hasDrops = kill.drops && kill.drops.length > 0
-                const isDropsExpanded = expandedDrops.has(kill.id)
                 return (
                   <div key={kill.id} className="px-3 py-2">
                     <div className="flex items-start justify-between gap-2">
@@ -789,16 +762,6 @@ export default function BossPage() {
                           )
                         )}
                         <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{kill.killDate?.slice(5)}</p>
-                        {hasDrops && (
-                          <button
-                            onClick={() => toggleDropSection(kill.id)}
-                            className="mt-1 flex items-center gap-1 text-xs"
-                            style={{ color: 'var(--text-3)' }}
-                          >
-                            <span>📦 드랍 {kill.drops!.length}개</span>
-                            <span>{isDropsExpanded ? '▲' : '▼'}</span>
-                          </button>
-                        )}
                       </div>
                       <div className="flex items-start gap-2 shrink-0">
                         <div className="text-right">
@@ -837,70 +800,33 @@ export default function BossPage() {
                       </div>
                     </div>
 
-                    {/* 드랍 아이템 섹션 */}
-                    {hasDrops && isDropsExpanded && (
-                      <div className="mt-2 space-y-1">
-                        {kill.drops!.map((drop) => (
-                          <div
+                    {/* 드랍 아이템 인라인 칩 */}
+                    {kill.drops && kill.drops.length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {kill.drops.map((drop) => (
+                          <span
                             key={drop.id}
-                            className="flex items-center justify-between px-2.5 py-1.5 rounded-lg"
-                            style={{ backgroundColor: 'var(--bg)', border: '1px solid var(--border)' }}
+                            className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full"
+                            style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
                           >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="text-xs font-medium truncate" style={{ color: 'var(--text)' }}>{drop.itemName}</span>
-                              <span
-                                className="text-xs px-1.5 py-0.5 rounded-full shrink-0 font-medium"
-                                style={
-                                  drop.status === 'sold'
-                                    ? { backgroundColor: 'rgba(63,185,80,0.12)', color: 'var(--green)' }
-                                    : drop.status === 'listed'
-                                    ? { backgroundColor: 'rgba(251,191,36,0.12)', color: '#fbbf24' }
-                                    : { backgroundColor: 'var(--surface-2)', color: 'var(--text-3)' }
-                                }
-                              >
-                                {drop.status === 'sold' ? '판매완료' : drop.status === 'listed' ? '경매중' : '보유중'}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                              {drop.status === 'holding' && (
-                                <button
-                                  onClick={() => handleListDrop(drop.id)}
-                                  className="text-xs px-2 py-0.5 rounded-lg"
-                                  style={{ backgroundColor: 'rgba(59,130,246,0.12)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.25)' }}
-                                >경매 등록</button>
-                              )}
-                              {drop.status === 'listed' && (
-                                sellForm?.dropId === drop.id ? (
-                                  <div className="flex items-center gap-1">
-                                    <input
-                                      type="number"
-                                      value={sellForm.amount}
-                                      onChange={(e) => setSellForm((p) => p ? { ...p, amount: e.target.value } : p)}
-                                      placeholder="판매가"
-                                      className="text-xs w-20 px-1.5 py-0.5 rounded border"
-                                      style={{ backgroundColor: 'var(--bg)', color: 'var(--text)', borderColor: 'var(--border)' }}
-                                    />
-                                    <button
-                                      onClick={() => handleSellDrop(drop.id, sellForm.amount, sellForm.date)}
-                                      className="text-xs px-2 py-0.5 rounded-lg font-medium"
-                                      style={{ backgroundColor: 'rgba(63,185,80,0.15)', color: 'var(--green)', border: '1px solid rgba(63,185,80,0.3)' }}
-                                    >확인</button>
-                                    <button
-                                      onClick={() => setSellForm(null)}
-                                      className="text-xs w-5 h-5 flex items-center justify-center rounded"
-                                      style={{ color: 'var(--text-3)' }}
-                                    >✕</button>
-                                  </div>
-                                ) : (
-                                  <button
-                                    onClick={() => setSellForm({ dropId: drop.id, amount: '', date: toDateString() })}
-                                    className="text-xs px-2 py-0.5 rounded-lg"
-                                    style={{ backgroundColor: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }}
-                                  >판매 완료</button>
-                                )
-                              )}
-                            </div>
-                          </div>
+                            🎁 {drop.itemName}
+                            <span
+                              className="px-1 py-0.5 rounded-full font-medium"
+                              style={
+                                drop.status === 'sold'
+                                  ? { backgroundColor: 'rgba(63,185,80,0.15)', color: 'var(--green)' }
+                                  : drop.status === 'listed'
+                                  ? { backgroundColor: 'rgba(59,130,246,0.12)', color: '#60a5fa' }
+                                  : { color: 'var(--text-3)' }
+                              }
+                            >
+                              {drop.status === 'sold'
+                                ? `판매완료${drop.saleAmount ? ' ' + formatMeso(drop.saleAmount) : ''}`
+                                : drop.status === 'listed'
+                                ? '등록중'
+                                : '보유중'}
+                            </span>
+                          </span>
                         ))}
                       </div>
                     )}
