@@ -45,17 +45,21 @@ export default function LedgerPage() {
     }
   }, [])
 
+  const [initialized, setInitialized] = useState(false)
+
   useEffect(() => {
     charactersApi.getCharacters().then((r) => {
       setCharacters(r.data)
       const main = r.data.find((c) => c.isMain) ?? r.data[0]
       if (main) setSelectedCharId(String(main.id))
+      setInitialized(true)
     })
   }, [])
 
   useEffect(() => {
+    if (!initialized) return
     fetchLedger(selectedCharId)
-  }, [selectedCharId, fetchLedger])
+  }, [selectedCharId, fetchLedger, initialized])
 
   const handleSubmit = async (e: { preventDefault(): void }) => {
     e.preventDefault()

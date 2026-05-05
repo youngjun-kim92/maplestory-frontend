@@ -50,6 +50,8 @@ export default function AuctionPage() {
     }
   }
 
+  const [initialized, setInitialized] = useState(false)
+
   const fetchEntries = useCallback(async (charId: 'all' | string) => {
     const params = charId !== 'all' ? { characterId: Number(charId) } : undefined
     const res = await ledgerApi.getWeeklyLedger(params)
@@ -61,12 +63,14 @@ export default function AuctionPage() {
       setCharacters(r.data)
       const main = r.data.find((c) => c.isMain) ?? r.data[0]
       if (main) setSelectedCharId(String(main.id))
+      setInitialized(true)
     })
   }, [])
 
   useEffect(() => {
+    if (!initialized) return
     fetchEntries(selectedCharId)
-  }, [selectedCharId, fetchEntries])
+  }, [selectedCharId, fetchEntries, initialized])
 
   const isSilverPlus = ['SILVER', 'GOLD', 'DIAMOND', 'RED', 'BLACK'].includes(user?.mvpGrade ?? '')
   const feeRate = incomeForm.isPcCafe ? 0.03 : (isSilverPlus ? 0.03 : 0.05)

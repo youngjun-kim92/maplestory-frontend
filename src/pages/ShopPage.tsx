@@ -39,9 +39,9 @@ export default function ShopPage() {
   const [success, setSuccess] = useState<string | null>(null)
 
   const fetchEntries = useCallback(async () => {
+    if (!selectedCharId) return
     try {
-      const params = selectedCharId ? { characterId: Number(selectedCharId) } : undefined
-      const res = await ledgerApi.getWeeklyLedger(params)
+      const res = await ledgerApi.getWeeklyLedger({ characterId: Number(selectedCharId) })
       setEntries(res.data.entries.filter((e) => SHOP_CATEGORIES.has(e.category)))
     } catch {
       setEntries([])
