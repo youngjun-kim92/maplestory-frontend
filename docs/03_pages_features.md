@@ -1,6 +1,6 @@
 # 페이지별 기능 상세
 
-> 최종 업데이트: 2026-05-05 (항목 1~6 반영, 보스 처치 목록 드랍 아이템 표시 추가)
+> 최종 업데이트: 2026-05-05 (타이머 전용 페이지 분리, 상점 캐릭터 드롭박스 개선)
 
 ---
 
@@ -14,8 +14,10 @@
 | `/hunting` | HuntingPage | 사냥 수익 기록 |
 | `/ledger` | LedgerPage | 메소 강화 지출 기록 |
 | `/auction` | AuctionPage | 경매장 수익/지출 기록 |
+| `/shop` | ShopPage | 직거래·아이템 구매 기록 |
 | `/characters` | CharactersPage | 캐릭터 관리 + ROI |
 | `/settings` | SettingsPage | 설정 |
+| `/timer` | TimerPage | 사냥 타이머 (데스크탑 사이드바 최하단, 모바일 탭 미노출) |
 
 ---
 
@@ -63,6 +65,8 @@
   - 보스 수입 항목에 bossKillId가 있으면 `BossGroupRows` (도핑 sub-rows + 순수익)
   - 없으면 `GET /api/boss/weekly`의 kill 정보로 synthetic `KillGroupRows` 생성
   - 필터: 8가지 (전체/수입/지출/보스/사냥/경매장/도핑/강화)
+  - **orphan kill_group (도핑만 있는 합성행)은 전체/지출/도핑 필터에서만 표시** (수입/보스 등 필터 시 숨김)
+  - 모든 유형 배지(수입/지출) `whiteSpace: nowrap` 적용 (줄바꿈 방지)
 
 ### 메소 잔액 + 수익 추이 차트
 - 인벤 / 창고 / 합계 표시
@@ -83,7 +87,9 @@
 
 ### 캐릭터 현황 테이블
 - `GET /api/characters` → 등록된 캐릭터 목록
-- 캐릭터명 / 직업 / 레벨 / 솔에르다 조각 수 표시
+- `GET /api/boss/weekly/character-counts?week=` → 캐릭터별 주간 보스 처치 수 (Map으로 관리)
+- 캐릭터명 / 직업 / 레벨 / **주간 보스 (N/12)** / 솔에르다 조각 수 표시
+  - N=12: 초록색, N=0: 회색, 그 외: 파란색
 
 ### 캐릭터별 수입/지출 테이블
 - `GET /api/characters/stats` → 캐릭터별 수입/지출/순수익 집계
@@ -167,6 +173,20 @@
 ### 이번 주 사냥 기록 목록
 - `GET /api/hunting/sessions?characterId={id}` (선택된 캐릭터 기준)
 - 날짜 / 솔 에르다 조각 수 / 순수익 표시
+- 각 행 **✏️ 수정** / **🗑️ 삭제** 버튼:
+  - 수정: 금액·조각·날짜 미리입력된 모달 → `PATCH /api/hunting/sessions/{id}`
+  - 삭제: confirm → `DELETE /api/hunting/sessions/{id}`
+
+---
+
+## 4-1. TimerPage (`/timer`) — 사냥 타이머
+
+> 사이드바 최하단 배치. 모바일 하단 탭에는 미노출 (URL 직접 접근 가능).
+
+- 30분 / 20분 / 15분 / 10분 프리셋 버튼
+- MM:SS 디지털 표시, 시작/일시정지/리셋
+- 볼륨 슬라이더 (0–100%) + **🎵 알람 미리듣기** 버튼 (즉시 재생)
+- 타이머 종료 시 Web Audio API로 부드러운 2음 차임벨 알람 (C6→G5, 1.5초 간격 × 2회)
 
 ---
 
@@ -238,7 +258,42 @@
 
 ---
 
-## 7. CharactersPage (`/characters`)
+## 7. ShopPage (`/shop`) — 상점
+
+### 역할
+직거래·개인 상점 수입과 아이템 구매 비용(도핑, 소비 아이템 등) 기록.
+
+### 캐릭터 선택 (페이지 최상단)
+- 페이지 헤더 우측 단일 캐릭터 드롭다운 배치 (다른 메뉴와 동일 패턴)
+- "전체 캐릭터" 옵션 없음, 기본값: 메인 캐릭터 (메인 없으면 첫 번째)
+- 캐릭터 변경 시 이번 주 내역 + 기록 폼 제출 캐릭터 갱신
+- `GET /api/ledger?characterId={id}` 항상 특정 캐릭터 기준 조회
+
+### 주간 요약
+- 이번 주 거래 수입 / 구매 지출 KPI 카드 2개
+
+### 탭 구조
+**판매 수입 탭:**
+- 아이템명·날짜 + 판매 금액 + QuickAmountButtons
+- 저장 실패 시 에러 메시지 표시 (빨간 경고)
+- 제출 → `POST /api/ledger` (type: `income`, category: `trade`, characterId: 선택된 캐릭터)
+
+**아이템 구매 탭:**
+- 구매 유형 선택 (도핑 / 기타)
+- **구매 유형 = 도핑 선택 시**: `GET /api/boss/doping/list` 기반 도핑약 드롭박스 추가 표시
+  - 선택 시 아이템명·금액 자동 입력, 직접 입력도 가능
+- 아이템명·날짜 + 구매 금액 + QuickAmountButtons
+- 저장 실패 시 에러 메시지 표시
+- 제출 → `POST /api/ledger` (type: `expense`, category: `doping` or `other`, characterId: 선택된 캐릭터)
+
+### 이번 주 내역
+- `GET /api/ledger?characterId={id}` → `trade`, `doping`, `other` 카테고리 항목만 필터링
+- 수입(초록)/지출(빨강) 배지 + 아이콘 + 설명 + 날짜 + 금액
+- ✕ 버튼 → `DELETE /api/ledger/{id}`
+
+---
+
+## 8. CharactersPage (`/characters`)
 
 ### 캐릭터 목록 및 관리
 - `GET /api/characters` (본캐 먼저, 이후 등록순)
@@ -254,7 +309,7 @@
 
 ---
 
-## 8. SettingsPage (`/settings`)
+## 9. SettingsPage (`/settings`)
 
 | 기능 | API | 비고 |
 |:---|:---|:---|
@@ -288,7 +343,7 @@ toKoreanAmount(15334333)  // "1533만 4333"  (단위 이름만, "메소" 없음)
 | 구분 | 값 |
 |:---|:---|
 | EntryType | `income`, `expense` |
-| EntryCategory | `boss`, `hunting`, `auction`, `sol_erda`, `cube`, `starforce`, `additional_option`, `spell_trace`, `other` |
+| EntryCategory | `boss`, `hunting`, `trade`, `auction`, `sol_erda`, `cube`, `starforce`, `additional_option`, `spell_trace`, `doping`, `other` |
 | DropStatus | `holding`, `listed`, `sold` |
 | ResetType | `daily`, `weekly`, `monthly` |
 

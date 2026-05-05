@@ -23,6 +23,11 @@ export default function HuntingPage() {
     sessionDate: toDateString(),
   })
 
+  // 편집 모달 상태
+  const [editingSession, setEditingSession] = useState<HuntingSession | null>(null)
+  const [editForm, setEditForm] = useState({ income: '', solErdaFragments: '', sessionDate: '' })
+  const [editSubmitting, setEditSubmitting] = useState(false)
+
   const fetchSessions = useCallback(async (charId: string) => {
     const params = charId ? { characterId: Number(charId) } : undefined
     const res = await huntingApi.getWeeklySessions(params)
@@ -65,6 +70,40 @@ export default function HuntingPage() {
       await refreshUser()
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('이 기록을 삭제하시겠습니까?')) return
+    await huntingApi.deleteSession(id)
+    await fetchSessions(selectedCharId)
+    await refreshUser()
+  }
+
+  const openEdit = (sess: HuntingSession) => {
+    setEditingSession(sess)
+    setEditForm({
+      income: String(sess.income),
+      solErdaFragments: sess.solErdaFragments > 0 ? String(sess.solErdaFragments) : '',
+      sessionDate: sess.sessionDate.slice(0, 10),
+    })
+  }
+
+  const handleEditSubmit = async (e: { preventDefault(): void }) => {
+    e.preventDefault()
+    if (!editingSession || !editForm.income) return
+    setEditSubmitting(true)
+    try {
+      await huntingApi.updateSession(editingSession.id, {
+        income: Number(editForm.income),
+        solErdaFragments: editForm.solErdaFragments ? Number(editForm.solErdaFragments) : undefined,
+        sessionDate: editForm.sessionDate,
+      })
+      setEditingSession(null)
+      await fetchSessions(selectedCharId)
+      await refreshUser()
+    } finally {
+      setEditSubmitting(false)
     }
   }
 
@@ -187,14 +226,84 @@ export default function HuntingPage() {
                     <p className="text-xs" style={{ color: 'var(--text-3)' }}>{sess.characterName}</p>
                   )}
                 </div>
-                <div className="text-right">
+                <div className="flex items-center gap-2 shrink-0">
                   <p className="font-semibold text-sm" style={{ color: 'var(--green)' }}>+{formatMeso(sess.totalIncome)}</p>
+                  <button
+                    onClick={() => openEdit(sess)}
+                    className="text-xs px-1.5 py-0.5 rounded transition-colors"
+                    style={{ color: 'var(--primary)', backgroundColor: 'var(--primary-dim)' }}
+                    title="수정"
+                  >✏️</button>
+                  <button
+                    onClick={() => handleDelete(sess.id)}
+                    className="text-xs px-1.5 py-0.5 rounded transition-colors"
+                    style={{ color: 'var(--text-3)', backgroundColor: 'var(--surface-2)' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--red)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-3)')}
+                    title="삭제"
+                  >🗑️</button>
                 </div>
               </div>
             ))}
           </div>
         )}
       </Card>
+
+      {/* 편집 모달 */}
+      {editingSession && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.8)' }}
+          onClick={(e) => { if (e.target === e.currentTarget) setEditingSession(null) }}
+        >
+          <div
+            className="rounded-2xl p-6 w-full max-w-sm space-y-4"
+            style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-md)' }}
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold text-base" style={{ color: 'var(--text)' }}>✏️ 사냥 기록 수정</h2>
+              <button
+                onClick={() => setEditingSession(null)}
+                className="text-sm w-7 h-7 flex items-center justify-center rounded-lg"
+                style={{ color: 'var(--text-3)', backgroundColor: 'var(--surface-2)' }}
+              >✕</button>
+            </div>
+            <form onSubmit={handleEditSubmit} className="space-y-3">
+              <div>
+                <Input
+                  label="순수익 (메소)"
+                  type="number"
+                  value={editForm.income}
+                  onChange={(e) => setEditForm((p) => ({ ...p, income: e.target.value }))}
+                  min={0}
+                />
+                <QuickAmountButtons onAdd={(v) => setEditForm((p) => ({ ...p, income: String((Number(p.income) || 0) + v) }))} />
+                {toKoreanAmount(editForm.income) && (
+                  <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-3)' }}>{toKoreanAmount(editForm.income)}</p>
+                )}
+              </div>
+              <Input
+                label="솔 에르다 조각 개수 (선택)"
+                type="number"
+                placeholder="0"
+                value={editForm.solErdaFragments}
+                onChange={(e) => setEditForm((p) => ({ ...p, solErdaFragments: e.target.value }))}
+                min={0}
+              />
+              <Input
+                label="날짜"
+                type="date"
+                value={editForm.sessionDate}
+                onChange={(e) => setEditForm((p) => ({ ...p, sessionDate: e.target.value }))}
+              />
+              <div className="flex gap-2 justify-end pt-1">
+                <Button type="button" variant="ghost" size="sm" onClick={() => setEditingSession(null)}>취소</Button>
+                <Button type="submit" size="sm" loading={editSubmitting}>저장</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

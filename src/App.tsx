@@ -6,8 +6,10 @@ import LandingPage from './pages/LandingPage'
 import DashboardPage from './pages/DashboardPage'
 import BossPage from './pages/BossPage'
 import HuntingPage from './pages/HuntingPage'
+import TimerPage from './pages/TimerPage'
 import LedgerPage from './pages/LedgerPage'
 import AuctionPage from './pages/AuctionPage'
+import ShopPage from './pages/ShopPage'
 import CharactersPage from './pages/CharactersPage'
 import SettingsPage from './pages/SettingsPage'
 
@@ -49,8 +51,10 @@ export default function App() {
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/boss" element={<BossPage />} />
             <Route path="/hunting" element={<HuntingPage />} />
+            <Route path="/timer" element={<TimerPage />} />
             <Route path="/ledger" element={<LedgerPage />} />
             <Route path="/auction" element={<AuctionPage />} />
+            <Route path="/shop" element={<ShopPage />} />
             <Route path="/characters" element={<CharactersPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>

@@ -82,6 +82,7 @@ export default function DashboardPage() {
   const [statsLoading, setStatsLoading] = useState(true)
 
   const [charStats, setCharStats] = useState<CharacterStatsResponse[]>([])
+  const [charBossCounts, setCharBossCounts] = useState<Map<number, number>>(new Map())
 
   const [drops, setDrops] = useState<BossDrop[]>([])
   const [dropsLoading, setDropsLoading] = useState(true)
@@ -173,6 +174,16 @@ export default function DashboardPage() {
       .catch(() => {})
       .finally(() => setStatsLoading(false))
   }, [])
+
+  useEffect(() => {
+    bossApi.getWeeklyCharacterCounts(weekStartStr)
+      .then(r => {
+        const map = new Map<number, number>()
+        r.data.forEach(d => map.set(d.characterId, d.weeklyBossCount))
+        setCharBossCounts(map)
+      })
+      .catch(() => setCharBossCounts(new Map()))
+  }, [weekStartStr])
 
   const handleListDrop = async (dropId: number) => {
     try {
@@ -346,15 +357,17 @@ export default function DashboardPage() {
     }
 
     // Synthetic rows for doping groups not linked to a boss income entry
+    // Only show when filter includes expense/doping context
+    const showOrphanDopings = ['all', 'expense', 'doping'].includes(filter)
     for (const [killId, dopings] of dopingsByKillId) {
-      if (!renderedKillIds.has(killId)) {
+      if (!renderedKillIds.has(killId) && showOrphanDopings) {
         const kill = killMap.get(killId)
         if (kill) rows.push({ type: 'kill_group', kill, dopings })
       }
     }
 
     return rows
-  }, [displayEntries, dopingsByKillId, killMap])
+  }, [displayEntries, dopingsByKillId, killMap, filter])
 
   const safeNum = (v: number | null | undefined) => (v == null || isNaN(v) ? 0 : v)
 
@@ -1171,13 +1184,16 @@ export default function DashboardPage() {
             <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ backgroundColor: 'var(--surface-2)', position: 'sticky', top: 0 }}>
-                  {['캐릭터', '직업', '레벨', '🔮 솔 에르다 조각'].map((h) => (
+                  {['캐릭터', '직업', '레벨', '주간 보스', '🔮 솔 에르다 조각'].map((h) => (
                     <th key={h} className="px-3 py-2 text-left text-xs font-medium" style={thStyle}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {characters.map((c, i) => (
+                {characters.map((c, i) => {
+                  const bossCount = charBossCounts.get(c.id) ?? 0
+                  const bossColor = bossCount >= 12 ? 'var(--green)' : bossCount === 0 ? 'var(--text-3)' : '#60a5fa'
+                  return (
                   <tr
                     key={c.id}
                     className="table-row"
@@ -1189,12 +1205,18 @@ export default function DashboardPage() {
                     <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--text-3)' }}>{c.jobClass ?? '—'}</td>
                     <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--text-3)' }}>{c.level > 0 ? `Lv.${c.level}` : '—'}</td>
                     <td className="px-3 py-2.5">
+                      <span className="text-sm font-semibold" style={{ color: bossColor }}>
+                        {bossCount}/12
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5">
                       <span className="text-sm font-semibold" style={{ color: '#c4b5fd' }}>
                         {(c.solErdaFragments ?? 0).toLocaleString()}개
                       </span>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -1522,7 +1544,7 @@ function BossGroupRows({
         style={{ borderBottom: hasDopings ? '1px solid rgba(240,246,252,0.08)' : (isLast ? 'none' : '1px solid var(--border)') }}
       >
         <td className="px-3 py-2.5">
-          <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ color: 'var(--green)', backgroundColor: 'rgba(74,222,128,0.1)' }}>수입</span>
+          <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ whiteSpace: 'nowrap', color: 'var(--green)', backgroundColor: 'rgba(74,222,128,0.1)' }}>수입</span>
         </td>
         <td className="px-3 py-2.5">
           <div className="flex items-center gap-2">
@@ -1573,7 +1595,7 @@ function BossGroupRows({
       {dopings.map((d) => (
         <tr key={d.id} style={{ borderBottom: '1px solid rgba(240,246,252,0.04)', backgroundColor: 'rgba(168,85,247,0.04)' }}>
           <td className="px-3 py-1.5">
-            <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ color: 'var(--red)', backgroundColor: 'rgba(248,113,113,0.1)' }}>지출</span>
+            <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ whiteSpace: 'nowrap', color: 'var(--red)', backgroundColor: 'rgba(248,113,113,0.1)' }}>지출</span>
           </td>
           <td className="px-3 py-1.5">
             <div className="flex items-center gap-2 pl-3">
@@ -1631,7 +1653,7 @@ function KillGroupRows({
         style={{ borderBottom: dopings.length > 0 ? '1px solid rgba(240,246,252,0.08)' : (isLast ? 'none' : '1px solid var(--border)') }}
       >
         <td className="px-3 py-2.5">
-          <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ color: 'var(--green)', backgroundColor: 'rgba(74,222,128,0.1)' }}>수입</span>
+          <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ whiteSpace: 'nowrap', color: 'var(--green)', backgroundColor: 'rgba(74,222,128,0.1)' }}>수입</span>
         </td>
         <td className="px-3 py-2.5">
           <div className="flex items-center gap-2">
@@ -1659,7 +1681,7 @@ function KillGroupRows({
       {dopings.map((d) => (
         <tr key={d.id} style={{ borderBottom: '1px solid rgba(240,246,252,0.04)', backgroundColor: 'rgba(168,85,247,0.04)' }}>
           <td className="px-3 py-1.5">
-            <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ color: 'var(--red)', backgroundColor: 'rgba(248,113,113,0.1)' }}>지출</span>
+            <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ whiteSpace: 'nowrap', color: 'var(--red)', backgroundColor: 'rgba(248,113,113,0.1)' }}>지출</span>
           </td>
           <td className="px-3 py-1.5">
             <div className="flex items-center gap-2 pl-3">

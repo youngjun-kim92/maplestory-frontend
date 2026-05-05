@@ -73,6 +73,12 @@ export const bossApi = {
   getKillDrops: (killId: number) =>
     client.get<BossDrop[]>(`/boss/kills/${killId}/drops`),
 
+  getWeeklyCharacterCounts: (week?: string) =>
+    client.get<{ characterId: number; characterName: string; weeklyBossCount: number }[]>(
+      '/boss/weekly/character-counts',
+      { params: week ? { week } : {} }
+    ),
+
   deleteBossKill: (killId: number) =>
     client.delete(`/boss/kills/${killId}`),
 

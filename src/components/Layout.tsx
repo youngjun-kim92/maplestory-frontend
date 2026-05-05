@@ -5,7 +5,7 @@ import { useTheme } from '../contexts/ThemeContext'
 import { charactersApi } from '../api/characters'
 
 type NavItem =
-  | { type: 'link'; to: string; label: string; icon: string; desc: string; indent?: boolean }
+  | { type: 'link'; to: string; label: string; icon: string; desc: string; indent?: boolean; hideMobile?: boolean }
   | { type: 'group'; label: string }
 
 const NAV_ITEMS: NavItem[] = [
@@ -15,11 +15,13 @@ const NAV_ITEMS: NavItem[] = [
   { type: 'link',  to: '/hunting',    label: '사냥',      icon: '🌲', desc: '사냥 세션·시간당 수익', indent: true },
   { type: 'link',  to: '/ledger',     label: '메소 강화', icon: '🔩', desc: '큐브·스타포스·추가옵션 기록. 수입은 대시보드에서 확인하세요.', indent: true },
   { type: 'link',  to: '/auction',    label: '경매장',    icon: '🏪', desc: '경매장 수입·지출 기록', indent: true },
+  { type: 'link',  to: '/shop',       label: '상점',      icon: '🛒', desc: '직거래·구매 아이템 기록', indent: true },
   { type: 'link',  to: '/characters', label: '캐릭터',    icon: '🧙', desc: '캐릭터 관리·손익분기점' },
   { type: 'link',  to: '/settings',   label: '설정',      icon: '⚙️', desc: 'MVP 등급·솔에르다·메소' },
+  { type: 'link',  to: '/timer',      label: '타이머',    icon: '⏱️', desc: '사냥 시간 타이머·알람', hideMobile: true },
 ]
 
-const navLinks = NAV_ITEMS.filter((n): n is Extract<NavItem, { type: 'link' }> => n.type === 'link')
+const navLinks = NAV_ITEMS.filter((n): n is Extract<NavItem, { type: 'link' }> => n.type === 'link' && !n.hideMobile)
 
 const ONBOARDING_KEY = 'onboarding_v1'
 
