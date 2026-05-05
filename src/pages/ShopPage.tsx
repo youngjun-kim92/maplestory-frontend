@@ -6,8 +6,10 @@ import type { DopingItem, EntryCategory, LedgerEntry, MapleCharacter } from '../
 import { formatMeso, formatDateKo, toDateString, CATEGORY_LABELS, CATEGORY_ICONS } from '../utils/format'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
+import AutocompleteInput from '../components/ui/AutocompleteInput'
 import QuickAmountButtons from '../components/ui/QuickAmountButtons'
 import Select from '../components/ui/Select'
+import { saveToHistory } from '../utils/autocomplete'
 
 const SHOP_CATEGORIES = new Set<EntryCategory>(['trade', 'doping', 'other'])
 
@@ -83,6 +85,7 @@ export default function ShopPage() {
         entryDate: incomeForm.date,
         characterId: selectedCharId ? Number(selectedCharId) : null,
       })
+      saveToHistory('shop_income', incomeForm.itemName.trim())
       setIncomeForm({ itemName: '', amount: '', date: toDateString() })
       await fetchEntries()
       showSuccess('판매 수입이 기록되었습니다.')
@@ -109,6 +112,7 @@ export default function ShopPage() {
         entryDate: expenseForm.date,
         characterId: selectedCharId ? Number(selectedCharId) : null,
       })
+      saveToHistory('shop_expense', expenseForm.itemName.trim())
       setExpenseForm((p) => ({ ...p, selectedDopingId: '', itemName: '', amount: '', date: toDateString() }))
       await fetchEntries()
       showSuccess('구매 지출이 기록되었습니다.')
@@ -229,9 +233,10 @@ export default function ShopPage() {
             <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>💰 판매 수입 기록</h3>
             <form onSubmit={handleIncomeSubmit} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
-                <Input
+                <AutocompleteInput
                   label="아이템명 / 거래 내용"
                   placeholder="예: 아케인셰이드 단검"
+                  historyKey="shop_income"
                   value={incomeForm.itemName}
                   onChange={(e) => setIncomeForm((p) => ({ ...p, itemName: e.target.value }))}
                 />
@@ -309,9 +314,10 @@ export default function ShopPage() {
                 />
               )}
 
-              <Input
+              <AutocompleteInput
                 label="아이템명 / 내용"
                 placeholder={expenseForm.category === 'doping' ? '예: 알레리아 영약' : '예: 경험의 비약 30%'}
+                historyKey="shop_expense"
                 value={expenseForm.itemName}
                 onChange={(e) => setExpenseForm((p) => ({ ...p, itemName: e.target.value }))}
               />

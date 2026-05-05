@@ -8,7 +8,9 @@ import { formatMeso, formatDate, CATEGORY_LABELS, toDateString, toKoreanAmount }
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
+import AutocompleteInput from '../components/ui/AutocompleteInput'
 import QuickAmountButtons from '../components/ui/QuickAmountButtons'
+import { saveToHistory } from '../utils/autocomplete'
 
 const ENHANCE_CATEGORIES: { value: EntryCategory; label: string }[] = [
   { value: 'cube',              label: '큐브' },
@@ -74,6 +76,7 @@ export default function LedgerPage() {
         entryDate: form.entryDate,
         characterId: selectedCharId !== 'all' ? Number(selectedCharId) : null,
       })
+      if (form.description.trim()) saveToHistory('ledger_memo', form.description.trim())
       setForm((p) => ({ ...p, amount: '', description: '' }))
       await fetchLedger(selectedCharId)
       await refreshUser()
@@ -202,6 +205,9 @@ export default function LedgerPage() {
                   min={0}
                 />
                 <QuickAmountButtons onAdd={(v) => setMesoForm((p) => ({ ...p, inventoryMeso: String((Number(p.inventoryMeso) || 0) + v) }))} />
+                {toKoreanAmount(mesoForm.inventoryMeso) && (
+                  <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-3)' }}>{toKoreanAmount(mesoForm.inventoryMeso)} 메소</p>
+                )}
               </div>
               <div>
                 <Input
@@ -213,7 +219,34 @@ export default function LedgerPage() {
                   min={0}
                 />
                 <QuickAmountButtons onAdd={(v) => setMesoForm((p) => ({ ...p, storageMeso: String((Number(p.storageMeso) || 0) + v) }))} />
+                {toKoreanAmount(mesoForm.storageMeso) && (
+                  <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-3)' }}>{toKoreanAmount(mesoForm.storageMeso)} 메소</p>
+                )}
               </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setMesoForm((p) => ({
+                  inventoryMeso: '0',
+                  storageMeso: String((Number(p.storageMeso) || 0) + (Number(p.inventoryMeso) || 0)),
+                }))}
+                className="flex-1 text-xs px-2 py-1.5 rounded-lg transition-all"
+                style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }}
+              >
+                창고로 옮기기 →
+              </button>
+              <button
+                type="button"
+                onClick={() => setMesoForm((p) => ({
+                  storageMeso: '0',
+                  inventoryMeso: String((Number(p.inventoryMeso) || 0) + (Number(p.storageMeso) || 0)),
+                }))}
+                className="flex-1 text-xs px-2 py-1.5 rounded-lg transition-all"
+                style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }}
+              >
+                ← 인벤으로 옮기기
+              </button>
             </div>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="ghost" onClick={() => setShowMesoForm(false)}>취소</Button>
@@ -278,9 +311,10 @@ export default function LedgerPage() {
               value={form.entryDate}
               onChange={(e) => setForm((p) => ({ ...p, entryDate: e.target.value }))}
             />
-            <Input
+            <AutocompleteInput
               label="메모 (선택)"
               placeholder="간단한 메모"
+              historyKey="ledger_memo"
               value={form.description}
               onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
             />

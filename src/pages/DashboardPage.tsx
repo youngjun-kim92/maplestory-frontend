@@ -16,6 +16,7 @@ import {
   formatWeekRange,
   getWeekStart,
   toDateString,
+  toKoreanAmount,
   CATEGORY_ICONS,
   CATEGORY_LABELS,
   difficultyLabel,
@@ -714,6 +715,9 @@ export default function DashboardPage() {
                       min={0}
                     />
                     <QuickAmountButtons onAdd={(v) => setMesoForm((p) => ({ ...p, inventoryMeso: String((Number(p.inventoryMeso) || 0) + v) }))} />
+                    {toKoreanAmount(mesoForm.inventoryMeso) && (
+                      <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-3)' }}>{toKoreanAmount(mesoForm.inventoryMeso)} 메소</p>
+                    )}
                   </div>
                   <div>
                     <Input
@@ -724,7 +728,34 @@ export default function DashboardPage() {
                       min={0}
                     />
                     <QuickAmountButtons onAdd={(v) => setMesoForm((p) => ({ ...p, storageMeso: String((Number(p.storageMeso) || 0) + v) }))} />
+                    {toKoreanAmount(mesoForm.storageMeso) && (
+                      <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-3)' }}>{toKoreanAmount(mesoForm.storageMeso)} 메소</p>
+                    )}
                   </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setMesoForm((p) => ({
+                      inventoryMeso: '0',
+                      storageMeso: String((Number(p.storageMeso) || 0) + (Number(p.inventoryMeso) || 0)),
+                    }))}
+                    className="flex-1 text-xs px-2 py-1.5 rounded-lg transition-all"
+                    style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }}
+                  >
+                    창고로 옮기기 →
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMesoForm((p) => ({
+                      storageMeso: '0',
+                      inventoryMeso: String((Number(p.inventoryMeso) || 0) + (Number(p.storageMeso) || 0)),
+                    }))}
+                    className="flex-1 text-xs px-2 py-1.5 rounded-lg transition-all"
+                    style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }}
+                  >
+                    ← 인벤으로 옮기기
+                  </button>
                 </div>
                 <div className="flex justify-end gap-2">
                   <Button type="button" variant="ghost" size="sm" onClick={() => setShowMesoForm(false)}>취소</Button>
@@ -783,7 +814,7 @@ export default function DashboardPage() {
             <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
               📋 {isThisWeek ? '이번 주' : '해당 주'} 내역
             </h3>
-            <span className="text-xs" style={{ color: 'var(--text-3)' }}>{displayEntries.length}건</span>
+            <span className="text-xs" style={{ color: 'var(--text-3)' }}>{filteredEntries.length}건</span>
           </div>
 
           {/* 필터 바 */}
@@ -846,6 +877,7 @@ export default function DashboardPage() {
                           kill={row.kill}
                           dopings={row.dopings}
                           isLast={isLast}
+                          showIncome={!['doping', 'expense'].includes(filter)}
                         />
                       )
                     }
@@ -1636,10 +1668,12 @@ function KillGroupRows({
   kill,
   dopings,
   isLast,
+  showIncome = true,
 }: {
   kill: BossKill
   dopings: LedgerEntry[]
   isLast: boolean
+  showIncome?: boolean
 }) {
   const dopingTotal = dopings.reduce((s, d) => s + d.amount, 0)
   const bossIncome = kill.income ?? kill.crystalPrice
@@ -1648,35 +1682,50 @@ function KillGroupRows({
 
   return (
     <>
-      <tr
-        className="table-row"
-        style={{ borderBottom: dopings.length > 0 ? '1px solid rgba(240,246,252,0.08)' : (isLast ? 'none' : '1px solid var(--border)') }}
-      >
-        <td className="px-3 py-2.5">
-          <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ whiteSpace: 'nowrap', color: 'var(--green)', backgroundColor: 'rgba(74,222,128,0.1)' }}>수입</span>
-        </td>
-        <td className="px-3 py-2.5">
-          <div className="flex items-center gap-2">
-            <span className="text-base leading-none shrink-0">⚔️</span>
-            <div className="min-w-0">
-              <p className="text-sm font-medium truncate" style={{ color: 'var(--text)' }}>{bossLabel} 결정석</p>
-              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: 'rgba(249,115,22,0.12)', color: 'var(--primary)' }}>보스</span>
-                <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: 'rgba(168,85,247,0.12)', color: '#a855f7' }}>
-                  도핑 {dopings.length}개
-                </span>
+      {showIncome ? (
+        <tr
+          className="table-row"
+          style={{ borderBottom: dopings.length > 0 ? '1px solid rgba(240,246,252,0.08)' : (isLast ? 'none' : '1px solid var(--border)') }}
+        >
+          <td className="px-3 py-2.5">
+            <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ whiteSpace: 'nowrap', color: 'var(--green)', backgroundColor: 'rgba(74,222,128,0.1)' }}>수입</span>
+          </td>
+          <td className="px-3 py-2.5">
+            <div className="flex items-center gap-2">
+              <span className="text-base leading-none shrink-0">⚔️</span>
+              <div className="min-w-0">
+                <p className="text-sm font-medium truncate" style={{ color: 'var(--text)' }}>{bossLabel} 결정석</p>
+                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                  <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: 'rgba(249,115,22,0.12)', color: 'var(--primary)' }}>보스</span>
+                  <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: 'rgba(168,85,247,0.12)', color: '#a855f7' }}>
+                    도핑 {dopings.length}개
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
-        </td>
-        <td className="px-3 py-2.5 text-right whitespace-nowrap">
-          <span className="font-bold text-sm" style={{ color: 'var(--green)' }}>+{formatMeso(bossIncome)}</span>
-        </td>
-        <td className="px-3 py-2.5 text-right">
-          <span style={{ color: 'var(--text-3)', fontSize: '10px' }}>—</span>
-        </td>
-        <td className="px-2 py-2.5" />
-      </tr>
+          </td>
+          <td className="px-3 py-2.5 text-right whitespace-nowrap">
+            <span className="font-bold text-sm" style={{ color: 'var(--green)' }}>+{formatMeso(bossIncome)}</span>
+          </td>
+          <td className="px-3 py-2.5 text-right">
+            <span style={{ color: 'var(--text-3)', fontSize: '10px' }}>—</span>
+          </td>
+          <td className="px-2 py-2.5" />
+        </tr>
+      ) : (
+        <tr style={{ borderBottom: dopings.length > 0 ? '1px solid rgba(240,246,252,0.08)' : (isLast ? 'none' : '1px solid var(--border)') }}>
+          <td className="px-3 py-2" colSpan={4}>
+            <div className="flex items-center gap-2">
+              <span className="text-base leading-none shrink-0">⚔️</span>
+              <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>{bossLabel}</span>
+              <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: 'rgba(168,85,247,0.12)', color: '#a855f7' }}>
+                도핑 {dopings.length}개
+              </span>
+            </div>
+          </td>
+          <td />
+        </tr>
+      )}
 
       {dopings.map((d) => (
         <tr key={d.id} style={{ borderBottom: '1px solid rgba(240,246,252,0.04)', backgroundColor: 'rgba(168,85,247,0.04)' }}>
@@ -1699,7 +1748,7 @@ function KillGroupRows({
         </tr>
       ))}
 
-      {dopings.length > 0 && (
+      {showIncome && dopings.length > 0 && (
         <tr style={{ borderBottom: isLast ? 'none' : '1px solid var(--border)' }}>
           <td />
           <td className="px-3 py-1.5 text-right" colSpan={2}>

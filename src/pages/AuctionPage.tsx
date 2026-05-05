@@ -8,7 +8,9 @@ import { formatMeso, formatDate, toDateString, toKoreanAmount, CATEGORY_LABELS }
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
+import AutocompleteInput from '../components/ui/AutocompleteInput'
 import QuickAmountButtons from '../components/ui/QuickAmountButtons'
+import { saveToHistory } from '../utils/autocomplete'
 
 const AUCTION_CATEGORIES = new Set(['auction', 'sol_erda'])
 
@@ -126,6 +128,7 @@ export default function AuctionPage() {
         entryDate: incomeForm.saleDate,
         characterId: charIdNum,
       })
+      if (incomeForm.itemName.trim()) saveToHistory('auction_income', incomeForm.itemName.trim())
       setIncomeForm((p) => ({ ...p, itemName: '', saleAmount: '' }))
       setSuccess('수입이 기록되었습니다.')
       setTimeout(() => setSuccess(null), 2500)
@@ -153,6 +156,7 @@ export default function AuctionPage() {
         entryDate: expenseForm.buyDate,
         characterId: charIdNum,
       })
+      if (expenseForm.itemName.trim()) saveToHistory('auction_expense', expenseForm.itemName.trim())
       setExpenseForm((p) => ({ ...p, itemName: '', buyAmount: '' }))
       setSuccess('지출이 기록되었습니다.')
       setTimeout(() => setSuccess(null), 2500)
@@ -321,9 +325,10 @@ export default function AuctionPage() {
             ) : (
               <>
                 <div className="grid grid-cols-2 gap-3">
-                  <Input
+                  <AutocompleteInput
                     label="아이템명 (선택)"
                     placeholder="예: 앱솔 숄더"
+                    historyKey="auction_income"
                     value={incomeForm.itemName}
                     onChange={(e) => setIncomeForm((p) => ({ ...p, itemName: e.target.value }))}
                   />
@@ -397,9 +402,10 @@ export default function AuctionPage() {
         <Card title="경매장 구매 지출" icon="💸">
           <form onSubmit={handleExpenseSubmit} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
-              <Input
+              <AutocompleteInput
                 label="아이템명 (선택)"
                 placeholder="예: 앱솔 무기"
+                historyKey="auction_expense"
                 value={expenseForm.itemName}
                 onChange={(e) => setExpenseForm((p) => ({ ...p, itemName: e.target.value }))}
               />

@@ -53,6 +53,7 @@ export default function HuntingPage() {
   }, [selectedCharId, fetchSessions, loading])
 
   const erdaPrice = user?.solErdaFragmentPrice ?? 0
+  const selectedChar = characters.find((c) => String(c.id) === selectedCharId)
 
   const handleSubmit = async (e: { preventDefault(): void }) => {
     e.preventDefault()
@@ -186,6 +187,11 @@ export default function HuntingPage() {
                   </button>
                 ))}
               </div>
+              {selectedChar !== undefined && (
+                <p className="text-xs mt-1 pl-0.5" style={{ color: '#a78bfa' }}>
+                  🔮 현재 보유: {selectedChar.solErdaFragments.toLocaleString()}개
+                </p>
+              )}
             </div>
           </div>
           {form.solErdaFragments && Number(form.solErdaFragments) > 0 && erdaPrice > 0 && (

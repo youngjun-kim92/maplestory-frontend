@@ -218,6 +218,30 @@ export default function SettingsPage() {
               )}
             </div>
           </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setMesoForm((p) => ({
+                inventoryMeso: '0',
+                storageMeso: String((Number(p.storageMeso) || 0) + (Number(p.inventoryMeso) || 0)),
+              }))}
+              className="flex-1 text-xs px-2 py-1.5 rounded-lg transition-all"
+              style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }}
+            >
+              창고로 옮기기 →
+            </button>
+            <button
+              type="button"
+              onClick={() => setMesoForm((p) => ({
+                storageMeso: '0',
+                inventoryMeso: String((Number(p.inventoryMeso) || 0) + (Number(p.storageMeso) || 0)),
+              }))}
+              className="flex-1 text-xs px-2 py-1.5 rounded-lg transition-all"
+              style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }}
+            >
+              ← 인벤으로 옮기기
+            </button>
+          </div>
           <Button type="submit" loading={mesoSubmitting} className="w-full">
             잔액 업데이트
           </Button>
