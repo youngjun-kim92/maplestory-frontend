@@ -180,6 +180,7 @@ export interface BossKill {
   characterName: string | null
   createdAt: string
   expenses?: Array<{ category: string; amount: number; description: string }>
+  drops?: BossDrop[]
 }
 
 export interface BossKillRequest {

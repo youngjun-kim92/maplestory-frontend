@@ -1,6 +1,6 @@
 # 페이지별 기능 상세
 
-> 최종 업데이트: 2026-05-05 (항목 1~6 반영)
+> 최종 업데이트: 2026-05-05 (항목 1~6 반영, 보스 처치 목록 드랍 아이템 표시 추가)
 
 ---
 
@@ -133,11 +133,20 @@
 - 카드 호버 시 "삭제" 버튼 표시 → `DELETE /api/favorites/{id}`
 
 ### 이번 주 처치 목록
-- `GET /api/boss/weekly?characterId={id}` (선택된 캐릭터 기준)
+- `GET /api/boss/weekly?characterId={id}` (선택된 캐릭터 기준, 응답에 `drops` 배열 포함)
 - 처치 행: 보스명 / 난이도 / 날짜 / 수입 / 지출 / 순수익
 - 각 행에 **수정(✏️)** / **삭제(✕)** 버튼:
   - 수정: 파티 인원 인라인 select → "저장" → `PATCH /api/boss/kills/{id}` `{ partySize }`
   - 삭제: confirm → `DELETE /api/boss/kills/{id}`
+- **드랍 아이템 섹션**: `drops` 배열이 있으면 "📦 드랍 N개 ▼" 토글 버튼 표시
+  - 클릭 시 접힌/펼친 상태 토글 (기본 접힘)
+  - 각 드랍: `itemName` + status 배지 + 상태 전환 버튼
+
+| status | 배지 | 버튼 |
+|:---|:---|:---|
+| `holding` | 보유중 (회색) | "경매 등록" → `PATCH /api/boss/drops/{id}/list` |
+| `listed` | 경매중 (노랑) | "판매 완료" → 인라인 판매가 입력 → `PATCH /api/boss/drops/{id}/sell` |
+| `sold` | 판매완료 (초록) | 없음 |
 
 ---
 
