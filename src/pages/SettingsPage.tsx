@@ -30,11 +30,6 @@ export default function SettingsPage() {
     }
   }
 
-  const [solPrice, setSolPrice] = useState(String(user?.solErdaFragmentPrice ?? 0))
-  const [solSubmitting, setSolSubmitting] = useState(false)
-  const [solSuccess, setSolSuccess] = useState(false)
-  const [solError, setSolError] = useState<string | null>(null)
-
   const [mesoForm, setMesoForm] = useState({
     inventoryMeso: String(user?.inventoryMeso ?? 0),
     storageMeso: String(user?.storageMeso ?? 0),
@@ -51,7 +46,6 @@ export default function SettingsPage() {
   // user 컨텍스트가 갱신되면 폼 값도 동기화
   useEffect(() => {
     if (user) {
-      setSolPrice(String(user.solErdaFragmentPrice ?? 0))
       setMesoForm({
         inventoryMeso: String(user.inventoryMeso ?? 0),
         storageMeso: String(user.storageMeso ?? 0),
@@ -74,26 +68,6 @@ export default function SettingsPage() {
       setMvpError(err?.response?.data?.message ?? '저장 실패')
     } finally {
       setMvpSubmitting(false)
-    }
-  }
-
-  const handleSolSubmit = async (e: { preventDefault(): void }) => {
-    e.preventDefault()
-    const price = Number(solPrice)
-    if (isNaN(price) || price < 0) return
-    setSolSubmitting(true)
-    setSolSuccess(false)
-    setSolError(null)
-    try {
-      await authApi.updateSolErdaPrice(price)
-      await refreshUser()
-      setSolSuccess(true)
-      setTimeout(() => setSolSuccess(false), 2500)
-    } catch (err: any) {
-      const msg = err?.response?.data?.message ?? `저장 실패 (${err?.response?.status ?? '네트워크 오류'})`
-      setSolError(msg)
-    } finally {
-      setSolSubmitting(false)
     }
   }
 
@@ -168,48 +142,6 @@ export default function SettingsPage() {
         <p className="text-xs mt-2" style={{ color: 'var(--text-3)' }}>
           💡 PC방 접속 중일 때는 등급에 관계없이 수수료 3%가 적용됩니다.
         </p>
-      </Card>
-
-      {/* Sol Erda price */}
-      <Card icon="🔮" title="솔 에르다 조각 개당 가격">
-        <p className="text-xs mb-3" style={{ color: 'var(--text-2)' }}>
-          기록하기 → 수익/지출 탭에서 솔 에르다 조각 카테고리 선택 시 자동 환산에 사용됩니다.
-        </p>
-        {solSuccess && (
-          <div
-            className="mb-3 p-2.5 rounded-xl text-sm"
-            style={{ backgroundColor: 'rgba(22,163,74,0.1)', color: 'var(--green)', border: '1px solid rgba(22,163,74,0.2)' }}
-          >
-            ✅ 저장되었습니다.
-          </div>
-        )}
-        {solError && (
-          <div
-            className="mb-3 p-2.5 rounded-xl text-sm"
-            style={{ backgroundColor: 'rgba(220,38,38,0.08)', color: 'var(--red)', border: '1px solid rgba(220,38,38,0.2)' }}
-          >
-            ❌ {solError}
-          </div>
-        )}
-        <form onSubmit={handleSolSubmit} className="flex gap-2 items-start">
-          <div className="flex-1">
-            <Input
-              type="number"
-              placeholder="예: 1200"
-              value={solPrice}
-              onChange={(e) => setSolPrice(e.target.value)}
-              min={0}
-            />
-            {solPrice && Number(solPrice) > 0 && (
-              <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-2)' }}>
-                현재: {Number(solPrice).toLocaleString()} 메소
-              </p>
-            )}
-          </div>
-          <Button type="submit" loading={solSubmitting} className="shrink-0">
-            저장
-          </Button>
-        </form>
       </Card>
 
       {/* Meso balance */}

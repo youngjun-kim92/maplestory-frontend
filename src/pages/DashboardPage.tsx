@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid, PieChart, Pie, Cell } from 'recharts'
 import { ledgerApi } from '../api/ledger'
 import { authApi } from '../api/auth'
 import { bossApi } from '../api/boss'
@@ -26,6 +26,17 @@ import Select from '../components/ui/Select'
 import QuickAmountButtons from '../components/ui/QuickAmountButtons'
 
 const DAY_HEADERS = ['일', '월', '화', '수', '목', '금', '토']
+const CHART_COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#ec4899']
+const ENTRY_FILTERS = [
+  { key: 'all',         label: '전체' },
+  { key: 'income',      label: '수입' },
+  { key: 'expense',     label: '지출' },
+  { key: 'boss',        label: '보스' },
+  { key: 'hunting',     label: '사냥' },
+  { key: 'auction',     label: '경매장' },
+  { key: 'doping',      label: '도핑' },
+  { key: 'enhancement', label: '강화' },
+] as const
 const MONTH_KO = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월']
 
 const CATEGORY_COLORS: Record<string, { bg: string; color: string }> = {
@@ -268,6 +279,47 @@ export default function DashboardPage() {
     selectedCharId === 'all'
       ? allEntries
       : allEntries.filter((e) => e.characterId === selectedCharId)
+
+  const [filter, setFilter] = useState<string>('all')
+
+  const filteredEntries = useMemo(() => {
+    switch (filter) {
+      case 'income':      return entries.filter(e => e.type === 'income')
+      case 'expense':     return entries.filter(e => e.type === 'expense')
+      case 'boss':        return entries.filter(e => e.category === 'boss')
+      case 'hunting':     return entries.filter(e => e.category === 'hunting')
+      case 'auction':     return entries.filter(e => e.category === 'auction')
+      case 'doping':      return entries.filter(e => e.category === 'doping')
+      case 'enhancement': return entries.filter(e => ['cube','starforce','spell_trace','additional_option'].includes(e.category))
+      default:            return entries
+    }
+  }, [entries, filter])
+
+  // bossKillId → [doping entries] from character-filtered entries
+  const dopingsByKillId = useMemo(() => {
+    const map = new Map<number, LedgerEntry[]>()
+    for (const e of entries) {
+      if (e.category === 'doping' && e.bossKillId != null) {
+        const arr = map.get(e.bossKillId) ?? []
+        arr.push(e)
+        map.set(e.bossKillId, arr)
+      }
+    }
+    return map
+  }, [entries])
+
+  // filteredEntries with grouped dopings removed (they show as sub-rows under boss)
+  const displayEntries = useMemo(() => {
+    const groupedDopingIds = new Set<number>()
+    for (const e of filteredEntries) {
+      if (e.category === 'boss' && e.type === 'income' && e.bossKillId != null) {
+        for (const d of dopingsByKillId.get(e.bossKillId) ?? []) {
+          groupedDopingIds.add(d.id)
+        }
+      }
+    }
+    return filteredEntries.filter(e => !groupedDopingIds.has(e.id))
+  }, [filteredEntries, dopingsByKillId])
 
   const safeNum = (v: number | null | undefined) => (v == null || isNaN(v) ? 0 : v)
 
@@ -683,7 +735,21 @@ export default function DashboardPage() {
             <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
               📋 {isThisWeek ? '이번 주' : '해당 주'} 내역
             </h3>
-            <span className="text-xs" style={{ color: 'var(--text-3)' }}>{entries.length}건</span>
+            <span className="text-xs" style={{ color: 'var(--text-3)' }}>{displayEntries.length}건</span>
+          </div>
+
+          {/* 필터 바 */}
+          <div className="flex gap-1 px-3 py-2 overflow-x-auto scrollbar-hide" style={{ borderBottom: '1px solid var(--border)' }}>
+            {ENTRY_FILTERS.map((f) => (
+              <button
+                key={f.key}
+                onClick={() => setFilter(f.key)}
+                className="text-xs px-2.5 py-1 rounded-lg shrink-0 font-medium transition-all"
+                style={filter === f.key
+                  ? { backgroundColor: 'var(--primary-dim)', color: 'var(--primary)', border: '1px solid var(--primary-glow)' }
+                  : { backgroundColor: 'var(--surface-2)', color: 'var(--text-3)', border: '1px solid transparent' }}
+              >{f.label}</button>
+            ))}
           </div>
 
           {loading ? (
@@ -711,15 +777,30 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {entries.map((entry, i) => (
-                    <EntryTableRow
-                      key={entry.id}
-                      entry={entry}
-                      onDelete={() => handleDeleteEntry(entry.id)}
-                      onEdit={() => openEditEntry(entry)}
-                      isLast={i === entries.length - 1}
-                    />
-                  ))}
+                  {displayEntries.map((entry, i) => {
+                    if (entry.category === 'boss' && entry.type === 'income' && entry.bossKillId != null) {
+                      const dopings = dopingsByKillId.get(entry.bossKillId) ?? []
+                      return (
+                        <BossGroupRows
+                          key={entry.id}
+                          bossEntry={entry}
+                          dopings={dopings}
+                          onDelete={() => handleDeleteEntry(entry.id)}
+                          onEdit={() => openEditEntry(entry)}
+                          isLast={i === displayEntries.length - 1}
+                        />
+                      )
+                    }
+                    return (
+                      <EntryTableRow
+                        key={entry.id}
+                        entry={entry}
+                        onDelete={() => handleDeleteEntry(entry.id)}
+                        onEdit={() => openEditEntry(entry)}
+                        isLast={i === displayEntries.length - 1}
+                      />
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1081,6 +1162,66 @@ export default function DashboardPage() {
           <div className="dark-panel-header">
             <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>📊 캐릭터별 수입/지출</h3>
           </div>
+
+          {/* 차트 */}
+          {charStats.some(s => s.totalIncome > 0) && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4" style={{ borderBottom: '1px solid var(--border)' }}>
+              <div>
+                <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-2)' }}>캐릭터별 수입 분포</p>
+                <ResponsiveContainer width="100%" height={160}>
+                  <PieChart>
+                    <Pie
+                      data={charStats.filter(s => s.totalIncome > 0).map(s => ({ name: s.characterName, value: s.totalIncome }))}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={40}
+                      outerRadius={68}
+                      dataKey="value"
+                      paddingAngle={2}
+                    >
+                      {charStats.filter(s => s.totalIncome > 0).map((_, idx) => (
+                        <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(v) => formatMeso(v as number)}
+                      contentStyle={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: '8px', fontSize: '11px' }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 justify-center mt-1">
+                  {charStats.filter(s => s.totalIncome > 0).map((s, idx) => (
+                    <span key={s.characterId} className="flex items-center gap-1 text-xs" style={{ color: 'var(--text-3)' }}>
+                      <span className="w-2 h-2 rounded-full inline-block shrink-0" style={{ backgroundColor: CHART_COLORS[idx % CHART_COLORS.length] }} />
+                      {s.characterName}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-2)' }}>수입 vs 지출 비교</p>
+                <ResponsiveContainer width="100%" height={160}>
+                  <BarChart
+                    data={charStats.map(s => ({ name: s.characterName, 수입: s.totalIncome, 지출: s.totalExpense }))}
+                    margin={{ top: 4, right: 0, left: 0, bottom: 0 }}
+                  >
+                    <XAxis dataKey="name" tick={{ fontSize: 9, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} />
+                    <YAxis hide />
+                    <Tooltip
+                      formatter={(v) => formatMeso(v as number)}
+                      contentStyle={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: '8px', fontSize: '11px' }}
+                      cursor={{ fill: 'var(--primary-dim)' }}
+                    />
+                    <CartesianGrid strokeDasharray="2 4" stroke="rgba(240,246,252,0.06)" vertical={false} />
+                    <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: '10px', color: 'var(--text-2)' }} />
+                    <Bar dataKey="수입" fill="#3fb950" radius={[3, 3, 0, 0]} maxBarSize={20} />
+                    <Bar dataKey="지출" fill="#f85149" radius={[3, 3, 0, 0]} maxBarSize={20} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
           <div className="overflow-x-auto">
             <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
               <thead>
@@ -1116,18 +1257,6 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
-
-      {/* FAB */}
-      <button
-        onClick={() => navigate('/boss')}
-        className="fixed bottom-20 md:bottom-8 right-4 md:right-8 w-14 h-14 rounded-full flex items-center justify-center text-2xl z-40 transition-all hover:scale-110 active:scale-95"
-        style={{
-          background: 'linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%)',
-          boxShadow: '0 4px 20px var(--primary-glow)',
-          color: 'white',
-        }}
-        aria-label="기록 추가"
-      >✏️</button>
 
       {/* ── 수정 모달 ── */}
       {editingEntry && (
@@ -1320,5 +1449,118 @@ function EntryTableRow({
         </div>
       </td>
     </tr>
+  )
+}
+
+function BossGroupRows({
+  bossEntry,
+  dopings,
+  onDelete,
+  onEdit,
+  isLast,
+}: {
+  bossEntry: LedgerEntry
+  dopings: LedgerEntry[]
+  onDelete: () => void
+  onEdit: () => void
+  isLast: boolean
+}) {
+  const hasDopings = dopings.length > 0
+  const dopingTotal = dopings.reduce((s, d) => s + d.amount, 0)
+  const net = bossEntry.amount - dopingTotal
+  const erdaCount = bossEntry.solErdaFragments ?? 0
+
+  return (
+    <>
+      <tr
+        className="table-row"
+        style={{ borderBottom: hasDopings ? '1px solid rgba(240,246,252,0.08)' : (isLast ? 'none' : '1px solid var(--border)') }}
+      >
+        <td className="px-3 py-2.5">
+          <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ color: 'var(--green)', backgroundColor: 'rgba(74,222,128,0.1)' }}>수입</span>
+        </td>
+        <td className="px-3 py-2.5">
+          <div className="flex items-center gap-2">
+            <span className="text-base leading-none shrink-0">⚔️</span>
+            <div className="min-w-0">
+              <p className="text-sm font-medium truncate" style={{ color: 'var(--text)' }}>{bossEntry.description || '보스'}</p>
+              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                <span className="text-xs" style={{ color: 'var(--text-3)' }}>
+                  {formatDateKo(bossEntry.entryDate)}{bossEntry.characterName && ` · ${bossEntry.characterName}`}
+                </span>
+                <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: 'rgba(249,115,22,0.12)', color: 'var(--primary)' }}>보스</span>
+                {hasDopings && (
+                  <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: 'rgba(168,85,247,0.12)', color: '#a855f7' }}>
+                    도핑 {dopings.length}개
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </td>
+        <td className="px-3 py-2.5 text-right whitespace-nowrap">
+          <span className="font-bold text-sm" style={{ color: 'var(--green)' }}>+{formatMeso(bossEntry.amount)}</span>
+        </td>
+        <td className="px-3 py-2.5 text-right">
+          {erdaCount > 0
+            ? <span className="text-xs font-semibold" style={{ color: '#c4b5fd' }}>{erdaCount}개</span>
+            : <span style={{ color: 'var(--text-3)', fontSize: '10px' }}>—</span>}
+        </td>
+        <td className="px-2 py-2.5">
+          <div className="flex items-center justify-end gap-1">
+            <button
+              onClick={onEdit}
+              className="text-xs px-2 py-0.5 rounded-md font-semibold"
+              style={{ color: 'var(--primary)', backgroundColor: 'var(--primary-dim)', border: '1px solid var(--primary-glow)' }}
+            >수정</button>
+            <button
+              onClick={onDelete}
+              title="삭제"
+              className="w-5 h-5 flex items-center justify-center rounded text-xs"
+              style={{ color: 'var(--text-3)' }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--red)')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-3)')}
+            >✕</button>
+          </div>
+        </td>
+      </tr>
+
+      {dopings.map((d) => (
+        <tr key={d.id} style={{ borderBottom: '1px solid rgba(240,246,252,0.04)', backgroundColor: 'rgba(168,85,247,0.04)' }}>
+          <td className="px-3 py-1.5">
+            <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ color: 'var(--red)', backgroundColor: 'rgba(248,113,113,0.1)' }}>지출</span>
+          </td>
+          <td className="px-3 py-1.5">
+            <div className="flex items-center gap-2 pl-3">
+              <span className="text-sm leading-none shrink-0">└ 💊</span>
+              <span className="text-xs truncate" style={{ color: 'var(--text-3)' }}>{d.description || '도핑'}</span>
+            </div>
+          </td>
+          <td className="px-3 py-1.5 text-right">
+            <span className="text-xs font-semibold" style={{ color: 'var(--red)' }}>-{formatMeso(d.amount)}</span>
+          </td>
+          <td className="px-3 py-1.5 text-right">
+            <span style={{ color: 'var(--text-3)', fontSize: '10px' }}>—</span>
+          </td>
+          <td />
+        </tr>
+      ))}
+
+      {hasDopings && (
+        <tr style={{ borderBottom: isLast ? 'none' : '1px solid var(--border)' }}>
+          <td />
+          <td className="px-3 py-1.5 text-right" colSpan={2}>
+            <span className="text-xs" style={{ color: 'var(--text-3)' }}>
+              보스 순수익:{' '}
+              <span className="font-semibold" style={{ color: net >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                {net >= 0 ? '+' : ''}{formatMeso(net)}
+              </span>
+            </span>
+          </td>
+          <td />
+          <td />
+        </tr>
+      )}
+    </>
   )
 }

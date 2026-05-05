@@ -56,6 +56,7 @@ export interface LedgerEntry {
   characterId: number | null
   characterName: string | null
   solErdaFragments?: number | null
+  bossKillId?: number | null
 }
 
 export interface LedgerEntryRequest {

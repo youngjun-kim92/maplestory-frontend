@@ -23,7 +23,7 @@ const WEEKLY_BOSS_MAX_PER_CHAR = 12
 const WEEKLY_BOSS_MAX_TOTAL = 90
 
 export default function BossPage() {
-  const { refreshUser } = useAuth()
+  const { user, refreshUser } = useAuth()
 
   const [bossList, setBossList] = useState<BossMaster[]>([])
   const [weeklyKills, setWeeklyKills] = useState<BossKill[]>([])
@@ -34,7 +34,6 @@ export default function BossPage() {
   const [dopingItems, setDopingItems] = useState<DopingItem[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
-  const [savingFavsCharId, setSavingFavsCharId] = useState<string | null>(null)
   const [savingSingleFav, setSavingSingleFav] = useState(false)
   const [selectedCharId, setSelectedCharId] = useState('')
 
@@ -49,7 +48,6 @@ export default function BossPage() {
   const [toast, setToast] = useState<{ message: string; type: 'error' | 'warning' | 'success' } | null>(null)
 
   const [selectedDopings, setSelectedDopings] = useState<number[]>([])
-  const [showFavPopup, setShowFavPopup] = useState(false)
   const [editingKillId, setEditingKillId] = useState<number | null>(null)
   const [editPartySize, setEditPartySize] = useState(1)
 
@@ -190,7 +188,6 @@ export default function BossPage() {
         expenses,
       })
 
-      setSelectedDopings([])
       await fetchKills(selectedCharId)
       await fetchAllKills()
       await refreshUser()
@@ -277,84 +274,6 @@ export default function BossPage() {
     }
   }
 
-  const handleBulkRecord = async () => {
-    if (!selectedCharId) { alert('캐릭터를 선택해주세요.'); return }
-    const validFavs = bossFavorites.filter((f) => f.bossName && f.difficulty)
-    if (validFavs.length === 0) return
-    if (!confirm(`즐겨찾기 ${validFavs.length}개를 이번 주 기록에 추가하시겠습니까?`)) return
-    setSubmitting(true)
-    try {
-      await Promise.all(
-        validFavs.map((fav) => {
-          const relatedDopings = dopingFavorites.filter((d) => d.bossName === fav.bossName && d.amount)
-          const expenses = relatedDopings.map((d) => ({
-            category: 'doping',
-            amount: d.amount!,
-            description: d.label,
-          }))
-          return bossApi.recordBossKill({
-            bossName: fav.bossName!,
-            difficulty: fav.difficulty!,
-            killDate: form.killDate,
-            partySize: fav.partySize ?? 1,
-            characterId: Number(selectedCharId),
-            expenses,
-          })
-        })
-      )
-      setShowFavPopup(false)
-      await fetchKills(selectedCharId)
-      await fetchAllKills()
-      await refreshUser()
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const handleSaveCharFavs = async () => {
-    const kills = weeklyKills
-    if (kills.length === 0) return
-    const charIdNum = Number(selectedCharId)
-    const existingKeys = new Set(bossFavorites.map((f) => `${f.bossName}|${f.difficulty}`))
-    const uniqueKillMap = new Map<string, BossKill>()
-    for (const k of kills) {
-      const key = `${k.bossName}|${k.difficulty}`
-      if (!existingKeys.has(key) && !uniqueKillMap.has(key)) uniqueKillMap.set(key, k)
-    }
-    const unique = [...uniqueKillMap.values()]
-    if (unique.length === 0) { alert('이미 모든 보스가 즐겨찾기에 저장되어 있습니다.'); return }
-    if (!confirm(`${unique.length}개의 보스를 즐겨찾기로 저장하시겠습니까?`)) return
-    setSavingFavsCharId(selectedCharId)
-    try {
-      await Promise.all(
-        unique.map((k) =>
-          favoritesApi.create({
-            type: 'BOSS',
-            label: `${k.bossName} ${difficultyLabel(k.difficulty)}`,
-            bossName: k.bossName,
-            difficulty: k.difficulty,
-            partySize: k.partySize ?? 1,
-            characterId: charIdNum,
-          })
-        )
-      )
-      const existingDopingKeys = new Set(dopingFavorites.map((d) => `${d.bossName}|${d.label}`))
-      const dopingToSave = unique.flatMap((k) =>
-        (k.expenses?.filter((e) => e.category === 'doping') ?? [])
-          .filter((e) => !existingDopingKeys.has(`${k.bossName}|${e.description}`))
-          .map((e) => ({ type: 'DOPING' as const, label: e.description, bossName: k.bossName, amount: e.amount, characterId: charIdNum }))
-      )
-      if (dopingToSave.length > 0) await Promise.all(dopingToSave.map((d) => favoritesApi.create(d)))
-      await fetchFavorites(selectedCharId)
-    } catch (err: any) {
-      if (err?.response?.status === 400) {
-        setToast({ message: '즐겨찾기는 캐릭터당 최대 12개까지 저장할 수 있습니다.', type: 'error' })
-      }
-    } finally {
-      setSavingFavsCharId(null)
-    }
-  }
-
   const handleDeleteFav = async (id: number) => {
     if (!confirm('즐겨찾기를 삭제하시겠습니까?')) return
     await favoritesApi.delete(id)
@@ -380,6 +299,12 @@ export default function BossPage() {
   const totalWeeklyRevenue = allWeeklyKills.reduce((s, k) => s + (k.income ?? k.crystalPrice), 0)
   const isWeeklyBossSelected = selectedBoss?.resetType === 'weekly'
   const maxPartySize = selectedBoss?.maxPartySize ?? 6
+
+  const dopingTotal = selectedDopings.reduce((sum, id) => {
+    const item = dopingItems.find((x) => x.id === id)
+    return sum + (item?.price ?? 0)
+  }, 0)
+  const isDopingInsufficientMeso = dopingTotal > 0 && dopingTotal > (user?.totalMeso ?? 0)
 
   const selectedChar = characters.find((c) => String(c.id) === selectedCharId)
 
@@ -449,6 +374,10 @@ export default function BossPage() {
         <div className="flex items-center justify-between px-4 py-2.5" style={{ borderBottom: '1px solid var(--border)' }}>
           <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>⭐ 즐겨찾기</p>
         </div>
+        <div className="px-4 py-2.5 text-xs" style={{ backgroundColor: 'var(--surface-2)', borderBottom: '1px solid var(--border)', color: 'var(--text-2)' }}>
+          자주 사용하는 보스 설정을 저장해두면 클릭 한 번으로 바로 입력됩니다.
+          캐릭터를 선택한 뒤 <span style={{ color: '#fbbf24' }}>★ 즐겨찾기 등록</span> 버튼으로 저장하세요.
+        </div>
         <div className="p-3 space-y-2.5">
           {bossFavorites.length === 0 ? (
             <p className="text-sm text-center py-4" style={{ color: 'var(--text-3)' }}>
@@ -503,11 +432,17 @@ export default function BossPage() {
           <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>보스 처치 기록</p>
           <button
             type="button"
-            onClick={() => setShowFavPopup(true)}
-            className="text-xs px-3 py-1.5 rounded-lg font-semibold"
-            style={{ backgroundColor: 'var(--primary-dim)', color: 'var(--primary)', border: '1px solid var(--primary-glow)' }}
+            onClick={handleSaveSingleBossFav}
+            disabled={savingSingleFav || !form.bossName || !form.difficulty || !selectedCharId}
+            className="text-xs px-2.5 py-1.5 rounded-lg font-medium"
+            style={
+              form.bossName && form.difficulty && selectedCharId
+                ? { backgroundColor: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }
+                : { backgroundColor: 'var(--surface-2)', color: 'var(--text-3)', border: '1px solid var(--border)', opacity: 0.5, cursor: 'not-allowed' }
+            }
+            title="현재 보스·난이도·파티인원·도핑을 즐겨찾기로 저장"
           >
-            ★ 즐겨찾기
+            {savingSingleFav ? '저장 중...' : '★ 즐겨찾기 등록'}
           </button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -653,19 +588,13 @@ export default function BossPage() {
           )}
 
           {charError && <p className="text-xs" style={{ color: 'var(--red)' }}>{charError}</p>}
-          <div className="flex justify-end gap-2">
-            {form.bossName && form.difficulty && (
-              <button
-                type="button"
-                onClick={handleSaveSingleBossFav}
-                disabled={savingSingleFav || !selectedCharId}
-                className="text-xs px-2.5 py-1.5 rounded-lg font-medium"
-                style={{ backgroundColor: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }}
-              >
-                {savingSingleFav ? '저장 중...' : '⭐ 즐겨찾기'}
-              </button>
-            )}
-            <Button type="submit" loading={submitting} disabled={!form.bossName || !form.difficulty || characters.length === 0}>
+          {isDopingInsufficientMeso && (
+            <div className="text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: 'rgba(220,38,38,0.08)', color: 'var(--red)', border: '1px solid rgba(220,38,38,0.2)' }}>
+              ⚠️ 현재 보유 메소({formatMeso(user?.totalMeso ?? 0)})보다 도핑 비용({formatMeso(dopingTotal)})이 많습니다. 인벤토리/창고 메소를 먼저 업데이트해주세요.
+            </div>
+          )}
+          <div className="flex justify-end">
+            <Button type="submit" loading={submitting} disabled={!form.bossName || !form.difficulty || characters.length === 0 || isDopingInsufficientMeso}>
               기록하기
             </Button>
           </div>
@@ -689,14 +618,6 @@ export default function BossPage() {
             >
               주간 {charWeeklyCount}/{WEEKLY_BOSS_MAX_PER_CHAR}
             </span>
-            <button
-              onClick={() => handleSaveCharFavs()}
-              disabled={savingFavsCharId === selectedCharId}
-              className="text-xs px-2.5 py-1.5 rounded-lg font-medium transition-all ml-auto shrink-0"
-              style={{ backgroundColor: 'rgba(251,191,36,0.1)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }}
-            >
-              {savingFavsCharId === selectedCharId ? '저장 중...' : '⭐ 즐겨찾기 저장'}
-            </button>
           </div>
         )}
 
@@ -809,55 +730,6 @@ export default function BossPage() {
         )}
       </div>
 
-      {/* ── ★ 즐겨찾기 팝업 ── */}
-      {showFavPopup && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ backgroundColor: 'rgba(0,0,0,0.75)' }}
-          onClick={(e) => { if (e.target === e.currentTarget) setShowFavPopup(false) }}
-        >
-          <div
-            className="rounded-2xl p-5 w-full max-w-sm space-y-3"
-            style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-md)' }}
-          >
-            <div className="flex items-center justify-between">
-              <h2 className="font-bold text-base" style={{ color: 'var(--text)' }}>⭐ 즐겨찾기 빠른 입력</h2>
-              <button onClick={() => setShowFavPopup(false)} className="w-7 h-7 flex items-center justify-center rounded-lg text-sm" style={{ color: 'var(--text-3)', backgroundColor: 'var(--surface-2)' }}>✕</button>
-            </div>
-
-            {bossFavorites.length === 0 ? (
-              <p className="text-sm text-center py-4" style={{ color: 'var(--text-3)' }}>등록된 즐겨찾기가 없습니다.</p>
-            ) : (
-              <>
-                <Button
-                  onClick={handleBulkRecord}
-                  loading={submitting}
-                  disabled={!selectedCharId}
-                  className="w-full"
-                >
-                  이번 주 전체 입력 ({bossFavorites.filter(f => f.bossName && f.difficulty).length}개)
-                </Button>
-                <div className="space-y-1.5">
-                  {bossFavorites.map((fav) => (
-                    <button
-                      key={fav.id}
-                      onClick={() => { applyFavorite(fav); setShowFavPopup(false) }}
-                      className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-all"
-                      style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)' }}
-                    >
-                      <span className="font-medium" style={{ color: 'var(--text)' }}>{fav.label}</span>
-                      <span className="text-xs" style={{ color: 'var(--text-3)' }}>
-                        {fav.bossName}
-                        {fav.difficulty && ` · ${difficultyLabel(fav.difficulty)}`}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { ledgerApi } from '../api/ledger'
+import { authApi } from '../api/auth'
 import { charactersApi } from '../api/characters'
 import { useAuth } from '../contexts/AuthContext'
 import type { LedgerEntry, MapleCharacter } from '../types'
@@ -31,6 +32,23 @@ export default function AuctionPage() {
   const [expenseSubmitting, setExpenseSubmitting] = useState(false)
 
   const [success, setSuccess] = useState<string | null>(null)
+
+  const [solPriceInput, setSolPriceInput] = useState(String(user?.solErdaFragmentPrice ?? 0))
+  const [solPriceSubmitting, setSolPriceSubmitting] = useState(false)
+
+  const handleSolPriceUpdate = async () => {
+    const price = Number(solPriceInput)
+    if (isNaN(price) || price < 0) return
+    setSolPriceSubmitting(true)
+    try {
+      await authApi.updateSolErdaPrice(price)
+      await refreshUser()
+      setSuccess('솔 에르다 조각 단가가 저장되었습니다.')
+      setTimeout(() => setSuccess(null), 2500)
+    } finally {
+      setSolPriceSubmitting(false)
+    }
+  }
 
   const fetchEntries = useCallback(async (charId: 'all' | string) => {
     const params = charId !== 'all' ? { characterId: Number(charId) } : undefined
@@ -147,6 +165,12 @@ export default function AuctionPage() {
   const incomeEntries = auctionEntries.filter((e) => e.type === 'income')
   const expenseEntries = auctionEntries.filter((e) => e.type === 'expense')
 
+  const isExpenseInsufficientMeso = !!(
+    expenseForm.buyAmount &&
+    Number(expenseForm.buyAmount) > 0 &&
+    Number(expenseForm.buyAmount) > (user?.totalMeso ?? 0)
+  )
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -258,11 +282,33 @@ export default function AuctionPage() {
                     </p>
                   </div>
                 )}
-                {solErdaUnitPrice === 0 && (
-                  <p className="text-xs" style={{ color: 'var(--text-3)' }}>
-                    💡 <a href="/settings" className="underline" style={{ color: 'var(--primary)' }}>설정</a>에서 솔 에르다 조각 단가를 입력하면 자동 계산됩니다.
-                  </p>
-                )}
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>🔮 조각 단가 설정</p>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="number"
+                      className="form-field text-sm flex-1"
+                      placeholder="예: 1200"
+                      value={solPriceInput}
+                      onChange={(e) => setSolPriceInput(e.target.value)}
+                      min={0}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSolPriceUpdate}
+                      disabled={solPriceSubmitting}
+                      className="text-xs px-3 py-1.5 rounded-lg font-semibold shrink-0"
+                      style={{ backgroundColor: 'rgba(167,139,250,0.15)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.3)' }}
+                    >
+                      {solPriceSubmitting ? '저장 중...' : '저장'}
+                    </button>
+                  </div>
+                  {Number(solPriceInput) > 0 && (
+                    <p className="text-xs pl-1" style={{ color: 'var(--text-3)' }}>
+                      현재: {Number(solPriceInput).toLocaleString()} 메소/개
+                    </p>
+                  )}
+                </div>
               </>
             ) : (
               <>
@@ -369,9 +415,14 @@ export default function AuctionPage() {
               {toKoreanAmount(expenseForm.buyAmount) && (
                 <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-3)' }}>{toKoreanAmount(expenseForm.buyAmount)}</p>
               )}
+              {isExpenseInsufficientMeso && (
+                <div className="text-xs px-3 py-2 rounded-lg mt-1.5" style={{ backgroundColor: 'rgba(220,38,38,0.08)', color: 'var(--red)', border: '1px solid rgba(220,38,38,0.2)' }}>
+                  ⚠️ 현재 보유 메소({formatMeso(user?.totalMeso ?? 0)})보다 지출이 많습니다. 인벤토리/창고 메소를 먼저 업데이트해주세요.
+                </div>
+              )}
             </div>
             <div className="flex justify-end">
-              <Button type="submit" loading={expenseSubmitting}>기록하기</Button>
+              <Button type="submit" loading={expenseSubmitting} disabled={isExpenseInsufficientMeso}>기록하기</Button>
             </div>
           </form>
         </Card>

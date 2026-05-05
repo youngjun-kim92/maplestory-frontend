@@ -59,8 +59,13 @@ export default function CharactersPage() {
   const removeBulkRow = (i: number) =>
     setBulkRows((p) => p.filter((_, idx) => idx !== i))
 
-  const updateBulkRow = (i: number, field: string, value: string | boolean) =>
-    setBulkRows((p) => p.map((r, idx) => idx === i ? { ...r, [field]: value } : r))
+  const updateBulkRow = (i: number, field: string, value: string | boolean) => {
+    if (field === 'isMain' && value === true) {
+      setBulkRows((p) => p.map((r, idx) => ({ ...r, isMain: idx === i })))
+    } else {
+      setBulkRows((p) => p.map((r, idx) => idx === i ? { ...r, [field]: value } : r))
+    }
+  }
 
   const handleBulkSubmit = async (e: { preventDefault(): void }) => {
     e.preventDefault()

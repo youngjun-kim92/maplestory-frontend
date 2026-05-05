@@ -1,6 +1,6 @@
 # 페이지별 기능 상세
 
-> 최종 업데이트: 2026-05-05
+> 최종 업데이트: 2026-05-05 (항목 1~5 반영)
 
 ---
 
@@ -107,18 +107,21 @@
 1. 보스 선택 → 난이도 선택
 2. 파티 인원 선택, 처치 날짜
 3. 도핑 선택: **체크박스** (복수 선택 가능) — `GET /api/boss/doping/list` 목록 사용
+   - **선택된 도핑 합계 > 보유 총 메소**이면 기록하기 버튼 비활성화 + 경고 메시지
+   - 기록 성공 후 도핑 선택 유지 (보스 변경 시에만 자동 초기화)
 4. 결정석 가격 미리보기 (주간 보스 여부 배지 포함)
-5. 보스+난이도 선택 시 "⭐ 즐겨찾기" 버튼 노출 → `POST /api/favorites` (기록하기 버튼 옆)
+5. 폼 헤더 우측 "★ 즐겨찾기 등록" 버튼: 현재 보스·난이도·파티인원·도핑을 저장 → `POST /api/favorites`
+   - 보스/난이도 미선택 시 비활성화(회색)
 6. "기록하기" → `POST /api/boss/kill`
    - 409 응답: 중복 처치 → "이미 이번 주에 처치한 보스입니다." 토스트(빨강)
    - 409 응답: 주간 한도 초과 → "이번 주 주간 보스 12개를 모두 처치했습니다." 토스트(노랑)
 
 **난이도 한글 표시**: Easy→이지, Normal→노말, Hard→하드, Chaos→카오스, Extreme→익스트림
 
-### 즐겨찾기 팝업
-- "★ 즐겨찾기" 버튼 → 즐겨찾기 팝업 오픈 (페이지 상단 `selectedCharId` 사용)
-- "이번 주 전체 입력" 버튼: 즐겨찾기 목록 전체 일괄 POST
-- 즐겨찾기 클릭 → 해당 보스+난이도 폼에 적용, 저장된 도핑 자동 체크
+### 즐겨찾기 섹션
+- 저장된 즐겨찾기 카드 그리드 표시
+- 카드 클릭 → 해당 보스+난이도 폼에 적용, 저장된 도핑 자동 체크
+- 카드 호버 시 "삭제" 버튼 표시 → `DELETE /api/favorites/{id}`
 
 ### 이번 주 처치 목록
 - `GET /api/boss/weekly?characterId={id}` (선택된 캐릭터 기준)
@@ -126,7 +129,6 @@
 - 각 행에 **수정(✏️)** / **삭제(✕)** 버튼:
   - 수정: 파티 인원 인라인 select → "저장" → `PATCH /api/boss/kills/{id}` `{ partySize }`
   - 삭제: confirm → `DELETE /api/boss/kills/{id}`
-- 목록 상단 배지: 이 캐릭터 주간 보스 X/12 + "⭐ 즐겨찾기 저장" 버튼
 
 ---
 
@@ -168,6 +170,7 @@
 ### 메소 강화 지출 입력
 - **카테고리**: 큐브 / 스타포스 / 추가옵션 — 라디오 pill 버튼
 - 금액 입력 + QuickAmountButtons + 한국어 금액 표시 (toKoreanAmount)
+- **입력 금액 > 보유 총 메소**이면 기록하기 버튼 비활성화 + 경고 메시지 (인벤토리/창고 업데이트 안내)
 - 날짜 + 메모
 - 제출 → `POST /api/ledger` (type: `expense`, category: `cube`/`starforce`/`additional_option`, characterId: 페이지 상단 선택)
 
@@ -200,12 +203,14 @@
 **솔 에르다 조각 판매 모드:**
 - 수량 입력 + 빠른 버튼 (+10/+30/+50/+100)
 - `수량 × user.solErdaFragmentPrice × (1 - feeRate)` 실수령 자동 계산
+- **조각 단가 설정 인라인 폼**: 수량 입력 하단에 단가 입력 + 저장 버튼 → `PUT /api/auth/sol-erda-price?price={금액}`
 - 제출 → `POST /api/ledger` (type: `income`, category: `sol_erda`, solErdaFragments: 수량)
 
 ### 지출 탭 (경매장 구매)
 
 - 아이템명 (선택) + 날짜
 - 구매 금액 입력 + QuickAmountButtons + 한국어 금액 표시
+- **입력 금액 > 보유 총 메소**이면 기록하기 버튼 비활성화 + 경고 메시지
 - 제출 → `POST /api/ledger` (type: `expense`, category: `auction`)
 
 ### 이번 주 경매장 내역
@@ -221,7 +226,7 @@
 - `GET /api/characters` (본캐 먼저, 이후 등록순)
 - 등록: name(필수), jobClass, level, isMain, initialInvestment, solErdaFragments
 - 수정: `PUT /api/characters/{id}`, 삭제: `DELETE /api/characters/{id}`
-- 일괄 등록 모달: 캐릭터 여러 명 한 번에 등록
+- 일괄 등록 모달: 캐릭터 여러 명 한 번에 등록. **메인 캐릭터는 전체 목록에서 하나만 선택 가능** (isMain 체크 시 다른 행 자동 해제)
 
 ### 손익분기점 (ROI)
 - `GET /api/characters/{id}/roi`
@@ -235,9 +240,10 @@
 
 | 기능 | API | 비고 |
 |:---|:---|:---|
-| 솔 에르다 조각 낱개 가격 | `PUT /api/auth/sol-erda-price?price={금액}` | Query param, 빈 body |
 | 현재 보유 메소 | `PUT /api/auth/meso-balance` | `{ inventoryMeso, storageMeso }` |
 | MVP 등급 설정 | `PUT /api/auth/mvp-grade` | 경매장 수수료 계산에 사용 |
+
+- 솔 에르다 조각 단가 설정은 경매장 페이지 솔 에르다 탭에서 인라인으로 설정 (`PUT /api/auth/sol-erda-price?price={금액}`)
 
 - 메소 잔액: QuickAmountButtons + toKoreanAmount 표시
 - 저장 성공/실패 여부 메시지 표시

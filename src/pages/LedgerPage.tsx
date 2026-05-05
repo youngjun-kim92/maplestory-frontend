@@ -102,6 +102,8 @@ export default function LedgerPage() {
     (e) => e.type === 'expense' && !EXCLUDED_CATEGORIES.has(e.category)
   ) ?? []
 
+  const isInsufficientMeso = !!(form.amount && Number(form.amount) > 0 && Number(form.amount) > (user?.totalMeso ?? 0))
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -255,6 +257,11 @@ export default function LedgerPage() {
             {toKoreanAmount(form.amount) && (
               <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-3)' }}>{toKoreanAmount(form.amount)}</p>
             )}
+            {isInsufficientMeso && (
+              <div className="text-xs px-3 py-2 rounded-lg mt-1.5" style={{ backgroundColor: 'rgba(220,38,38,0.08)', color: 'var(--red)', border: '1px solid rgba(220,38,38,0.2)' }}>
+                ⚠️ 현재 보유 메소({formatMeso(user?.totalMeso ?? 0)})보다 지출이 많습니다. 인벤토리/창고 메소를 먼저 업데이트해주세요.
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Input
@@ -271,7 +278,7 @@ export default function LedgerPage() {
             />
           </div>
           <div className="flex justify-end">
-            <Button type="submit" loading={submitting}>기록하기</Button>
+            <Button type="submit" loading={submitting} disabled={isInsufficientMeso}>기록하기</Button>
           </div>
         </form>
       </Card>
