@@ -7,7 +7,7 @@ import { bossApi } from '../api/boss'
 import { charactersApi } from '../api/characters'
 import { useAuth } from '../contexts/AuthContext'
 import type {
-  BossDrop, CharacterStatsResponse, EntryCategory, EntryType, LedgerEntry, LedgerStat,
+  BossDrop, BossKill, CharacterStatsResponse, EntryCategory, EntryType, LedgerEntry, LedgerStat,
   MapleCharacter, WeeklyLedger, WeeklySummary,
 } from '../types'
 import {
@@ -85,6 +85,7 @@ export default function DashboardPage() {
 
   const [drops, setDrops] = useState<BossDrop[]>([])
   const [dropsLoading, setDropsLoading] = useState(true)
+  const [weeklyBossKills, setWeeklyBossKills] = useState<BossKill[]>([])
   const [sellingId, setSellingId] = useState<number | null>(null)
   const [sellForm, setSellForm] = useState({ saleAmount: '', saleDate: toDateString(), isPcCafe: false })
   const [sellSubmitting, setSellSubmitting] = useState(false)
@@ -152,6 +153,11 @@ export default function DashboardPage() {
   useEffect(() => { fetchLedger() }, [fetchLedger])
   useEffect(() => { fetchAllWeeks() }, [fetchAllWeeks])
   useEffect(() => { fetchDrops() }, [fetchDrops])
+  useEffect(() => {
+    bossApi.getWeeklyBossKills({ week: weekStartStr })
+      .then(r => setWeeklyBossKills(r.data))
+      .catch(() => setWeeklyBossKills([]))
+  }, [weekStartStr])
   useEffect(() => {
     charactersApi.getCharacters().then((r) => setCharacters(r.data))
   }, [])
@@ -308,18 +314,47 @@ export default function DashboardPage() {
     return map
   }, [entries])
 
-  // filteredEntries with grouped dopings removed (they show as sub-rows under boss)
-  const displayEntries = useMemo(() => {
-    const groupedDopingIds = new Set<number>()
-    for (const e of filteredEntries) {
-      if (e.category === 'boss' && e.type === 'income' && e.bossKillId != null) {
-        for (const d of dopingsByKillId.get(e.bossKillId) ?? []) {
-          groupedDopingIds.add(d.id)
-        }
+  const killMap = useMemo(
+    () => new Map(weeklyBossKills.map(k => [k.id, k])),
+    [weeklyBossKills]
+  )
+
+  // Remove all doping entries with bossKillId (they appear as sub-rows)
+  const displayEntries = useMemo(
+    () => filteredEntries.filter(e => !(e.category === 'doping' && e.bossKillId != null)),
+    [filteredEntries]
+  )
+
+  // Unified display rows: boss_group, kill_group (synthetic), or regular entry
+  const displayRows = useMemo(() => {
+    type DisplayRow =
+      | { type: 'entry'; entry: LedgerEntry }
+      | { type: 'boss_group'; bossEntry: LedgerEntry; dopings: LedgerEntry[] }
+      | { type: 'kill_group'; kill: BossKill; dopings: LedgerEntry[] }
+
+    const rows: DisplayRow[] = []
+    const renderedKillIds = new Set<number>()
+
+    for (const entry of displayEntries) {
+      if (entry.category === 'boss' && entry.type === 'income' && entry.bossKillId != null) {
+        const dopings = dopingsByKillId.get(entry.bossKillId) ?? []
+        renderedKillIds.add(entry.bossKillId)
+        rows.push({ type: 'boss_group', bossEntry: entry, dopings })
+      } else {
+        rows.push({ type: 'entry', entry })
       }
     }
-    return filteredEntries.filter(e => !groupedDopingIds.has(e.id))
-  }, [filteredEntries, dopingsByKillId])
+
+    // Synthetic rows for doping groups not linked to a boss income entry
+    for (const [killId, dopings] of dopingsByKillId) {
+      if (!renderedKillIds.has(killId)) {
+        const kill = killMap.get(killId)
+        if (kill) rows.push({ type: 'kill_group', kill, dopings })
+      }
+    }
+
+    return rows
+  }, [displayEntries, dopingsByKillId, killMap])
 
   const safeNum = (v: number | null | undefined) => (v == null || isNaN(v) ? 0 : v)
 
@@ -777,27 +812,37 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {displayEntries.map((entry, i) => {
-                    if (entry.category === 'boss' && entry.type === 'income' && entry.bossKillId != null) {
-                      const dopings = dopingsByKillId.get(entry.bossKillId) ?? []
+                  {displayRows.map((row, i) => {
+                    const isLast = i === displayRows.length - 1
+                    if (row.type === 'boss_group') {
                       return (
                         <BossGroupRows
-                          key={entry.id}
-                          bossEntry={entry}
-                          dopings={dopings}
-                          onDelete={() => handleDeleteEntry(entry.id)}
-                          onEdit={() => openEditEntry(entry)}
-                          isLast={i === displayEntries.length - 1}
+                          key={row.bossEntry.id}
+                          bossEntry={row.bossEntry}
+                          dopings={row.dopings}
+                          onDelete={() => handleDeleteEntry(row.bossEntry.id)}
+                          onEdit={() => openEditEntry(row.bossEntry)}
+                          isLast={isLast}
+                        />
+                      )
+                    }
+                    if (row.type === 'kill_group') {
+                      return (
+                        <KillGroupRows
+                          key={`kill-${row.kill.id}`}
+                          kill={row.kill}
+                          dopings={row.dopings}
+                          isLast={isLast}
                         />
                       )
                     }
                     return (
                       <EntryTableRow
-                        key={entry.id}
-                        entry={entry}
-                        onDelete={() => handleDeleteEntry(entry.id)}
-                        onEdit={() => openEditEntry(entry)}
-                        isLast={i === displayEntries.length - 1}
+                        key={row.entry.id}
+                        entry={row.entry}
+                        onDelete={() => handleDeleteEntry(row.entry.id)}
+                        onEdit={() => openEditEntry(row.entry)}
+                        isLast={isLast}
                       />
                     )
                   })}
@@ -1547,6 +1592,92 @@ function BossGroupRows({
       ))}
 
       {hasDopings && (
+        <tr style={{ borderBottom: isLast ? 'none' : '1px solid var(--border)' }}>
+          <td />
+          <td className="px-3 py-1.5 text-right" colSpan={2}>
+            <span className="text-xs" style={{ color: 'var(--text-3)' }}>
+              보스 순수익:{' '}
+              <span className="font-semibold" style={{ color: net >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                {net >= 0 ? '+' : ''}{formatMeso(net)}
+              </span>
+            </span>
+          </td>
+          <td />
+          <td />
+        </tr>
+      )}
+    </>
+  )
+}
+
+function KillGroupRows({
+  kill,
+  dopings,
+  isLast,
+}: {
+  kill: BossKill
+  dopings: LedgerEntry[]
+  isLast: boolean
+}) {
+  const dopingTotal = dopings.reduce((s, d) => s + d.amount, 0)
+  const bossIncome = kill.income ?? kill.crystalPrice
+  const net = bossIncome - dopingTotal
+  const bossLabel = `${kill.bossName} ${difficultyLabel(kill.difficulty)}`
+
+  return (
+    <>
+      <tr
+        className="table-row"
+        style={{ borderBottom: dopings.length > 0 ? '1px solid rgba(240,246,252,0.08)' : (isLast ? 'none' : '1px solid var(--border)') }}
+      >
+        <td className="px-3 py-2.5">
+          <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ color: 'var(--green)', backgroundColor: 'rgba(74,222,128,0.1)' }}>수입</span>
+        </td>
+        <td className="px-3 py-2.5">
+          <div className="flex items-center gap-2">
+            <span className="text-base leading-none shrink-0">⚔️</span>
+            <div className="min-w-0">
+              <p className="text-sm font-medium truncate" style={{ color: 'var(--text)' }}>{bossLabel} 결정석</p>
+              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: 'rgba(249,115,22,0.12)', color: 'var(--primary)' }}>보스</span>
+                <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: 'rgba(168,85,247,0.12)', color: '#a855f7' }}>
+                  도핑 {dopings.length}개
+                </span>
+              </div>
+            </div>
+          </div>
+        </td>
+        <td className="px-3 py-2.5 text-right whitespace-nowrap">
+          <span className="font-bold text-sm" style={{ color: 'var(--green)' }}>+{formatMeso(bossIncome)}</span>
+        </td>
+        <td className="px-3 py-2.5 text-right">
+          <span style={{ color: 'var(--text-3)', fontSize: '10px' }}>—</span>
+        </td>
+        <td className="px-2 py-2.5" />
+      </tr>
+
+      {dopings.map((d) => (
+        <tr key={d.id} style={{ borderBottom: '1px solid rgba(240,246,252,0.04)', backgroundColor: 'rgba(168,85,247,0.04)' }}>
+          <td className="px-3 py-1.5">
+            <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ color: 'var(--red)', backgroundColor: 'rgba(248,113,113,0.1)' }}>지출</span>
+          </td>
+          <td className="px-3 py-1.5">
+            <div className="flex items-center gap-2 pl-3">
+              <span className="text-sm leading-none shrink-0">└ 💊</span>
+              <span className="text-xs truncate" style={{ color: 'var(--text-3)' }}>{d.description || '도핑'}</span>
+            </div>
+          </td>
+          <td className="px-3 py-1.5 text-right">
+            <span className="text-xs font-semibold" style={{ color: 'var(--red)' }}>-{formatMeso(d.amount)}</span>
+          </td>
+          <td className="px-3 py-1.5 text-right">
+            <span style={{ color: 'var(--text-3)', fontSize: '10px' }}>—</span>
+          </td>
+          <td />
+        </tr>
+      ))}
+
+      {dopings.length > 0 && (
         <tr style={{ borderBottom: isLast ? 'none' : '1px solid var(--border)' }}>
           <td />
           <td className="px-3 py-1.5 text-right" colSpan={2}>

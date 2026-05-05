@@ -13,7 +13,7 @@ const NAV_ITEMS: NavItem[] = [
   { type: 'group', label: '기록하기' },
   { type: 'link',  to: '/boss',       label: '보스 처치', icon: '⚔️', desc: '보스 킬 기록·결정석 수익', indent: true },
   { type: 'link',  to: '/hunting',    label: '사냥',      icon: '🌲', desc: '사냥 세션·시간당 수익', indent: true },
-  { type: 'link',  to: '/ledger',     label: '메소 강화', icon: '🔩', desc: '큐브·스타포스·추가옵션 기록', indent: true },
+  { type: 'link',  to: '/ledger',     label: '메소 강화', icon: '🔩', desc: '큐브·스타포스·추가옵션 기록. 수입은 대시보드에서 확인하세요.', indent: true },
   { type: 'link',  to: '/auction',    label: '경매장',    icon: '🏪', desc: '경매장 수입·지출 기록', indent: true },
   { type: 'link',  to: '/characters', label: '캐릭터',    icon: '🧙', desc: '캐릭터 관리·손익분기점' },
   { type: 'link',  to: '/settings',   label: '설정',      icon: '⚙️', desc: 'MVP 등급·솔에르다·메소' },
@@ -150,8 +150,8 @@ export default function Layout() {
                   <span className="text-xl w-6 text-center shrink-0 leading-none">{item.icon}</span>
                   <span className="hidden lg:block">{item.label}</span>
                 </NavLink>
-                {/* 아이콘만 보이는 너비(md~lg)에서 hover 툴팁 */}
-                <div className="hidden md:block lg:hidden absolute left-full top-1/2 -translate-y-1/2 ml-2 z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                {/* 사이드바 hover 툴팁 (md 이상 전체 너비) */}
+                <div className="hidden md:block absolute left-full top-1/2 -translate-y-1/2 ml-2 z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
                   <div
                     className="px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap"
                     style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border-2)', color: 'var(--text)', boxShadow: 'var(--shadow)' }}

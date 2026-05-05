@@ -46,7 +46,11 @@ export default function LedgerPage() {
   }, [])
 
   useEffect(() => {
-    charactersApi.getCharacters().then((r) => setCharacters(r.data))
+    charactersApi.getCharacters().then((r) => {
+      setCharacters(r.data)
+      const main = r.data.find((c) => c.isMain) ?? r.data[0]
+      if (main) setSelectedCharId(String(main.id))
+    })
   }, [])
 
   useEffect(() => {
@@ -119,7 +123,7 @@ export default function LedgerPage() {
           <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>🔩 메소 강화</h1>
           {ledger && (
             <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>
-              📅 {ledger.weekStart} 주 (목요일 기준) · 수입은 대시보드에서 확인하세요
+              📅 {ledger.weekStart} 주 (목요일 기준)
             </p>
           )}
         </div>

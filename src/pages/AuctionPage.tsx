@@ -57,7 +57,11 @@ export default function AuctionPage() {
   }, [])
 
   useEffect(() => {
-    charactersApi.getCharacters().then((r) => setCharacters(r.data))
+    charactersApi.getCharacters().then((r) => {
+      setCharacters(r.data)
+      const main = r.data.find((c) => c.isMain) ?? r.data[0]
+      if (main) setSelectedCharId(String(main.id))
+    })
   }, [])
 
   useEffect(() => {

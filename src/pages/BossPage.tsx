@@ -4,13 +4,20 @@ import { charactersApi } from '../api/characters'
 import { favoritesApi } from '../api/favorites'
 import type { FavoriteItem } from '../api/favorites'
 import { useAuth } from '../contexts/AuthContext'
-import type { BossKill, BossMaster, DopingItem, MapleCharacter, ResetType } from '../types'
+import type { BossDropItem, BossKill, BossMaster, DopingItem, MapleCharacter, ResetType } from '../types'
 import { formatMeso, toDateString, difficultyLabel } from '../utils/format'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Select from '../components/ui/Select'
 import Input from '../components/ui/Input'
 import Toast from '../components/ui/Toast'
+
+const DROP_CATEGORY_LABELS: Record<string, string> = {
+  dark_accessory:    '칠흑 장신구',
+  radiant_accessory: '광휘 장신구',
+  dawn_accessory:    '여명 장신구',
+  other:             '기타',
+}
 
 const RESET_TYPE_TABS: { key: ResetType | 'all'; label: string }[] = [
   { key: 'all', label: '전체' },
@@ -48,6 +55,8 @@ export default function BossPage() {
   const [toast, setToast] = useState<{ message: string; type: 'error' | 'warning' | 'success' } | null>(null)
 
   const [selectedDopings, setSelectedDopings] = useState<number[]>([])
+  const [dropItems, setDropItems] = useState<BossDropItem[]>([])
+  const [checkedDrops, setCheckedDrops] = useState<Set<string>>(new Set())
   const [editingKillId, setEditingKillId] = useState<number | null>(null)
   const [editPartySize, setEditPartySize] = useState(1)
 
@@ -104,6 +113,17 @@ export default function BossPage() {
     }
   }, [selectedCharId, fetchFavorites, fetchKills, fetchAllKills])
 
+  useEffect(() => {
+    if (!form.bossName || !form.difficulty) {
+      setDropItems([])
+      setCheckedDrops(new Set())
+      return
+    }
+    bossApi.getDropItems(form.bossName, form.difficulty)
+      .then(r => setDropItems(r.data))
+      .catch(() => setDropItems([]))
+  }, [form.bossName, form.difficulty])
+
   const filteredBossList = form.resetFilter === 'all'
     ? bossList
     : bossList.filter((b) => b.resetType === form.resetFilter)
@@ -158,6 +178,7 @@ export default function BossPage() {
     const diffs = filteredBossList.filter((b) => b.bossName === name).map((b) => b.difficulty)
     setForm((p) => ({ ...p, bossName: name, difficulty: diffs[0] || '', partySize: 1 }))
     setSelectedDopings([])
+    setCheckedDrops(new Set())
   }
 
   const handleResetFilterChange = (filter: ResetType | 'all') => {
@@ -179,7 +200,7 @@ export default function BossPage() {
             .map((item) => ({ category: 'doping', amount: item.price, description: item.name }))
         : []
 
-      await bossApi.recordBossKill({
+      const killRes = await bossApi.recordBossKill({
         bossName: form.bossName,
         difficulty: form.difficulty,
         killDate: form.killDate,
@@ -187,6 +208,13 @@ export default function BossPage() {
         characterId: Number(selectedCharId),
         expenses,
       })
+
+      if (checkedDrops.size > 0) {
+        await Promise.all(
+          [...checkedDrops].map(itemName => bossApi.recordDrop(killRes.data.id, itemName))
+        )
+        setCheckedDrops(new Set())
+      }
 
       await fetchKills(selectedCharId)
       await fetchAllKills()
@@ -299,6 +327,9 @@ export default function BossPage() {
   const totalWeeklyRevenue = allWeeklyKills.reduce((s, k) => s + (k.income ?? k.crystalPrice), 0)
   const isWeeklyBossSelected = selectedBoss?.resetType === 'weekly'
   const maxPartySize = selectedBoss?.maxPartySize ?? 6
+  const alreadySaved = bossFavorites.some(
+    f => f.bossName === form.bossName && f.difficulty === form.difficulty && !!form.bossName && !!form.difficulty
+  )
 
   const dopingTotal = selectedDopings.reduce((sum, id) => {
     const item = dopingItems.find((x) => x.id === id)
@@ -436,13 +467,15 @@ export default function BossPage() {
             disabled={savingSingleFav || !form.bossName || !form.difficulty || !selectedCharId}
             className="text-xs px-2.5 py-1.5 rounded-lg font-medium"
             style={
-              form.bossName && form.difficulty && selectedCharId
-                ? { backgroundColor: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }
-                : { backgroundColor: 'var(--surface-2)', color: 'var(--text-3)', border: '1px solid var(--border)', opacity: 0.5, cursor: 'not-allowed' }
+              alreadySaved
+                ? { backgroundColor: 'rgba(251,191,36,0.25)', color: '#f59e0b', border: '1.5px solid rgba(251,191,36,0.5)' }
+                : form.bossName && form.difficulty && selectedCharId
+                  ? { backgroundColor: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }
+                  : { backgroundColor: 'var(--surface-2)', color: 'var(--text-3)', border: '1px solid var(--border)', opacity: 0.5, cursor: 'not-allowed' }
             }
             title="현재 보스·난이도·파티인원·도핑을 즐겨찾기로 저장"
           >
-            {savingSingleFav ? '저장 중...' : '★ 즐겨찾기 등록'}
+            {savingSingleFav ? '저장 중...' : alreadySaved ? '⭐ 즐겨찾기 저장됨' : '★ 즐겨찾기 등록'}
           </button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -579,6 +612,48 @@ export default function BossPage() {
                       <span>{item.name}</span>
                       <span className="text-xs ml-1" style={{ color: checked ? 'var(--primary)' : 'var(--text-3)' }}>
                         {item.price.toLocaleString()}
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {dropItems.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-2)' }}>
+                📦 드랍 물욕템 체크리스트
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {dropItems.map((item) => {
+                  const checked = checkedDrops.has(item.itemName)
+                  return (
+                    <label
+                      key={item.itemName}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg cursor-pointer select-none transition-all text-sm"
+                      style={
+                        checked
+                          ? { backgroundColor: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1.5px solid rgba(251,191,36,0.3)' }
+                          : { backgroundColor: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }
+                      }
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() =>
+                          setCheckedDrops((prev) => {
+                            const next = new Set(prev)
+                            if (next.has(item.itemName)) next.delete(item.itemName)
+                            else next.add(item.itemName)
+                            return next
+                          })
+                        }
+                        className="sr-only"
+                      />
+                      <span>{item.itemName}</span>
+                      <span className="text-xs ml-1" style={{ color: checked ? '#fbbf24' : 'var(--text-3)' }}>
+                        {DROP_CATEGORY_LABELS[item.itemCategory] ?? item.itemCategory}
                       </span>
                     </label>
                   )
