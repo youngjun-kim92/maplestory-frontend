@@ -7,11 +7,15 @@ const client = axios.create({
   },
 })
 
-// 요청 인터셉터: JWT 토큰 자동 첨부
+// 요청 인터셉터: JWT 토큰 + 활성 서버 프로필 자동 첨부
 client.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
+  }
+  const activeServerId = localStorage.getItem('activeServerId')
+  if (activeServerId && !config.headers['X-Server-Profile-Id']) {
+    config.headers['X-Server-Profile-Id'] = activeServerId
   }
   return config
 })

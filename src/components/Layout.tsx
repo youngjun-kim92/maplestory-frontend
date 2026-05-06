@@ -1,24 +1,24 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
 import { charactersApi } from '../api/characters'
 
 type NavItem =
-  | { type: 'link'; to: string; label: string; icon: string; desc: string; indent?: boolean; hideMobile?: boolean }
+  | { type: 'link'; to: string; label: string; icon: string; indent?: boolean; hideMobile?: boolean }
   | { type: 'group'; label: string }
 
 const NAV_ITEMS: NavItem[] = [
-  { type: 'link',  to: '/dashboard',  label: '대시보드',  icon: '📊', desc: '주간 수익·지출·통계 현황' },
+  { type: 'link',  to: '/dashboard',  label: '대시보드',  icon: '📊' },
   { type: 'group', label: '기록하기' },
-  { type: 'link',  to: '/boss',       label: '보스 처치', icon: '⚔️', desc: '보스 킬 기록·결정석 수익', indent: true },
-  { type: 'link',  to: '/hunting',    label: '사냥',      icon: '🌲', desc: '사냥 세션·시간당 수익', indent: true },
-  { type: 'link',  to: '/ledger',     label: '메소 강화', icon: '🔩', desc: '큐브·스타포스·추가옵션 기록. 수입은 대시보드에서 확인하세요.', indent: true },
-  { type: 'link',  to: '/auction',    label: '경매장',    icon: '🏪', desc: '경매장 수입·지출 기록', indent: true },
-  { type: 'link',  to: '/shop',       label: '상점',      icon: '🛒', desc: '직거래·구매 아이템 기록', indent: true },
-  { type: 'link',  to: '/characters', label: '캐릭터',    icon: '🧙', desc: '캐릭터 관리·손익분기점' },
-  { type: 'link',  to: '/settings',   label: '설정',      icon: '⚙️', desc: 'MVP 등급·솔에르다·메소' },
-  { type: 'link',  to: '/timer',      label: '타이머',    icon: '⏱️', desc: '사냥 시간 타이머·알람', hideMobile: true },
+  { type: 'link',  to: '/boss',       label: '보스 처치', icon: '⚔️', indent: true },
+  { type: 'link',  to: '/hunting',    label: '사냥',      icon: '🌲', indent: true },
+  { type: 'link',  to: '/ledger',     label: '메소 강화', icon: '🔩', indent: true },
+  { type: 'link',  to: '/auction',    label: '경매장',    icon: '🏪', indent: true },
+  { type: 'link',  to: '/shop',       label: '상점',      icon: '🛒', indent: true },
+  { type: 'link',  to: '/characters', label: '캐릭터',    icon: '🧙' },
+  { type: 'link',  to: '/settings',   label: '설정',      icon: '⚙️' },
+  { type: 'link',  to: '/timer',      label: '타이머',    icon: '⏱️', hideMobile: true },
 ]
 
 const navLinks = NAV_ITEMS.filter((n): n is Extract<NavItem, { type: 'link' }> => n.type === 'link' && !n.hideMobile)
@@ -33,18 +33,39 @@ const ONBOARDING_STEPS = [
   { icon: '⚙️', title: '설정', desc: '솔 에르다 조각 개당 가격과 현재 보유 메소를 설정해 주세요.' },
 ]
 
+const SERVER_MIGRATION_KEY = 'server_migrated_notice_v1'
+
+function ServerBoundary() {
+  return <Outlet />
+}
+
 export default function Layout() {
-  const { user, logout } = useAuth()
+  const { user, logout, activeServer, activeServerId, serverKey, setActiveServerId } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const { theme, toggleTheme } = useTheme()
   const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem(ONBOARDING_KEY))
   const [hasNoChars, setHasNoChars] = useState(false)
   const [charBannerDismissed, setCharBannerDismissed] = useState(false)
+  const [showServerMenu, setShowServerMenu] = useState(false)
+  const [showMigrationBanner, setShowMigrationBanner] = useState(
+    () => !localStorage.getItem(SERVER_MIGRATION_KEY) && (user?.serverProfiles?.length ?? 0) <= 1
+  )
+  const serverMenuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     charactersApi.getCharacters().then((r) => setHasNoChars(r.data.length === 0)).catch(() => {})
-  }, [location.pathname])
+  }, [location.pathname, serverKey])
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (serverMenuRef.current && !serverMenuRef.current.contains(e.target as Node)) {
+        setShowServerMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
   const [onboardingStep, setOnboardingStep] = useState(0)
 
   const closeOnboarding = () => {
@@ -99,6 +120,56 @@ export default function Layout() {
                 <span className="font-semibold" style={{ color: 'var(--primary)' }}>{user.nickname}</span>
               </div>
             )}
+
+            {/* 서버 선택기 */}
+            {user && user.serverProfiles?.length > 0 && (
+              <div className="relative" ref={serverMenuRef}>
+                <button
+                  onClick={() => setShowServerMenu((v) => !v)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all"
+                  style={{
+                    backgroundColor: 'var(--surface-2)',
+                    border: '1.5px solid var(--border)',
+                    color: 'var(--text)',
+                  }}
+                >
+                  <span>🗺️</span>
+                  <span className="hidden sm:inline">{activeServer?.worldDisplayName ?? '서버'}</span>
+                  <span className="text-xs" style={{ color: 'var(--text-3)' }}>▾</span>
+                </button>
+                {showServerMenu && (
+                  <div
+                    className="absolute right-0 top-full mt-1.5 z-50 rounded-xl overflow-hidden min-w-[140px]"
+                    style={{ backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', boxShadow: 'var(--shadow-md)' }}
+                  >
+                    {user.serverProfiles.map((sp) => (
+                      <button
+                        key={sp.id}
+                        onClick={() => { setActiveServerId(sp.id); setShowServerMenu(false) }}
+                        className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 transition-colors"
+                        style={{
+                          backgroundColor: sp.id === activeServerId ? 'var(--primary-dim)' : 'transparent',
+                          color: sp.id === activeServerId ? 'var(--primary)' : 'var(--text)',
+                        }}
+                      >
+                        {sp.id === activeServerId && <span className="text-xs">✓</span>}
+                        {sp.id !== activeServerId && <span className="text-xs opacity-0">✓</span>}
+                        {sp.worldDisplayName}
+                      </button>
+                    ))}
+                    <div style={{ borderTop: '1px solid var(--border)' }}>
+                      <button
+                        onClick={() => { navigate('/settings'); setShowServerMenu(false) }}
+                        className="w-full text-left px-3 py-2 text-xs transition-colors"
+                        style={{ color: 'var(--text-3)' }}
+                      >
+                        + 서버 관리
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             <button
               onClick={toggleTheme}
               title={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
@@ -128,7 +199,7 @@ export default function Layout() {
       <div className="flex flex-1">
         {/* Sidebar (desktop) */}
         <nav
-          className="hidden md:flex flex-col w-16 lg:w-[200px] py-3 gap-0.5 sticky top-14 h-[calc(100vh-3.5rem)] overflow-y-auto"
+          className="hidden md:flex flex-col w-16 lg:w-[200px] py-3 gap-0.5 sticky top-14 h-[calc(100vh-3.5rem)]"
           style={{ backgroundColor: 'var(--surface)', borderRight: '1.5px solid var(--border)' }}
         >
           {NAV_ITEMS.map((item, idx) => {
@@ -152,14 +223,13 @@ export default function Layout() {
                   <span className="text-xl w-6 text-center shrink-0 leading-none">{item.icon}</span>
                   <span className="hidden lg:block">{item.label}</span>
                 </NavLink>
-                {/* 사이드바 hover 툴팁 (접힌 상태 md only) */}
-                <div className="hidden md:block lg:hidden absolute left-full top-1/2 -translate-y-1/2 ml-2 z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                {/* 사이드바 hover 툴팁 (접힌 상태 md — 메뉴명만) */}
+                <div className="hidden md:block lg:hidden absolute left-full top-1/2 -translate-y-1/2 ml-2 z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity" style={{ width: 'max-content' }}>
                   <div
-                    className="px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap"
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold"
                     style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border-2)', color: 'var(--text)', boxShadow: 'var(--shadow)' }}
                   >
                     {item.label}
-                    <span className="block text-xs font-normal mt-0.5" style={{ color: 'var(--text-3)' }}>{item.desc}</span>
                   </div>
                 </div>
               </div>
@@ -173,6 +243,31 @@ export default function Layout() {
         {/* Main */}
         <main className="flex-1 p-2 md:p-3 pb-20 md:pb-6 overflow-auto">
           <div className="max-w-7xl mx-auto w-full fade-in">
+            {/* 서버 마이그레이션 안내 배너 (기존 사용자 1회) */}
+            {showMigrationBanner && (
+              <div
+                className="mb-3 flex items-center justify-between gap-3 px-4 py-3 rounded-xl"
+                style={{ backgroundColor: 'rgba(99,102,241,0.08)', border: '1.5px solid rgba(99,102,241,0.25)' }}
+              >
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: 'var(--primary)' }}>
+                    🗺️ 멀티 서버 기능이 추가되었습니다
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>
+                    기존 데이터는 스카니아 서버로 자동 이전되었습니다. 설정에서 다른 서버를 추가할 수 있어요.
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    localStorage.setItem(SERVER_MIGRATION_KEY, '1')
+                    setShowMigrationBanner(false)
+                  }}
+                  className="text-xs w-6 h-6 flex items-center justify-center rounded shrink-0"
+                  style={{ color: 'var(--text-3)' }}
+                >✕</button>
+              </div>
+            )}
+
             {/* 캐릭터 0개 배너 */}
             {hasNoChars && !charBannerDismissed && location.pathname !== '/characters' && (
               <div
@@ -206,7 +301,7 @@ export default function Layout() {
                 </div>
               </div>
             )}
-            <Outlet />
+            <ServerBoundary key={serverKey} />
           </div>
         </main>
       </div>

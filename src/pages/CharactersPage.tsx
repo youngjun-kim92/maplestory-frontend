@@ -31,7 +31,7 @@ const JOB_GROUPS = [
 ]
 
 export default function CharactersPage() {
-  const { refreshUser } = useAuth()
+  const { refreshUser, activeServer, activeServerId } = useAuth()
   const [characters, setCharacters] = useState<MapleCharacter[]>([])
   const [rois, setRois] = useState<Record<number, CharacterROI>>({})
   const [loading, setLoading] = useState(true)
@@ -99,7 +99,7 @@ export default function CharactersPage() {
     }
   }, [])
 
-  useEffect(() => { fetchCharacters() }, [fetchCharacters])
+  useEffect(() => { fetchCharacters() }, [fetchCharacters, activeServerId])
 
   const loadROI = async (charId: number) => {
     if (rois[charId]) return
@@ -199,7 +199,17 @@ export default function CharactersPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold font-heading" style={{ color: 'var(--text)' }}>🧙 캐릭터 관리</h1>
+        <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold font-heading" style={{ color: 'var(--text)' }}>🧙 캐릭터 관리</h1>
+            {activeServer && (
+              <span
+                className="px-2 py-0.5 rounded-full text-xs font-semibold"
+                style={{ backgroundColor: 'var(--primary-dim)', color: 'var(--primary)', border: '1px solid var(--primary-glow)' }}
+              >
+                🗺️ {activeServer.worldDisplayName}
+              </span>
+            )}
+          </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowBulkModal(true)}

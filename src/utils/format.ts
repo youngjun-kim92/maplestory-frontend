@@ -16,6 +16,31 @@ export function toDateString(date: Date = new Date()): string {
   return `${y}-${m}-${d}`
 }
 
+export function withCurrentTime(dateStr: string): string {
+  if (dateStr.includes('T')) return dateStr
+  const now = new Date()
+  const h = String(now.getHours()).padStart(2, '0')
+  const min = String(now.getMinutes()).padStart(2, '0')
+  return `${dateStr}T${h}:${min}`
+}
+
+export function toDateTimeString(date: Date = new Date()): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  const h = String(date.getHours()).padStart(2, '0')
+  const min = String(date.getMinutes()).padStart(2, '0')
+  return `${y}-${m}-${d}T${h}:${min}`
+}
+
+export function formatDateTime(dateStr: string): string {
+  if (!dateStr) return ''
+  const d = new Date(dateStr.includes('T') ? dateStr : dateStr + 'T00:00:00')
+  const h = String(d.getHours()).padStart(2, '0')
+  const min = String(d.getMinutes()).padStart(2, '0')
+  return `${d.getMonth() + 1}/${d.getDate()} ${h}:${min}`
+}
+
 export function formatDate(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00')
   return `${d.getMonth() + 1}/${d.getDate()}`

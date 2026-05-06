@@ -5,7 +5,7 @@ import { favoritesApi } from '../api/favorites'
 import type { FavoriteItem } from '../api/favorites'
 import { useAuth } from '../contexts/AuthContext'
 import type { BossDropItem, BossKill, BossMaster, DopingItem, MapleCharacter, ResetType } from '../types'
-import { formatMeso, toDateString, difficultyLabel } from '../utils/format'
+import { formatMeso, toDateString, withCurrentTime, formatDateTime, difficultyLabel } from '../utils/format'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Select from '../components/ui/Select'
@@ -30,7 +30,7 @@ const WEEKLY_BOSS_MAX_PER_CHAR = 12
 const WEEKLY_BOSS_MAX_TOTAL = 90
 
 export default function BossPage() {
-  const { user, refreshUser } = useAuth()
+  const { user, refreshUser, activeServer, activeServerId } = useAuth()
 
   const [bossList, setBossList] = useState<BossMaster[]>([])
   const [weeklyKills, setWeeklyKills] = useState<BossKill[]>([])
@@ -74,7 +74,9 @@ export default function BossPage() {
       setDopingItems(dopings.data)
       const mainChar = charList.find((c) => c.isMain) ?? charList[0]
       if (mainChar) {
-        setSelectedCharId((prev) => prev || String(mainChar.id))
+        setSelectedCharId(String(mainChar.id))
+      } else {
+        setSelectedCharId('')
       }
     } finally {
       setLoading(false)
@@ -103,7 +105,7 @@ export default function BossPage() {
     setDopingFavorites(dFavs.data)
   }, [])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  useEffect(() => { fetchData() }, [fetchData, activeServerId])
 
   useEffect(() => {
     if (selectedCharId) {
@@ -203,7 +205,7 @@ export default function BossPage() {
       const killRes = await bossApi.recordBossKill({
         bossName: form.bossName,
         difficulty: form.difficulty,
-        killDate: form.killDate,
+        killDate: withCurrentTime(form.killDate),
         partySize: form.partySize,
         characterId: Number(selectedCharId),
         expenses,
@@ -335,7 +337,7 @@ export default function BossPage() {
     const item = dopingItems.find((x) => x.id === id)
     return sum + (item?.price ?? 0)
   }, 0)
-  const isDopingInsufficientMeso = dopingTotal > 0 && dopingTotal > (user?.totalMeso ?? 0)
+  const isDopingInsufficientMeso = dopingTotal > 0 && dopingTotal > (activeServer?.totalMeso ?? 0)
 
   const selectedChar = characters.find((c) => String(c.id) === selectedCharId)
 
@@ -665,7 +667,7 @@ export default function BossPage() {
           {charError && <p className="text-xs" style={{ color: 'var(--red)' }}>{charError}</p>}
           {isDopingInsufficientMeso && (
             <div className="text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: 'rgba(220,38,38,0.08)', color: 'var(--red)', border: '1px solid rgba(220,38,38,0.2)' }}>
-              ⚠️ 현재 보유 메소({formatMeso(user?.totalMeso ?? 0)})보다 도핑 비용({formatMeso(dopingTotal)})이 많습니다. 인벤토리/창고 메소를 먼저 업데이트해주세요.
+              ⚠️ 현재 보유 메소({formatMeso(activeServer?.totalMeso ?? 0)})보다 도핑 비용({formatMeso(dopingTotal)})이 많습니다. 인벤토리/창고 메소를 먼저 업데이트해주세요.
             </div>
           )}
           <div className="flex justify-end">
@@ -761,7 +763,7 @@ export default function BossPage() {
                             <span className="text-xs ml-1" style={{ color: 'var(--text-3)' }}>{kill.partySize}인</span>
                           )
                         )}
-                        <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{kill.killDate?.slice(5)}</p>
+                        <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{formatDateTime(kill.killDate ?? '')}</p>
                       </div>
                       <div className="flex items-start gap-2 shrink-0">
                         <div className="text-right">

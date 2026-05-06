@@ -5,6 +5,7 @@ import { ledgerApi } from '../api/ledger'
 import { authApi } from '../api/auth'
 import { bossApi } from '../api/boss'
 import { charactersApi } from '../api/characters'
+import client from '../api/client'
 import { useAuth } from '../contexts/AuthContext'
 import type {
   BossDrop, BossKill, CharacterStatsResponse, EntryCategory, EntryType, LedgerEntry, LedgerStat,
@@ -12,10 +13,11 @@ import type {
 } from '../types'
 import {
   formatMeso,
-  formatDateKo,
+  formatDateTime,
   formatWeekRange,
   getWeekStart,
   toDateString,
+  withCurrentTime,
   toKoreanAmount,
   CATEGORY_ICONS,
   CATEGORY_LABELS,
@@ -51,6 +53,12 @@ const CATEGORY_COLORS: Record<string, { bg: string; color: string }> = {
   other:       { bg: 'rgba(139,148,158,0.12)', color: 'var(--text-2)' },
 }
 
+function weekEndLabel(weekStart: string): string {
+  const d = new Date(weekStart + 'T00:00:00')
+  d.setDate(d.getDate() + 6)
+  return `${d.getMonth() + 1}/${d.getDate()}`
+}
+
 function buildMonthCalendar(year: number, month: number): (Date | null)[][] {
   const firstDay = new Date(year, month, 1)
   const lastDate = new Date(year, month + 1, 0).getDate()
@@ -64,7 +72,7 @@ function buildMonthCalendar(year: number, month: number): (Date | null)[][] {
 }
 
 export default function DashboardPage() {
-  const { user, refreshUser } = useAuth()
+  const { user, refreshUser, activeServer, activeServerId } = useAuth()
   const navigate = useNavigate()
 
   const [characters, setCharacters] = useState<MapleCharacter[]>([])
@@ -74,6 +82,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [allWeeks, setAllWeeks] = useState<WeeklySummary[]>([])
   const [allWeeksLoading, setAllWeeksLoading] = useState(true)
+  const [weekPage, setWeekPage] = useState(0)
+  const [showAllWeeks, setShowAllWeeks] = useState(false)
 
   const [showMesoForm, setShowMesoForm] = useState(false)
   const [mesoForm, setMesoForm] = useState({ inventoryMeso: '', storageMeso: '' })
@@ -84,6 +94,8 @@ export default function DashboardPage() {
 
   const [charStats, setCharStats] = useState<CharacterStatsResponse[]>([])
   const [charBossCounts, setCharBossCounts] = useState<Map<number, number>>(new Map())
+  const [serverSummaries, setServerSummaries] = useState<Record<number, { income: number; expense: number }>>({})
+  const isMultiServer = (user?.serverProfiles?.length ?? 0) >= 2
 
   const [drops, setDrops] = useState<BossDrop[]>([])
   const [dropsLoading, setDropsLoading] = useState(true)
@@ -128,7 +140,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false)
     }
-  }, [weekStartStr])
+  }, [weekStartStr, activeServerId])
 
   const fetchAllWeeks = useCallback(async () => {
     setAllWeeksLoading(true)
@@ -138,7 +150,7 @@ export default function DashboardPage() {
     } finally {
       setAllWeeksLoading(false)
     }
-  }, [])
+  }, [activeServerId])
 
   const fetchDrops = useCallback(async () => {
     setDropsLoading(true)
@@ -150,7 +162,7 @@ export default function DashboardPage() {
     } finally {
       setDropsLoading(false)
     }
-  }, [weekStartStr])
+  }, [weekStartStr, activeServerId])
 
   useEffect(() => { fetchLedger() }, [fetchLedger])
   useEffect(() => { fetchAllWeeks() }, [fetchAllWeeks])
@@ -159,14 +171,18 @@ export default function DashboardPage() {
     bossApi.getWeeklyBossKills({ week: weekStartStr })
       .then(r => setWeeklyBossKills(r.data))
       .catch(() => setWeeklyBossKills([]))
-  }, [weekStartStr])
+  }, [weekStartStr, activeServerId])
   useEffect(() => {
-    charactersApi.getCharacters().then((r) => setCharacters(r.data))
-  }, [])
+    charactersApi.getCharacters().then((r) => {
+      setCharacters(r.data)
+      const main = r.data.find((c) => c.isMain) ?? r.data[0]
+      setSelectedCharId(main?.id ?? 'all')
+    })
+  }, [activeServerId])
 
   useEffect(() => {
     charactersApi.getCharacterStats().then((r) => setCharStats(r.data)).catch(() => {})
-  }, [])
+  }, [activeServerId])
 
   useEffect(() => {
     setStatsLoading(true)
@@ -174,7 +190,7 @@ export default function DashboardPage() {
       .then((res) => setCatStats(res.data))
       .catch(() => {})
       .finally(() => setStatsLoading(false))
-  }, [])
+  }, [activeServerId])
 
   useEffect(() => {
     bossApi.getWeeklyCharacterCounts(weekStartStr)
@@ -184,7 +200,28 @@ export default function DashboardPage() {
         setCharBossCounts(map)
       })
       .catch(() => setCharBossCounts(new Map()))
-  }, [weekStartStr])
+  }, [weekStartStr, activeServerId])
+
+  useEffect(() => {
+    if (!isMultiServer || !user?.serverProfiles) return
+    Promise.all(
+      user.serverProfiles.map(async (sp) => {
+        const res = await client.get('/ledger', {
+          params: { week: weekStartStr },
+          headers: { 'X-Server-Profile-Id': String(sp.id) },
+        })
+        return { id: sp.id, summary: res.data.summary }
+      })
+    )
+      .then((results) => {
+        const map: Record<number, { income: number; expense: number }> = {}
+        results.forEach(({ id, summary }) => {
+          map[id] = { income: summary.totalIncome, expense: summary.totalExpense }
+        })
+        setServerSummaries(map)
+      })
+      .catch(() => {})
+  }, [isMultiServer, user?.serverProfiles, weekStartStr, activeServerId])
 
   const handleListDrop = async (dropId: number) => {
     try {
@@ -257,7 +294,7 @@ export default function DashboardPage() {
         category: editForm.category,
         amount,
         description: editForm.description,
-        entryDate: editForm.entryDate,
+        entryDate: withCurrentTime(editForm.entryDate),
         characterId: editForm.characterId ? Number(editForm.characterId) : null,
         solErdaFragments: editForm.solErdaFragments ? Number(editForm.solErdaFragments) : null,
       })
@@ -270,8 +307,8 @@ export default function DashboardPage() {
 
   const openMesoForm = () => {
     setMesoForm({
-      inventoryMeso: String(user?.inventoryMeso ?? 0),
-      storageMeso: String(user?.storageMeso ?? 0),
+      inventoryMeso: String(activeServer?.inventoryMeso ?? 0),
+      storageMeso: String(activeServer?.storageMeso ?? 0),
     })
     setShowMesoForm(true)
   }
@@ -435,12 +472,26 @@ export default function DashboardPage() {
 
   const thStyle = { color: 'var(--text-3)' } as const
 
+  const catStatsStart = new Date(getWeekStart().getTime() - 21 * 86400000)
+  const catStatsEnd = new Date(getWeekStart().getTime() + 6 * 86400000)
+  const catStatsRange = `${catStatsStart.getMonth() + 1}/${catStatsStart.getDate()} ~ ${catStatsEnd.getMonth() + 1}/${catStatsEnd.getDate()}`
+
   return (
     <div className="space-y-4">
       {/* 헤더 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>📊 대시보드</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>📊 대시보드</h1>
+            {activeServer && (
+              <span
+                className="px-2 py-0.5 rounded-full text-xs font-semibold"
+                style={{ backgroundColor: 'var(--primary-dim)', color: 'var(--primary)', border: '1px solid var(--primary-glow)' }}
+              >
+                🗺️ {activeServer.worldDisplayName}
+              </span>
+            )}
+          </div>
           <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>
             {formatWeekRange(weekStartStr, toDateString(weekEnd))}
           </p>
@@ -653,7 +704,7 @@ export default function DashboardPage() {
                 },
                 {
                   label: '현재 보유 메소',
-                  value: formatMeso(user?.totalMeso ?? 0),
+                  value: formatMeso(activeServer?.totalMeso ?? 0),
                   color: 'var(--primary)',
                   icon: '🏦',
                   action: openMesoForm,
@@ -787,10 +838,6 @@ export default function DashboardPage() {
 
       {/* 캐릭터 탭 */}
       <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-        <button
-          className={`char-tab ${selectedCharId === 'all' ? 'char-tab-active' : ''}`}
-          onClick={() => setSelectedCharId('all')}
-        >전체</button>
         {characters.map((c) => (
           <button
             key={c.id}
@@ -1088,85 +1135,170 @@ export default function DashboardPage() {
         )}
       </div>
 
+      {/* 이번 주 / 전체 통계 구분선 */}
+      <div className="flex items-center gap-3 my-2">
+        <div className="flex-1 h-px" style={{ backgroundColor: 'var(--border-2)' }} />
+        <span
+          className="text-xs font-semibold px-3 py-1.5 rounded-full"
+          style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border-2)', color: 'var(--text-3)' }}
+        >
+          📊 전체 통계
+        </span>
+        <div className="flex-1 h-px" style={{ backgroundColor: 'var(--border-2)' }} />
+      </div>
+
       {/* 주별 기록 테이블 (솔 에르다 조각 + 항목 수 컬럼 포함) */}
       <div className="rounded-xl overflow-hidden" style={panelStyle}>
-        <div className="dark-panel-header">
-          <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>📜 주별 기록</h3>
+        <div className="dark-panel-header flex items-center justify-between">
+          {(() => {
+            // allWeeks is newest-first (API ORDER BY week_start DESC)
+            // page 0 = most recent 4 weeks; display each page oldest-first
+            const totalWeekPages = Math.ceil(allWeeks.length / 4)
+            const pageSlice = allWeeks.slice(weekPage * 4, (weekPage + 1) * 4)
+            const displayedWeeks = showAllWeeks
+              ? [...allWeeks].reverse()
+              : [...pageSlice].reverse()
+            const pageStart = displayedWeeks[0]?.weekStart
+            const pageEnd = displayedWeeks[displayedWeeks.length - 1]?.weekStart
+            const pageRangeText = (!showAllWeeks && pageStart && pageEnd)
+              ? `${pageStart.slice(5).replace('-', '/')} ~ ${pageEnd.slice(5).replace('-', '/')}`
+              : '전체'
+            return (
+              <>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>📜 주별 기록</h3>
+                  {!showAllWeeks && allWeeks.length > 0 && (
+                    <span className="text-xs" style={{ color: 'var(--text-3)' }}>{pageRangeText}</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  {!showAllWeeks && (
+                    <>
+                      <button
+                        onClick={() => setWeekPage((p) => Math.min(p + 1, totalWeekPages - 1))}
+                        disabled={weekPage >= totalWeekPages - 1}
+                        className="px-2 py-0.5 text-xs rounded"
+                        style={{
+                          backgroundColor: 'var(--surface-2)',
+                          border: '1px solid var(--border)',
+                          color: weekPage >= totalWeekPages - 1 ? 'var(--text-3)' : 'var(--text-2)',
+                          cursor: weekPage >= totalWeekPages - 1 ? 'not-allowed' : 'pointer',
+                        }}
+                      >◀</button>
+                      <span className="text-xs px-1" style={{ color: 'var(--text-3)' }}>
+                        {totalWeekPages > 0 ? `${totalWeekPages - weekPage}/${totalWeekPages}` : ''}
+                      </span>
+                      <button
+                        onClick={() => setWeekPage((p) => Math.max(p - 1, 0))}
+                        disabled={weekPage === 0}
+                        className="px-2 py-0.5 text-xs rounded"
+                        style={{
+                          backgroundColor: 'var(--surface-2)',
+                          border: '1px solid var(--border)',
+                          color: weekPage === 0 ? 'var(--text-3)' : 'var(--text-2)',
+                          cursor: weekPage === 0 ? 'not-allowed' : 'pointer',
+                        }}
+                      >▶</button>
+                    </>
+                  )}
+                  <button
+                    onClick={() => { setShowAllWeeks((v) => !v); setWeekPage(0) }}
+                    className="ml-1 px-2 py-0.5 text-xs rounded"
+                    style={{
+                      backgroundColor: showAllWeeks ? 'var(--primary-dim)' : 'var(--surface-2)',
+                      border: `1px solid ${showAllWeeks ? 'var(--primary)' : 'var(--border)'}`,
+                      color: showAllWeeks ? 'var(--primary)' : 'var(--text-2)',
+                      cursor: 'pointer',
+                    }}
+                  >전체</button>
+                </div>
+              </>
+            )
+          })()}
         </div>
         {allWeeksLoading ? (
           <p className="text-sm text-center py-6 animate-pulse" style={{ color: 'var(--text-3)' }}>불러오는 중...</p>
         ) : allWeeks.length === 0 ? (
           <p className="text-sm text-center py-6" style={{ color: 'var(--text-3)' }}>아직 기록이 없어요</p>
-        ) : (
-          <div className="overflow-x-auto max-h-72 overflow-y-auto">
-            <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ backgroundColor: 'var(--surface-2)', position: 'sticky', top: 0, zIndex: 1 }}>
-                  <th className="px-4 py-2 text-left text-xs font-medium" style={thStyle}>주차</th>
-                  <th className="px-3 py-2 text-right text-xs font-medium" style={thStyle}>수입</th>
-                  <th className="px-3 py-2 text-right text-xs font-medium" style={thStyle}>지출</th>
-                  <th className="px-3 py-2 text-right text-xs font-medium" style={thStyle}>순수익</th>
-                  <th className="px-3 py-2 text-right text-xs font-medium" style={{ color: '#a78bfa' }}>🔮 조각</th>
-                  <th className="px-4 py-2 text-right text-xs font-medium" style={thStyle}>항목</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[...allWeeks].reverse().map((w, i, arr) => {
-                  const net = w.totalIncome - w.totalExpense
-                  const isCurrent = weekStartStr === w.weekStart
-                  return (
-                    <tr
-                      key={w.weekStart}
-                      onClick={() => jumpToWeek(w.weekStart)}
-                      className="table-row cursor-pointer"
-                      style={{
-                        backgroundColor: isCurrent ? 'var(--primary-dim)' : undefined,
-                        borderBottom: i === arr.length - 1 ? 'none' : '1px solid var(--border)',
-                      }}
-                    >
-                      <td className="px-4 py-2.5">
-                        <span className="text-sm font-medium" style={{ color: isCurrent ? 'var(--primary)' : 'var(--text)' }}>
-                          {w.weekStart.slice(5).replace('-', '/')} 주
-                          {isCurrent && (
-                            <span className="ml-1.5 text-xs font-normal" style={{ color: 'var(--primary)' }}>← 현재</span>
-                          )}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5 text-right">
-                        <span className="text-sm" style={{ color: 'var(--green)' }}>+{formatMeso(w.totalIncome)}</span>
-                      </td>
-                      <td className="px-3 py-2.5 text-right">
-                        <span className="text-sm" style={{ color: 'var(--red)' }}>-{formatMeso(w.totalExpense)}</span>
-                      </td>
-                      <td className="px-3 py-2.5 text-right">
-                        <span className="text-sm font-bold" style={{ color: net >= 0 ? 'var(--primary)' : 'var(--red)' }}>
-                          {net >= 0 ? '+' : ''}{formatMeso(net)}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5 text-right">
-                        {(w.totalSolErdaFragments ?? 0) > 0
-                          ? <span className="text-xs font-semibold" style={{ color: '#c4b5fd' }}>{w.totalSolErdaFragments ?? 0}개</span>
-                          : <span style={{ color: 'var(--text-3)', fontSize: '10px' }}>—</span>
-                        }
-                      </td>
-                      <td className="px-4 py-2.5 text-right">
-                        <span className="text-xs" style={{ color: 'var(--text-3)' }}>
-                          {w.entryCount != null ? `${w.entryCount}건` : '—'}
-                        </span>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        ) : (() => {
+          const pageSlice = allWeeks.slice(weekPage * 4, (weekPage + 1) * 4)
+          const displayedWeeks = showAllWeeks
+            ? [...allWeeks].reverse()
+            : [...pageSlice].reverse()
+          return (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ backgroundColor: 'var(--surface-2)' }}>
+                    <th className="px-4 py-2 text-left text-xs font-medium" style={thStyle}>주차</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium" style={thStyle}>수입</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium" style={thStyle}>지출</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium" style={thStyle}>순수익</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium" style={{ color: '#a78bfa' }}>🔮 조각</th>
+                    <th className="px-4 py-2 text-right text-xs font-medium" style={thStyle}>항목</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayedWeeks.map((w, i, arr) => {
+                    const net = w.totalIncome - w.totalExpense
+                    const isCurrent = weekStartStr === w.weekStart
+                    return (
+                      <tr
+                        key={w.weekStart}
+                        onClick={() => jumpToWeek(w.weekStart)}
+                        className="table-row cursor-pointer"
+                        style={{
+                          backgroundColor: isCurrent ? 'var(--primary-dim)' : undefined,
+                          borderBottom: i === arr.length - 1 ? 'none' : '1px solid var(--border)',
+                        }}
+                      >
+                        <td className="px-4 py-2.5">
+                          <span className="text-sm font-medium" style={{ color: isCurrent ? 'var(--primary)' : 'var(--text)' }}>
+                            {w.weekStart.slice(5).replace('-', '/')} 주
+                          </span>
+                          <span className="block text-xs mt-0.5" style={{ color: isCurrent ? 'var(--primary)' : 'var(--text-3)' }}>
+                            {w.weekStart.slice(5).replace('-', '/')} - {weekEndLabel(w.weekStart)}
+                            {isCurrent && (
+                              <span className="ml-1.5" style={{ color: 'var(--primary)' }}>← 현재</span>
+                            )}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          <span className="text-sm" style={{ color: 'var(--green)' }}>+{formatMeso(w.totalIncome)}</span>
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          <span className="text-sm" style={{ color: 'var(--red)' }}>-{formatMeso(w.totalExpense)}</span>
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          <span className="text-sm font-bold" style={{ color: net >= 0 ? 'var(--primary)' : 'var(--red)' }}>
+                            {net >= 0 ? '+' : ''}{formatMeso(net)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          {(w.totalSolErdaFragments ?? 0) > 0
+                            ? <span className="text-xs font-semibold" style={{ color: '#c4b5fd' }}>{w.totalSolErdaFragments ?? 0}개</span>
+                            : <span style={{ color: 'var(--text-3)', fontSize: '10px' }}>—</span>
+                          }
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          <span className="text-xs" style={{ color: 'var(--text-3)' }}>
+                            {w.entryCount != null ? `${w.entryCount}건` : '—'}
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )
+        })()}
       </div>
 
       {/* 수익 구성 비율 */}
       <div className="rounded-xl overflow-hidden" style={panelStyle}>
         <div className="dark-panel-header">
-          <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>📊 수익 구성 비율 (최근 4주)</h3>
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>📊 수익 구성 비율 ({catStatsRange})</h3>
         </div>
         {statsLoading ? (
           <p className="text-sm text-center py-6 animate-pulse" style={{ color: 'var(--text-3)' }}>불러오는 중...</p>
@@ -1357,6 +1489,56 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* 서버별 이번 주 현황 (서버 2개 이상인 경우만) */}
+      {isMultiServer && (
+        <div>
+          <h3 className="text-sm font-semibold mb-2" style={{ color: 'var(--text-2)' }}>
+            🗺️ 서버별 {isThisWeek ? '이번 주' : '해당 주'} 현황
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+            {user?.serverProfiles?.map((sp) => {
+              const s = serverSummaries[sp.id]
+              const net = (s?.income ?? 0) - (s?.expense ?? 0)
+              const isActive = sp.id === activeServer?.id
+              return (
+                <div
+                  key={sp.id}
+                  className="rounded-xl px-3 py-3"
+                  style={{
+                    backgroundColor: isActive ? 'var(--primary-dim)' : 'var(--surface)',
+                    border: `1.5px solid ${isActive ? 'var(--primary-glow)' : 'var(--border)'}`,
+                  }}
+                >
+                  <p className="text-xs font-semibold mb-2" style={{ color: isActive ? 'var(--primary)' : 'var(--text-2)' }}>
+                    {isActive ? '✓ ' : ''}{sp.worldDisplayName}
+                  </p>
+                  {s ? (
+                    <div className="space-y-0.5">
+                      <p className="text-xs flex justify-between">
+                        <span style={{ color: 'var(--text-3)' }}>수입</span>
+                        <span style={{ color: 'var(--green)' }}>+{formatMeso(s.income)}</span>
+                      </p>
+                      <p className="text-xs flex justify-between">
+                        <span style={{ color: 'var(--text-3)' }}>지출</span>
+                        <span style={{ color: 'var(--red)' }}>-{formatMeso(s.expense)}</span>
+                      </p>
+                      <p className="text-xs flex justify-between font-semibold pt-1" style={{ borderTop: '1px solid var(--border)' }}>
+                        <span style={{ color: 'var(--text-3)' }}>순수익</span>
+                        <span style={{ color: net >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                          {net >= 0 ? '+' : ''}{formatMeso(net)}
+                        </span>
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs animate-pulse" style={{ color: 'var(--text-3)' }}>로딩 중...</p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* ── 수정 모달 ── */}
       {editingEntry && (
         <div
@@ -1498,7 +1680,7 @@ function EntryTableRow({
             </p>
             <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
               <span className="text-xs" style={{ color: 'var(--text-3)' }}>
-                {formatDateKo(entry.entryDate)}
+                {formatDateTime(entry.entryDate)}
                 {entry.characterName && ` · ${entry.characterName}`}
               </span>
               <span
@@ -1585,7 +1767,7 @@ function BossGroupRows({
               <p className="text-sm font-medium truncate" style={{ color: 'var(--text)' }}>{bossEntry.description || '보스'}</p>
               <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                 <span className="text-xs" style={{ color: 'var(--text-3)' }}>
-                  {formatDateKo(bossEntry.entryDate)}{bossEntry.characterName && ` · ${bossEntry.characterName}`}
+                  {formatDateTime(bossEntry.entryDate)}{bossEntry.characterName && ` · ${bossEntry.characterName}`}
                 </span>
                 <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: 'rgba(249,115,22,0.12)', color: 'var(--primary)' }}>보스</span>
                 {hasDopings && (

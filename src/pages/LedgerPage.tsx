@@ -4,7 +4,7 @@ import { authApi } from '../api/auth'
 import { charactersApi } from '../api/characters'
 import { useAuth } from '../contexts/AuthContext'
 import type { EntryCategory, LedgerEntry, MapleCharacter, WeeklyLedger } from '../types'
-import { formatMeso, formatDate, CATEGORY_LABELS, toDateString, toKoreanAmount } from '../utils/format'
+import { formatMeso, formatDateTime, CATEGORY_LABELS, toDateString, withCurrentTime, toKoreanAmount } from '../utils/format'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
@@ -19,7 +19,7 @@ const ENHANCE_CATEGORIES: { value: EntryCategory; label: string }[] = [
 ]
 
 export default function LedgerPage() {
-  const { user, refreshUser } = useAuth()
+  const { user, refreshUser, activeServer, activeServerId } = useAuth()
   const [ledger, setLedger] = useState<WeeklyLedger | null>(null)
   const [characters, setCharacters] = useState<MapleCharacter[]>([])
   const [loading, setLoading] = useState(true)
@@ -50,13 +50,15 @@ export default function LedgerPage() {
   const [initialized, setInitialized] = useState(false)
 
   useEffect(() => {
+    setInitialized(false)
     charactersApi.getCharacters().then((r) => {
       setCharacters(r.data)
       const main = r.data.find((c) => c.isMain) ?? r.data[0]
       if (main) setSelectedCharId(String(main.id))
+      else setSelectedCharId('all')
       setInitialized(true)
     })
-  }, [])
+  }, [activeServerId])
 
   useEffect(() => {
     if (!initialized) return
@@ -73,7 +75,7 @@ export default function LedgerPage() {
         category: form.category,
         amount: Number(form.amount),
         description: form.description,
-        entryDate: form.entryDate,
+        entryDate: withCurrentTime(form.entryDate),
         characterId: selectedCharId !== 'all' ? Number(selectedCharId) : null,
       })
       if (form.description.trim()) saveToHistory('ledger_memo', form.description.trim())
@@ -113,7 +115,7 @@ export default function LedgerPage() {
     (e) => e.type === 'expense' && !EXCLUDED_CATEGORIES.has(e.category)
   ) ?? []
 
-  const isInsufficientMeso = !!(form.amount && Number(form.amount) > 0 && Number(form.amount) > (user?.totalMeso ?? 0))
+  const isInsufficientMeso = !!(form.amount && Number(form.amount) > 0 && Number(form.amount) > (activeServer?.totalMeso ?? 0))
 
   if (loading) {
     return (
@@ -140,7 +142,6 @@ export default function LedgerPage() {
             value={selectedCharId}
             onChange={(e) => setSelectedCharId(e.target.value)}
           >
-            <option value="all">전체</option>
             {characters.map((c) => (
               <option key={c.id} value={String(c.id)} style={{ backgroundColor: 'var(--surface-2)' }}>
                 {c.isMain ? `⭐ ${c.name}` : c.name}
@@ -171,22 +172,22 @@ export default function LedgerPage() {
         <div className="grid grid-cols-3 gap-3 mb-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--text-2)' }}>인벤토리</p>
-            <p className="font-bold text-base" style={{ color: 'var(--text)' }}>{formatMeso(user?.inventoryMeso ?? 0)}</p>
+            <p className="font-bold text-base" style={{ color: 'var(--text)' }}>{formatMeso(activeServer?.inventoryMeso ?? 0)}</p>
           </div>
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--text-2)' }}>창고</p>
-            <p className="font-bold text-base" style={{ color: 'var(--text)' }}>{formatMeso(user?.storageMeso ?? 0)}</p>
+            <p className="font-bold text-base" style={{ color: 'var(--text)' }}>{formatMeso(activeServer?.storageMeso ?? 0)}</p>
           </div>
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--text-2)' }}>합계</p>
-            <p className="font-bold text-base" style={{ color: 'var(--orange-light)' }}>{formatMeso(user?.totalMeso ?? 0)}</p>
+            <p className="font-bold text-base" style={{ color: 'var(--orange-light)' }}>{formatMeso(activeServer?.totalMeso ?? 0)}</p>
           </div>
         </div>
         {!showMesoForm ? (
           <Button size="sm" variant="ghost" onClick={() => {
             setMesoForm({
-              inventoryMeso: String(user?.inventoryMeso ?? 0),
-              storageMeso: String(user?.storageMeso ?? 0),
+              inventoryMeso: String(activeServer?.inventoryMeso ?? 0),
+              storageMeso: String(activeServer?.storageMeso ?? 0),
             })
             setShowMesoForm(true)
           }}>
@@ -300,7 +301,7 @@ export default function LedgerPage() {
             )}
             {isInsufficientMeso && (
               <div className="text-xs px-3 py-2 rounded-lg mt-1.5" style={{ backgroundColor: 'rgba(220,38,38,0.08)', color: 'var(--red)', border: '1px solid rgba(220,38,38,0.2)' }}>
-                ⚠️ 현재 보유 메소({formatMeso(user?.totalMeso ?? 0)})보다 지출이 많습니다. 인벤토리/창고 메소를 먼저 업데이트해주세요.
+                ⚠️ 현재 보유 메소({formatMeso(activeServer?.totalMeso ?? 0)})보다 지출이 많습니다. 인벤토리/창고 메소를 먼저 업데이트해주세요.
               </div>
             )}
           </div>
@@ -356,7 +357,7 @@ export default function LedgerPage() {
                     <p className="font-semibold text-sm" style={{ color: 'var(--red)' }}>
                       -{formatMeso(entry.amount)}
                     </p>
-                    <p className="text-xs" style={{ color: 'var(--text-3)' }}>{formatDate(entry.entryDate)}</p>
+                    <p className="text-xs" style={{ color: 'var(--text-3)' }}>{formatDateTime(entry.entryDate)}</p>
                   </div>
                   <button
                     onClick={() => handleDelete(entry.id)}

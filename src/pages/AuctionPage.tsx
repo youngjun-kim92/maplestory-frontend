@@ -4,7 +4,7 @@ import { authApi } from '../api/auth'
 import { charactersApi } from '../api/characters'
 import { useAuth } from '../contexts/AuthContext'
 import type { LedgerEntry, MapleCharacter } from '../types'
-import { formatMeso, formatDate, toDateString, toKoreanAmount, CATEGORY_LABELS } from '../utils/format'
+import { formatMeso, formatDateTime, toDateString, withCurrentTime, toKoreanAmount, CATEGORY_LABELS } from '../utils/format'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
@@ -15,7 +15,7 @@ import { saveToHistory } from '../utils/autocomplete'
 const AUCTION_CATEGORIES = new Set(['auction', 'sol_erda'])
 
 export default function AuctionPage() {
-  const { user, refreshUser } = useAuth()
+  const { user, refreshUser, activeServer, activeServerId } = useAuth()
   const [tab, setTab] = useState<'income' | 'expense'>('income')
   const [characters, setCharacters] = useState<MapleCharacter[]>([])
   const [selectedCharId, setSelectedCharId] = useState<'all' | string>('all')
@@ -35,7 +35,7 @@ export default function AuctionPage() {
 
   const [success, setSuccess] = useState<string | null>(null)
 
-  const [solPriceInput, setSolPriceInput] = useState(String(user?.solErdaFragmentPrice ?? 0))
+  const [solPriceInput, setSolPriceInput] = useState(String(activeServer?.solErdaFragmentPrice ?? 0))
   const [solPriceSubmitting, setSolPriceSubmitting] = useState(false)
 
   const handleSolPriceUpdate = async () => {
@@ -61,18 +61,24 @@ export default function AuctionPage() {
   }, [])
 
   useEffect(() => {
+    setInitialized(false)
     charactersApi.getCharacters().then((r) => {
       setCharacters(r.data)
       const main = r.data.find((c) => c.isMain) ?? r.data[0]
       if (main) setSelectedCharId(String(main.id))
+      else setSelectedCharId('all')
       setInitialized(true)
     })
-  }, [])
+  }, [activeServerId])
 
   useEffect(() => {
     if (!initialized) return
     fetchEntries(selectedCharId)
   }, [selectedCharId, fetchEntries, initialized])
+
+  useEffect(() => {
+    setSolPriceInput(String(activeServer?.solErdaFragmentPrice ?? 0))
+  }, [activeServer?.id])
 
   const isSilverPlus = ['SILVER', 'GOLD', 'DIAMOND', 'RED', 'BLACK'].includes(user?.mvpGrade ?? '')
   const feeRate = incomeForm.isPcCafe ? 0.03 : (isSilverPlus ? 0.03 : 0.05)
@@ -81,7 +87,7 @@ export default function AuctionPage() {
   const net = Math.floor(saleAmt * (1 - feeRate))
 
   const solErdaQty = Number(incomeForm.solErdaQty) || 0
-  const solErdaUnitPrice = user?.solErdaFragmentPrice ?? 0
+  const solErdaUnitPrice = activeServer?.solErdaFragmentPrice ?? 0
   const solErdaNet = solErdaQty > 0 && solErdaUnitPrice > 0
     ? Math.floor(solErdaQty * solErdaUnitPrice * (1 - feeRate))
     : 0
@@ -100,7 +106,7 @@ export default function AuctionPage() {
           category: 'sol_erda',
           amount: solErdaNet,
           description: desc,
-          entryDate: incomeForm.saleDate,
+          entryDate: withCurrentTime(incomeForm.saleDate),
           characterId: charIdNum,
           solErdaFragments: solErdaQty,
         })
@@ -153,7 +159,7 @@ export default function AuctionPage() {
         category: 'auction',
         amount: amt,
         description: desc,
-        entryDate: expenseForm.buyDate,
+        entryDate: withCurrentTime(expenseForm.buyDate),
         characterId: charIdNum,
       })
       if (expenseForm.itemName.trim()) saveToHistory('auction_expense', expenseForm.itemName.trim())
@@ -180,7 +186,7 @@ export default function AuctionPage() {
   const isExpenseInsufficientMeso = !!(
     expenseForm.buyAmount &&
     Number(expenseForm.buyAmount) > 0 &&
-    Number(expenseForm.buyAmount) > (user?.totalMeso ?? 0)
+    Number(expenseForm.buyAmount) > (activeServer?.totalMeso ?? 0)
   )
 
   return (
@@ -193,7 +199,6 @@ export default function AuctionPage() {
             value={selectedCharId}
             onChange={(e) => setSelectedCharId(e.target.value)}
           >
-            <option value="all">전체</option>
             {characters.map((c) => (
               <option key={c.id} value={String(c.id)} style={{ backgroundColor: 'var(--surface-2)' }}>
                 {c.isMain ? `⭐ ${c.name}` : c.name}
@@ -431,7 +436,7 @@ export default function AuctionPage() {
               )}
               {isExpenseInsufficientMeso && (
                 <div className="text-xs px-3 py-2 rounded-lg mt-1.5" style={{ backgroundColor: 'rgba(220,38,38,0.08)', color: 'var(--red)', border: '1px solid rgba(220,38,38,0.2)' }}>
-                  ⚠️ 현재 보유 메소({formatMeso(user?.totalMeso ?? 0)})보다 지출이 많습니다. 인벤토리/창고 메소를 먼저 업데이트해주세요.
+                  ⚠️ 현재 보유 메소({formatMeso(activeServer?.totalMeso ?? 0)})보다 지출이 많습니다. 인벤토리/창고 메소를 먼저 업데이트해주세요.
                 </div>
               )}
             </div>
@@ -478,7 +483,7 @@ export default function AuctionPage() {
                     >
                       {entry.type === 'income' ? '+' : '-'}{formatMeso(entry.amount)}
                     </p>
-                    <p className="text-xs" style={{ color: 'var(--text-3)' }}>{formatDate(entry.entryDate)}</p>
+                    <p className="text-xs" style={{ color: 'var(--text-3)' }}>{formatDateTime(entry.entryDate)}</p>
                   </div>
                   <button
                     onClick={() => handleDeleteEntry(entry.id)}

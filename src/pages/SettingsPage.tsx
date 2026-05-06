@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authApi } from '../api/auth'
+import { serverProfilesApi } from '../api/serverProfiles'
 import { useAuth } from '../contexts/AuthContext'
 import type { MvpGrade } from '../types'
 import { MVP_GRADE_LABELS } from '../types'
@@ -11,8 +12,25 @@ import Input from '../components/ui/Input'
 import Select from '../components/ui/Select'
 import QuickAmountButtons from '../components/ui/QuickAmountButtons'
 
+const WORLD_OPTIONS = [
+  { value: 'SCANIA',   label: '스카니아' },
+  { value: 'LUNA',     label: '루나' },
+  { value: 'ELYSIUM',  label: '엘리시움' },
+  { value: 'CROA',     label: '크로아' },
+  { value: 'BERA',     label: '베라' },
+  { value: 'AURORA',   label: '오로라' },
+  { value: 'UNION',    label: '유니온' },
+  { value: 'ENOSIS',   label: '이노시스' },
+  { value: 'ZENITH',   label: '제니스' },
+  { value: 'RED',      label: '레드' },
+  { value: 'ARCANE',   label: '아케인' },
+  { value: 'NOVA',     label: '노바' },
+  { value: 'EOS',      label: '에오스' },
+  { value: 'HELIOS',   label: '헬리오스' },
+]
+
 export default function SettingsPage() {
-  const { user, refreshUser } = useAuth()
+  const { user, refreshUser, activeServer, setActiveServerId } = useAuth()
   const navigate = useNavigate()
 
   const [showResetModal, setShowResetModal] = useState(false)
@@ -31,8 +49,8 @@ export default function SettingsPage() {
   }
 
   const [mesoForm, setMesoForm] = useState({
-    inventoryMeso: String(user?.inventoryMeso ?? 0),
-    storageMeso: String(user?.storageMeso ?? 0),
+    inventoryMeso: String(activeServer?.inventoryMeso ?? 0),
+    storageMeso: String(activeServer?.storageMeso ?? 0),
   })
   const [mesoSubmitting, setMesoSubmitting] = useState(false)
   const [mesoSuccess, setMesoSuccess] = useState(false)
@@ -43,13 +61,24 @@ export default function SettingsPage() {
   const [mvpSuccess, setMvpSuccess] = useState(false)
   const [mvpError, setMvpError] = useState<string | null>(null)
 
-  // user 컨텍스트가 갱신되면 폼 값도 동기화
+  // 서버 관리
+  const [addingServer, setAddingServer] = useState(false)
+  const [newWorld, setNewWorld] = useState('SCANIA')
+  const [serverSubmitting, setServerSubmitting] = useState(false)
+  const [serverError, setServerError] = useState<string | null>(null)
+
+  // activeServer가 바뀌면 폼 동기화
+  useEffect(() => {
+    if (activeServer) {
+      setMesoForm({
+        inventoryMeso: String(activeServer.inventoryMeso ?? 0),
+        storageMeso: String(activeServer.storageMeso ?? 0),
+      })
+    }
+  }, [activeServer])
+
   useEffect(() => {
     if (user) {
-      setMesoForm({
-        inventoryMeso: String(user.inventoryMeso ?? 0),
-        storageMeso: String(user.storageMeso ?? 0),
-      })
       setMvpGrade(user.mvpGrade ?? 'NORMAL')
     }
   }, [user])
@@ -92,6 +121,35 @@ export default function SettingsPage() {
     }
   }
 
+  const handleAddServer = async (e: { preventDefault(): void }) => {
+    e.preventDefault()
+    setServerSubmitting(true)
+    setServerError(null)
+    try {
+      const res = await serverProfilesApi.createProfile({ world: newWorld })
+      await refreshUser()
+      setActiveServerId(res.data.id)
+      setAddingServer(false)
+    } catch (err: any) {
+      setServerError(err?.response?.data?.message ?? '서버 추가 실패')
+    } finally {
+      setServerSubmitting(false)
+    }
+  }
+
+  const handleDeleteServer = async (id: number) => {
+    if (!confirm('이 서버 프로필을 삭제하시겠습니까? 해당 서버의 모든 데이터가 삭제됩니다.')) return
+    try {
+      await serverProfilesApi.deleteProfile(id)
+      await refreshUser()
+    } catch (err: any) {
+      alert(err?.response?.data?.message ?? '삭제 실패')
+    }
+  }
+
+  const usedWorlds = new Set(user?.serverProfiles?.map((p) => p.world) ?? [])
+  const availableWorlds = WORLD_OPTIONS.filter((w) => !usedWorlds.has(w.value))
+
   return (
     <div className="space-y-3">
       <h1 className="text-2xl font-bold font-heading" style={{ color: 'var(--text)' }}>⚙️ 설정</h1>
@@ -112,6 +170,73 @@ export default function SettingsPage() {
             </p>
           </div>
         </div>
+      </Card>
+
+      {/* 서버 관리 */}
+      <Card icon="🗺️" title="서버 관리">
+        <p className="text-xs mb-3" style={{ color: 'var(--text-2)' }}>
+          플레이 중인 서버를 추가하면 서버별로 수익/지출을 따로 관리할 수 있습니다.
+        </p>
+        <div className="space-y-2 mb-3">
+          {user?.serverProfiles?.map((sp) => (
+            <button
+              key={sp.id}
+              onClick={() => setActiveServerId(sp.id)}
+              className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left transition-all"
+              style={{
+                backgroundColor: sp.id === activeServer?.id ? 'var(--primary-dim)' : 'var(--surface-2)',
+                border: `1.5px solid ${sp.id === activeServer?.id ? 'var(--primary-glow)' : 'var(--border)'}`,
+              }}
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold w-3" style={{ color: 'var(--primary)' }}>
+                  {sp.id === activeServer?.id ? '✓' : ''}
+                </span>
+                <span className="text-sm font-semibold" style={{ color: sp.id === activeServer?.id ? 'var(--primary)' : 'var(--text)' }}>
+                  {sp.worldDisplayName}
+                </span>
+              </div>
+              {(user?.serverProfiles?.length ?? 0) > 1 && (
+                <span
+                  role="button"
+                  onClick={(e) => { e.stopPropagation(); handleDeleteServer(sp.id) }}
+                  className="text-xs w-6 h-6 flex items-center justify-center rounded"
+                  style={{ color: 'var(--red)' }}
+                >✕</span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {serverError && (
+          <div className="mb-3 p-2.5 rounded-xl text-sm" style={{ backgroundColor: 'rgba(220,38,38,0.08)', color: 'var(--red)', border: '1px solid rgba(220,38,38,0.2)' }}>
+            ❌ {serverError}
+          </div>
+        )}
+
+        {!addingServer && availableWorlds.length > 0 && (
+          <button
+            onClick={() => { setAddingServer(true); setNewWorld(availableWorlds[0].value) }}
+            className="w-full py-2 rounded-xl text-sm font-medium"
+            style={{ backgroundColor: 'var(--surface-2)', border: '1.5px dashed var(--border-2)', color: 'var(--text-2)' }}
+          >
+            + 서버 추가
+          </button>
+        )}
+
+        {addingServer && (
+          <form onSubmit={handleAddServer} className="flex gap-2 items-end mt-2">
+            <Select
+              label="서버 선택"
+              options={availableWorlds}
+              value={newWorld}
+              onChange={(e) => setNewWorld(e.target.value)}
+              className="flex-1"
+            />
+            <Button type="submit" loading={serverSubmitting} className="shrink-0">추가</Button>
+            <Button type="button" variant="ghost" onClick={() => setAddingServer(false)} className="shrink-0">취소</Button>
+          </form>
+        )}
       </Card>
 
       {/* MVP grade */}
@@ -144,18 +269,17 @@ export default function SettingsPage() {
         </p>
       </Card>
 
-      {/* Meso balance */}
-      <Card icon="💰" title="현재 보유 메소 기록">
+      {/* Meso balance — 현재 활성 서버 기준 */}
+      <Card icon="💰" title={`현재 보유 메소 기록 (${activeServer?.worldDisplayName ?? ''})`}>
         <p className="text-xs mb-3" style={{ color: 'var(--text-2)' }}>
           인벤토리와 창고 메소를 기록해두면 대시보드에서 합계를 확인할 수 있습니다.
         </p>
 
-        {/* Current values */}
         <div className="grid grid-cols-3 gap-2 mb-4">
           {[
-            { label: '인벤토리', value: user?.inventoryMeso ?? 0 },
-            { label: '창고',     value: user?.storageMeso ?? 0 },
-            { label: '합계',     value: user?.totalMeso ?? 0, highlight: true },
+            { label: '인벤토리', value: activeServer?.inventoryMeso ?? 0 },
+            { label: '창고',     value: activeServer?.storageMeso ?? 0 },
+            { label: '합계',     value: activeServer?.totalMeso ?? 0, highlight: true },
           ].map((item) => (
             <div
               key={item.label}

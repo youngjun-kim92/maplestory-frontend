@@ -5,7 +5,7 @@ import { ledgerApi } from '../api/ledger'
 import { charactersApi } from '../api/characters'
 import { useAuth } from '../contexts/AuthContext'
 import type { BossDropItem, BossMaster, EntryCategory, EntryType, LedgerAddResponse, MapleCharacter, ResetType } from '../types'
-import { formatMeso, toDateString, difficultyLabel } from '../utils/format'
+import { formatMeso, toDateString, withCurrentTime, difficultyLabel } from '../utils/format'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
@@ -42,13 +42,14 @@ const ITEM_CATEGORY_LABELS: Record<string, string> = {
 }
 
 export default function InputPage() {
+  const { activeServerId } = useAuth()
   const [bossList, setBossList] = useState<BossMaster[]>([])
   const [characters, setCharacters] = useState<MapleCharacter[]>([])
 
   useEffect(() => {
     bossApi.getBossList().then((r) => setBossList(r.data))
     charactersApi.getCharacters().then((r) => setCharacters(r.data))
-  }, [])
+  }, [activeServerId])
 
   return (
     <div className="space-y-4">
@@ -152,7 +153,7 @@ function BossSection({
       const res = await bossApi.recordBossKill({
         bossName: form.bossName,
         difficulty: form.difficulty,
-        killDate: form.killDate,
+        killDate: withCurrentTime(form.killDate),
         partySize: Number(form.partySize),
         characterId: form.characterId ? Number(form.characterId) : null,
       })
@@ -365,7 +366,7 @@ function BossSection({
 
 /* ─── 수익 / 지출 ─── */
 function GeneralSection({ characters }: { characters: MapleCharacter[] }) {
-  const { user, refreshUser } = useAuth()
+  const { refreshUser, activeServer } = useAuth()
   const navigate = useNavigate()
   const [type, setType] = useState<EntryType>('income')
   const [category, setCategory] = useState<EntryCategory>('hunting')
@@ -393,7 +394,7 @@ function GeneralSection({ characters }: { characters: MapleCharacter[] }) {
   const catOptions = type === 'income' ? INCOME_CATS : EXPENSE_CATS
   const isSolErda = category === 'sol_erda'
   const isHunting = category === 'hunting' && type === 'income'
-  const solPrice = user?.solErdaFragmentPrice ?? 0
+  const solPrice = activeServer?.solErdaFragmentPrice ?? 0
   const solAmount = isSolErda ? (Number(form.fragments) || 0) * solPrice : 0
 
   const showToast = (msg: string) => {
@@ -413,7 +414,7 @@ function GeneralSection({ characters }: { characters: MapleCharacter[] }) {
         category,
         amount,
         description: form.description,
-        entryDate: form.entryDate,
+        entryDate: withCurrentTime(form.entryDate),
         characterId: form.characterId ? Number(form.characterId) : null,
         solErdaFragments: isHunting && form.fragments ? Number(form.fragments) : null,
       })

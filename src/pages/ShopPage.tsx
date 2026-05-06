@@ -3,7 +3,7 @@ import { ledgerApi } from '../api/ledger'
 import { charactersApi } from '../api/characters'
 import { bossApi } from '../api/boss'
 import type { DopingItem, EntryCategory, LedgerEntry, MapleCharacter } from '../types'
-import { formatMeso, formatDateKo, toDateString, CATEGORY_LABELS, CATEGORY_ICONS } from '../utils/format'
+import { formatMeso, formatDateTime, toDateString, withCurrentTime, CATEGORY_LABELS, CATEGORY_ICONS } from '../utils/format'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import AutocompleteInput from '../components/ui/AutocompleteInput'
@@ -82,7 +82,7 @@ export default function ShopPage() {
         category: 'trade',
         amount,
         description: incomeForm.itemName.trim(),
-        entryDate: incomeForm.date,
+        entryDate: withCurrentTime(incomeForm.date),
         characterId: selectedCharId ? Number(selectedCharId) : null,
       })
       saveToHistory('shop_income', incomeForm.itemName.trim())
@@ -109,7 +109,7 @@ export default function ShopPage() {
         category: expenseForm.category,
         amount,
         description: expenseForm.itemName.trim(),
-        entryDate: expenseForm.date,
+        entryDate: withCurrentTime(expenseForm.date),
         characterId: selectedCharId ? Number(selectedCharId) : null,
       })
       saveToHistory('shop_expense', expenseForm.itemName.trim())
@@ -160,9 +160,6 @@ export default function ShopPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>🛒 상점</h1>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>
-            직거래·개인 상점 수입과 아이템 구매 비용을 기록하세요
-          </p>
         </div>
         {characters.length > 0 ? (
           <select
@@ -372,7 +369,7 @@ export default function ShopPage() {
                       </p>
                       <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                         <span className="text-xs" style={{ color: 'var(--text-3)' }}>
-                          {formatDateKo(entry.entryDate)}
+                          {formatDateTime(entry.entryDate)}
                           {entry.characterName && ` · ${entry.characterName}`}
                         </span>
                         <span

@@ -4,15 +4,27 @@ export interface AuthResponse {
   user?: UserResponse
 }
 
-export interface UserResponse {
+export interface ServerProfileResponse {
   id: number
-  nickname: string
-  solErdaFragmentPrice: number
+  world: string
+  worldDisplayName: string
   inventoryMeso: number
   storageMeso: number
   totalMeso: number
+  solErdaFragmentPrice: number
+  createdAt: string
+}
+
+export interface ServerProfileRequest {
+  world: string
+}
+
+export interface UserResponse {
+  id: number
+  nickname: string
   createdAt: string
   mvpGrade?: MvpGrade
+  serverProfiles: ServerProfileResponse[]
 }
 
 export interface LoginRequest {
@@ -284,6 +296,9 @@ export interface MapleCharacter {
   isMain: boolean
   initialInvestment: number
   solErdaFragments: number
+  serverProfileId?: number
+  world?: string
+  worldDisplayName?: string
 }
 
 export interface CharacterRequest {
