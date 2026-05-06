@@ -67,6 +67,27 @@ export default function SettingsPage() {
   const [serverSubmitting, setServerSubmitting] = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
 
+  const [editingServerId, setEditingServerId] = useState<number | null>(null)
+  const [editWorld, setEditWorld] = useState('')
+  const [editSubmitting, setEditSubmitting] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
+
+  const handleEditServer = async (e: { preventDefault(): void }) => {
+    if (!editingServerId) return
+    e.preventDefault()
+    setEditSubmitting(true)
+    setEditError(null)
+    try {
+      await serverProfilesApi.updateProfile(editingServerId, { world: editWorld })
+      await refreshUser()
+      setEditingServerId(null)
+    } catch (err: any) {
+      setEditError(err?.response?.data?.message ?? '수정 실패')
+    } finally {
+      setEditSubmitting(false)
+    }
+  }
+
   // activeServer가 바뀌면 폼 동기화
   useEffect(() => {
     if (activeServer) {
@@ -149,6 +170,8 @@ export default function SettingsPage() {
 
   const usedWorlds = new Set(user?.serverProfiles?.map((p) => p.world) ?? [])
   const availableWorlds = WORLD_OPTIONS.filter((w) => !usedWorlds.has(w.value))
+  const worldsForEdit = (currentWorld: string) =>
+    WORLD_OPTIONS.filter((w) => w.value === currentWorld || !usedWorlds.has(w.value))
 
   return (
     <div className="space-y-3">
@@ -179,32 +202,61 @@ export default function SettingsPage() {
         </p>
         <div className="space-y-2 mb-3">
           {user?.serverProfiles?.map((sp) => (
-            <button
-              key={sp.id}
-              onClick={() => setActiveServerId(sp.id)}
-              className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left transition-all"
-              style={{
-                backgroundColor: sp.id === activeServer?.id ? 'var(--primary-dim)' : 'var(--surface-2)',
-                border: `1.5px solid ${sp.id === activeServer?.id ? 'var(--primary-glow)' : 'var(--border)'}`,
-              }}
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold w-3" style={{ color: 'var(--primary)' }}>
-                  {sp.id === activeServer?.id ? '✓' : ''}
-                </span>
-                <span className="text-sm font-semibold" style={{ color: sp.id === activeServer?.id ? 'var(--primary)' : 'var(--text)' }}>
-                  {sp.worldDisplayName}
-                </span>
-              </div>
-              {(user?.serverProfiles?.length ?? 0) > 1 && (
-                <span
-                  role="button"
-                  onClick={(e) => { e.stopPropagation(); handleDeleteServer(sp.id) }}
-                  className="text-xs w-6 h-6 flex items-center justify-center rounded"
-                  style={{ color: 'var(--red)' }}
-                >✕</span>
+            <div key={sp.id}>
+              {editingServerId === sp.id ? (
+                <form onSubmit={handleEditServer} className="p-3 rounded-xl space-y-2"
+                  style={{ backgroundColor: 'var(--surface-2)', border: '1.5px solid var(--primary-glow)' }}>
+                  {editError && (
+                    <p className="text-xs" style={{ color: 'var(--red)' }}>❌ {editError}</p>
+                  )}
+                  <Select
+                    label="서버 변경"
+                    options={worldsForEdit(sp.world)}
+                    value={editWorld}
+                    onChange={(e) => setEditWorld(e.target.value)}
+                  />
+                  <div className="flex gap-2">
+                    <Button type="submit" size="sm" loading={editSubmitting} className="flex-1">저장</Button>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => { setEditingServerId(null); setEditError(null) }}>취소</Button>
+                  </div>
+                </form>
+              ) : (
+                <div
+                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all"
+                  style={{
+                    backgroundColor: sp.id === activeServer?.id ? 'var(--primary-dim)' : 'var(--surface-2)',
+                    border: `1.5px solid ${sp.id === activeServer?.id ? 'var(--primary-glow)' : 'var(--border)'}`,
+                  }}
+                >
+                  <button className="flex items-center gap-2 flex-1 text-left" onClick={() => setActiveServerId(sp.id)}>
+                    <span className="text-xs font-semibold w-3" style={{ color: 'var(--primary)' }}>
+                      {sp.id === activeServer?.id ? '✓' : ''}
+                    </span>
+                    <span className="text-sm font-semibold" style={{ color: sp.id === activeServer?.id ? 'var(--primary)' : 'var(--text)' }}>
+                      {sp.worldDisplayName}
+                    </span>
+                  </button>
+                  <div className="flex items-center gap-1">
+                    <span
+                      role="button"
+                      onClick={() => { setEditingServerId(sp.id); setEditWorld(sp.world); setEditError(null) }}
+                      className="text-xs w-6 h-6 flex items-center justify-center rounded transition-colors"
+                      style={{ color: 'var(--text-3)' }}
+                      title="서버 변경"
+                    >✏️</span>
+                    {(user?.serverProfiles?.length ?? 0) > 1 && (
+                      <span
+                        role="button"
+                        onClick={() => handleDeleteServer(sp.id)}
+                        className="text-xs w-6 h-6 flex items-center justify-center rounded"
+                        style={{ color: 'var(--red)' }}
+                        title="삭제"
+                      >✕</span>
+                    )}
+                  </div>
+                </div>
               )}
-            </button>
+            </div>
           ))}
         </div>
 
