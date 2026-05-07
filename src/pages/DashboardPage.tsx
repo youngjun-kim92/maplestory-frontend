@@ -413,7 +413,7 @@ export default function DashboardPage() {
   const cumulativeExpense = allWeeks.reduce((s, w) => s + safeNum(w.totalExpense), 0)
   const cumulativeNet = cumulativeIncome - cumulativeExpense
 
-  const chartData = [...allWeeks].slice(-8).map((w) => ({
+  const chartData = allWeeks.filter(w => w.weekStart <= weekStartStr).slice(0, 8).reverse().map((w) => ({
     week: w.weekStart.slice(5).replace('-', '/'),
     수입: safeNum(w.totalIncome),
     지출: safeNum(w.totalExpense),
@@ -944,99 +944,42 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* 오른쪽: 차트 + 누적 */}
-        <div className="lg:col-span-2 space-y-4">
-
-          {chartData.length > 0 && (
-            <div className="rounded-xl p-4" style={panelStyle}>
-              <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text)' }}>📈 주간 수익 추이</h3>
-              <ResponsiveContainer width="100%" height={148}>
-                <BarChart data={chartData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
-                  <XAxis
-                    dataKey="week"
-                    tick={{ fontSize: 10, fill: 'var(--text-3)' }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis hide />
-                  <Tooltip
-                    formatter={(v) => formatMeso(v as number)}
-                    contentStyle={{
-                      backgroundColor: 'var(--surface-2)',
-                      border: '1px solid var(--border-2)',
-                      borderRadius: '8px',
-                      fontSize: '11px',
-                    }}
-                    cursor={{ fill: 'var(--primary-dim)' }}
-                  />
-                  <CartesianGrid strokeDasharray="2 4" stroke="rgba(240,246,252,0.06)" vertical={false} />
-                  <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: '10px', color: 'var(--text-2)' }} />
-                  <Bar dataKey="수입" fill="#3fb950" radius={[3, 3, 0, 0]} maxBarSize={22} />
-                  <Bar dataKey="지출" fill="#f85149" radius={[3, 3, 0, 0]} maxBarSize={22} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-
-          <div className="rounded-xl p-4" style={panelStyle}>
-            <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text)' }}>📋 전체 누적</h3>
-            <div className="space-y-2">
-              {[
-                { label: '총 수입', value: cumulativeIncome, color: 'var(--green)', prefix: '+' },
-                { label: '총 지출', value: cumulativeExpense, color: 'var(--red)', prefix: '-' },
-                { label: '총 순수익', value: cumulativeNet, color: cumulativeNet >= 0 ? 'var(--primary)' : 'var(--red)', prefix: cumulativeNet >= 0 ? '+' : '' },
-              ].map((item) => (
-                <div
-                  key={item.label}
-                  className="flex items-center justify-between py-2 px-3 rounded-lg"
-                  style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)' }}
-                >
-                  <span className="text-xs" style={{ color: 'var(--text-3)' }}>{item.label}</span>
-                  <span className="text-sm font-bold" style={{ color: item.color }}>
-                    {item.prefix}{formatMeso(item.value)}
-                  </span>
-                </div>
-              ))}
-            </div>
+        {/* 오른쪽: 드랍 아이템 */}
+        <div className="lg:col-span-2 rounded-xl overflow-hidden" style={panelStyle}>
+          <div className="dark-panel-header">
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+              📦 {isThisWeek ? '이번 주' : '해당 주'} 드랍 아이템
+            </h3>
           </div>
-        </div>
-      </div>
-
-      {/* 드랍 아이템 */}
-      <div className="rounded-xl overflow-hidden" style={panelStyle}>
-        <div className="dark-panel-header">
-          <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
-            📦 {isThisWeek ? '이번 주' : '해당 주'} 드랍 아이템
-          </h3>
-        </div>
-        {dropsLoading ? (
-          <p className="text-sm text-center py-6 animate-pulse" style={{ color: 'var(--text-3)' }}>불러오는 중...</p>
-        ) : drops.length === 0 ? (
-          <p className="text-sm text-center py-6" style={{ color: 'var(--text-3)' }}>드랍 기록이 없어요</p>
-        ) : (
-          <div className="p-3 space-y-2">
-            {drops.map((drop) => (
-              <div key={drop.id}>
-                <div className="list-row">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{drop.itemName}</p>
-                      <span
-                        className="text-xs px-2 py-0.5 rounded-full"
-                        style={
-                          drop.status === 'sold'
-                            ? { backgroundColor: 'rgba(74,222,128,0.12)', color: 'var(--green)' }
-                            : drop.status === 'listed'
-                            ? { backgroundColor: 'rgba(234,179,8,0.12)', color: '#fbbf24' }
-                            : { backgroundColor: 'var(--primary-dim)', color: 'var(--primary)' }
-                        }
-                      >
-                        {drop.status === 'sold' ? '✅ 판매 완료' : drop.status === 'listed' ? '🏪 경매장 등록 중' : '📦 보유 중'}
-                      </span>
-                    </div>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
-                      {drop.bossName} {difficultyLabel(drop.difficulty)}{drop.characterName && ` • ${drop.characterName}`}
-                    </p>
+          <div className="overflow-y-auto" style={{ maxHeight: '340px' }}>
+            {dropsLoading ? (
+              <p className="text-sm text-center py-6 animate-pulse" style={{ color: 'var(--text-3)' }}>불러오는 중...</p>
+            ) : drops.length === 0 ? (
+              <p className="text-sm text-center py-6" style={{ color: 'var(--text-3)' }}>드랍 기록이 없어요</p>
+            ) : (
+              <div className="p-3 space-y-2">
+                {drops.map((drop) => (
+                  <div key={drop.id}>
+                    <div className="list-row">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{drop.itemName}</p>
+                          <span
+                            className="text-xs px-2 py-0.5 rounded-full"
+                            style={
+                              drop.status === 'sold'
+                                ? { backgroundColor: 'rgba(74,222,128,0.12)', color: 'var(--green)' }
+                                : drop.status === 'listed'
+                                ? { backgroundColor: 'rgba(234,179,8,0.12)', color: '#fbbf24' }
+                                : { backgroundColor: 'var(--primary-dim)', color: 'var(--primary)' }
+                            }
+                          >
+                            {drop.status === 'sold' ? '✅ 판매 완료' : drop.status === 'listed' ? '🏪 경매장 등록 중' : '📦 보유 중'}
+                          </span>
+                        </div>
+                        <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
+                          {drop.bossName} {difficultyLabel(drop.difficulty)}{drop.characterName && ` • ${drop.characterName}`}
+                        </p>
                     {drop.status === 'sold' && drop.saleAmount && (
                       <p className="text-xs mt-0.5 font-medium" style={{ color: 'var(--green)' }}>
                         {formatMeso(drop.saleAmount)} 판매
@@ -1133,6 +1076,8 @@ export default function DashboardPage() {
             ))}
           </div>
         )}
+          </div>
+        </div>
       </div>
 
       {/* 이번 주 / 전체 통계 구분선 */}
@@ -1147,6 +1092,87 @@ export default function DashboardPage() {
         <div className="flex-1 h-px" style={{ backgroundColor: 'var(--border-2)' }} />
       </div>
 
+      {/* 전체 통계: 차트 + 누적 + 수익 구성 */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="rounded-xl p-4" style={panelStyle}>
+          <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text)' }}>📈 주간 수익 추이</h3>
+          {chartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={120}>
+              <BarChart data={chartData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+                <XAxis dataKey="week" tick={{ fontSize: 9, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} />
+                <YAxis hide />
+                <Tooltip
+                  formatter={(v) => formatMeso(v as number)}
+                  contentStyle={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: '8px', fontSize: '11px' }}
+                  cursor={{ fill: 'var(--primary-dim)' }}
+                />
+                <CartesianGrid strokeDasharray="2 4" stroke="rgba(240,246,252,0.06)" vertical={false} />
+                <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: '10px', color: 'var(--text-2)' }} />
+                <Bar dataKey="수입" fill="#3fb950" radius={[3, 3, 0, 0]} maxBarSize={18} />
+                <Bar dataKey="지출" fill="#f85149" radius={[3, 3, 0, 0]} maxBarSize={18} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="text-xs text-center py-6" style={{ color: 'var(--text-3)' }}>데이터 없음</p>
+          )}
+        </div>
+        <div className="rounded-xl p-4" style={panelStyle}>
+          <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text)' }}>📋 전체 누적</h3>
+          <div className="space-y-2">
+            {[
+              { label: '총 수입', value: cumulativeIncome, color: 'var(--green)', prefix: '+' },
+              { label: '총 지출', value: cumulativeExpense, color: 'var(--red)', prefix: '-' },
+              { label: '총 순수익', value: cumulativeNet, color: cumulativeNet >= 0 ? 'var(--primary)' : 'var(--red)', prefix: cumulativeNet >= 0 ? '+' : '' },
+            ].map((item) => (
+              <div key={item.label} className="flex items-center justify-between py-2 px-3 rounded-lg" style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                <span className="text-xs" style={{ color: 'var(--text-3)' }}>{item.label}</span>
+                <span className="text-sm font-bold" style={{ color: item.color }}>{item.prefix}{formatMeso(item.value)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-xl overflow-hidden" style={panelStyle}>
+          <div className="dark-panel-header">
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>📊 수익 구성 비율 ({catStatsRange})</h3>
+          </div>
+          {statsLoading ? (
+            <p className="text-sm text-center py-6 animate-pulse" style={{ color: 'var(--text-3)' }}>불러오는 중...</p>
+          ) : (() => {
+            const incomeStats = catStats.filter((s) => s.type === 'income')
+            const byCategory = Object.fromEntries(incomeStats.map((s) => [s.category, safeNum(s.total)]))
+            const bossAuction = safeNum(byCategory['boss']) + safeNum(byCategory['auction'])
+            const huntingSolErda = safeNum(byCategory['hunting']) + safeNum(byCategory['sol_erda'])
+            const totalIncome = Object.values(byCategory).reduce((a, b) => a + b, 0)
+            const bossAuctionPct = totalIncome > 0 ? (bossAuction / totalIncome) * 100 : 0
+            const huntingSolErdaPct = totalIncome > 0 ? (huntingSolErda / totalIncome) * 100 : 0
+            if (totalIncome === 0) {
+              return <p className="text-xs text-center py-6" style={{ color: 'var(--text-3)' }}>데이터 없음</p>
+            }
+            return (
+              <div className="p-4 space-y-4">
+                {[
+                  { label: '⚔️ 보스 + 경매장', value: bossAuction, pct: bossAuctionPct, color: 'var(--primary)', gradient: 'linear-gradient(90deg, var(--primary) 0%, var(--primary-light) 100%)' },
+                  { label: '🌲 사냥 + 솔 에르다', value: huntingSolErda, pct: huntingSolErdaPct, color: 'var(--green)', gradient: 'var(--green)' },
+                ].map((row) => (
+                  <div key={row.label}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>{row.label}</span>
+                      <span className="text-xs font-bold" style={{ color: row.color }}>{row.pct.toFixed(1)}%</span>
+                    </div>
+                    <div className="rounded-full h-3 overflow-hidden" style={{ backgroundColor: 'var(--surface-2)' }}>
+                      <div className="h-full rounded-full transition-all" style={{ width: `${row.pct}%`, background: row.gradient }} />
+                    </div>
+                    <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>{formatMeso(row.value)}</p>
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
+        </div>
+      </div>
+
+      {/* 주별 기록 + 캐릭터 현황 2컬럼 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       {/* 주별 기록 테이블 (솔 에르다 조각 + 항목 수 컬럼 포함) */}
       <div className="rounded-xl overflow-hidden" style={panelStyle}>
         <div className="dark-panel-header flex items-center justify-between">
@@ -1295,49 +1321,6 @@ export default function DashboardPage() {
         })()}
       </div>
 
-      {/* 수익 구성 비율 */}
-      <div className="rounded-xl overflow-hidden" style={panelStyle}>
-        <div className="dark-panel-header">
-          <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>📊 수익 구성 비율 ({catStatsRange})</h3>
-        </div>
-        {statsLoading ? (
-          <p className="text-sm text-center py-6 animate-pulse" style={{ color: 'var(--text-3)' }}>불러오는 중...</p>
-        ) : (() => {
-          const incomeStats = catStats.filter((s) => s.type === 'income')
-          const byCategory = Object.fromEntries(incomeStats.map((s) => [s.category, safeNum(s.total)]))
-          const bossAuction = safeNum(byCategory['boss']) + safeNum(byCategory['auction'])
-          const huntingSolErda = safeNum(byCategory['hunting']) + safeNum(byCategory['sol_erda'])
-          const totalIncome = Object.values(byCategory).reduce((a, b) => a + b, 0)
-          const bossAuctionPct = totalIncome > 0 ? (bossAuction / totalIncome) * 100 : 0
-          const huntingSolErdaPct = totalIncome > 0 ? (huntingSolErda / totalIncome) * 100 : 0
-          if (totalIncome === 0) {
-            return <p className="text-xs text-center py-6" style={{ color: 'var(--text-3)' }}>데이터 없음</p>
-          }
-          return (
-            <div className="p-4 space-y-4">
-              {[
-                { label: '⚔️ 보스 + 경매장', value: bossAuction, pct: bossAuctionPct, color: 'var(--primary)', gradient: 'linear-gradient(90deg, var(--primary) 0%, var(--primary-light) 100%)' },
-                { label: '🌲 사냥 + 솔 에르다', value: huntingSolErda, pct: huntingSolErdaPct, color: 'var(--green)', gradient: 'var(--green)' },
-              ].map((row) => (
-                <div key={row.label}>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>{row.label}</span>
-                    <span className="text-xs font-bold" style={{ color: row.color }}>{row.pct.toFixed(1)}%</span>
-                  </div>
-                  <div className="rounded-full h-3 overflow-hidden" style={{ backgroundColor: 'var(--surface-2)' }}>
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{ width: `${row.pct}%`, background: row.gradient }}
-                    />
-                  </div>
-                  <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>{formatMeso(row.value)}</p>
-                </div>
-              ))}
-            </div>
-          )
-        })()}
-      </div>
-
       {/* 캐릭터 현황 */}
       {characters.length > 0 && (
         <div className="rounded-xl overflow-hidden" style={panelStyle}>
@@ -1386,6 +1369,7 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+      </div>
 
       {/* 캐릭터별 수입/지출 */}
       {charStats.length > 0 && (

@@ -3,7 +3,7 @@ import { huntingApi } from '../api/hunting'
 import { charactersApi, bustCharacterCache } from '../api/characters'
 import { useAuth } from '../contexts/AuthContext'
 import type { HuntingSession, MapleCharacter } from '../types'
-import { formatMeso, formatDateTime, toDateString, withCurrentTime, toKoreanAmount } from '../utils/format'
+import { formatMeso, formatDateTime, toDateString, withCurrentTime, toKoreanAmount, getWeekStart } from '../utils/format'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
@@ -33,29 +33,33 @@ export default function HuntingPage() {
   const [calcAfter, setCalcAfter] = useState({ meso: '', fragments: '' })
 
   const fetchSessions = useCallback(async (charId: string) => {
-    const params = charId ? { characterId: Number(charId) } : undefined
+    const week = toDateString(getWeekStart())
+    const params = charId
+      ? { week, characterId: Number(charId) }
+      : { week }
     const res = await huntingApi.getWeeklySessions(params)
     setSessions(res.data)
   }, [])
 
   useEffect(() => {
+    let cancelled = false
     setLoading(true)
-    setSelectedCharId('')
-    Promise.all([
-      huntingApi.getWeeklySessions(),
-      charactersApi.getCharacters(),
-    ]).then(([sess, chars]) => {
-      setSessions(sess.data)
+    charactersApi.getCharacters().then(async (chars) => {
+      if (cancelled) return
       const charList = chars.data
       setCharacters(charList)
       const mainChar = charList.find((c) => c.isMain) ?? charList[0]
-      if (mainChar) setSelectedCharId(String(mainChar.id))
-    }).finally(() => setLoading(false))
-  }, [activeServerId])
+      const mainCharId = mainChar ? String(mainChar.id) : ''
+      setSelectedCharId(mainCharId)
+      await fetchSessions(mainCharId)
+    }).finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [activeServerId, fetchSessions])
 
-  useEffect(() => {
-    if (!loading && selectedCharId) fetchSessions(selectedCharId)
-  }, [selectedCharId, fetchSessions, loading])
+  const handleCharChange = useCallback((charId: string) => {
+    setSelectedCharId(charId)
+    fetchSessions(charId)
+  }, [fetchSessions])
 
   const erdaPrice = activeServer?.solErdaFragmentPrice ?? 0
   const selectedChar = characters.find((c) => String(c.id) === selectedCharId)
@@ -150,7 +154,7 @@ export default function HuntingPage() {
           <select
             className="form-field text-sm min-w-[120px] max-w-[200px] w-auto"
             value={selectedCharId}
-            onChange={(e) => setSelectedCharId(e.target.value)}
+            onChange={(e) => handleCharChange(e.target.value)}
           >
             {characters.map((c) => (
               <option key={c.id} value={String(c.id)} style={{ backgroundColor: 'var(--surface-2)' }}>
