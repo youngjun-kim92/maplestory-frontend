@@ -20,12 +20,13 @@ export default function HuntingPage() {
   const [form, setForm] = useState({
     income: '',
     solErdaFragments: '',
+    roundCount: '',
     sessionDate: toDateString(),
   })
 
   // 편집 모달 상태
   const [editingSession, setEditingSession] = useState<HuntingSession | null>(null)
-  const [editForm, setEditForm] = useState({ income: '', solErdaFragments: '', sessionDate: '' })
+  const [editForm, setEditForm] = useState({ income: '', solErdaFragments: '', roundCount: '', sessionDate: '' })
   const [editSubmitting, setEditSubmitting] = useState(false)
 
   const [inputMode, setInputMode] = useState<'direct' | 'calc'>('direct')
@@ -75,6 +76,7 @@ export default function HuntingPage() {
     if (!selectedCharId) return
     let income: number
     let fragments: number | undefined
+    const roundCount = form.roundCount ? Number(form.roundCount) : undefined
     if (inputMode === 'calc') {
       if (!calcAfter.meso) return
       income = Number(calcAfter.meso) - Number(calcBefore.meso || '0')
@@ -92,12 +94,13 @@ export default function HuntingPage() {
         solErdaFragments: fragments,
         sessionDate: withCurrentTime(form.sessionDate),
         characterId: Number(selectedCharId),
+        roundCount: roundCount ?? null,
       })
       if (inputMode === 'calc') {
         setCalcBefore({ meso: calcAfter.meso, fragments: calcAfter.fragments })
         setCalcAfter({ meso: '', fragments: '' })
       } else {
-        setForm((p) => ({ ...p, income: '', solErdaFragments: '' }))
+        setForm((p) => ({ ...p, income: '', solErdaFragments: '', roundCount: '' }))
       }
       await Promise.all([fetchSessions(selectedCharId), refetchCharacters()])
       await refreshUser()
@@ -118,6 +121,7 @@ export default function HuntingPage() {
     setEditForm({
       income: String(sess.income),
       solErdaFragments: sess.solErdaFragments > 0 ? String(sess.solErdaFragments) : '',
+      roundCount: sess.roundCount ? String(sess.roundCount) : '',
       sessionDate: sess.sessionDate.slice(0, 10),
     })
   }
@@ -131,6 +135,7 @@ export default function HuntingPage() {
         income: Number(editForm.income),
         solErdaFragments: editForm.solErdaFragments ? Number(editForm.solErdaFragments) : undefined,
         sessionDate: withCurrentTime(editForm.sessionDate),
+        roundCount: editForm.roundCount ? Number(editForm.roundCount) : null,
       })
       setEditingSession(null)
       await Promise.all([fetchSessions(selectedCharId), refetchCharacters()])
@@ -141,6 +146,10 @@ export default function HuntingPage() {
   }
 
   const totalWeeklyIncome = sessions.reduce((s, sess) => s + sess.totalIncome, 0)
+  const totalRounds = sessions.reduce((s, sess) => s + (sess.roundCount ?? 0), 0)
+  const totalFragments = sessions.reduce((s, sess) => s + sess.solErdaFragments, 0)
+  const avgIncomePerRound = totalRounds > 0 ? Math.round(totalWeeklyIncome / totalRounds) : null
+  const avgFragmentsPerRound = totalRounds > 0 && totalFragments > 0 ? Math.round(totalFragments / totalRounds) : null
 
   if (loading) {
     return <div className="flex items-center justify-center py-20 text-orange-400 animate-pulse">불러오는 중...</div>
@@ -149,7 +158,10 @@ export default function HuntingPage() {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>🌲 사냥 기록</h1>
+        <div>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>🌲 사냥 기록</h1>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>📅 {toDateString(getWeekStart())} 주 (목요일 기준)</p>
+        </div>
         {characters.length > 0 ? (
           <select
             className="form-field text-sm min-w-[120px] max-w-[200px] w-auto"
@@ -168,210 +180,287 @@ export default function HuntingPage() {
       </div>
 
       {/* 주간 요약 */}
-      <Card className="flex items-center justify-between">
+      <Card className="flex items-center justify-between gap-4" style={{ padding: '0.75rem 1rem' }}>
         <div>
           <p className="text-sm" style={{ color: 'var(--text-2)' }}>이번 주 사냥 수익</p>
           <p className="font-bold text-2xl mt-0.5" style={{ color: 'var(--orange-light)' }}>{formatMeso(totalWeeklyIncome)}</p>
         </div>
+        {avgIncomePerRound !== null && (
+          <div className="text-center">
+            <p className="text-sm" style={{ color: 'var(--text-2)' }}>소재당 평균 수익</p>
+            <p className="font-bold text-2xl mt-0.5" style={{ color: 'var(--green)' }}>{formatMeso(avgIncomePerRound)}</p>
+          </div>
+        )}
+        {avgFragmentsPerRound !== null && (
+          <div className="text-center">
+            <p className="text-sm" style={{ color: 'var(--text-2)' }}>소재당 평균 조각</p>
+            <p className="font-bold text-2xl mt-0.5" style={{ color: '#a78bfa' }}>🔮 {avgFragmentsPerRound}개</p>
+          </div>
+        )}
         <div className="text-right">
           <p className="text-sm" style={{ color: 'var(--text-2)' }}>사냥 횟수</p>
           <p className="font-bold text-2xl mt-0.5" style={{ color: 'var(--text)' }}>{sessions.length}회</p>
         </div>
       </Card>
 
-      {/* 사냥 기록 폼 */}
-      <Card title="사냥 기록" icon="🌲">
-        <form onSubmit={handleSubmit} className="space-y-3">
-          {/* 입력 모드 토글 */}
-          <div className="flex gap-0.5 p-0.5 rounded-xl" style={{ backgroundColor: 'var(--surface-2)', width: 'fit-content' }}>
-            {(['direct', 'calc'] as const).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => {
-                  if (mode === 'calc') {
-                    setCalcBefore({
-                      meso: String(activeServer?.inventoryMeso ?? ''),
-                      fragments: String(selectedChar?.solErdaFragments ?? ''),
-                    })
-                    setCalcAfter({ meso: '', fragments: '' })
-                  }
-                  setInputMode(mode)
-                }}
-                className="px-3 py-1 rounded-lg text-xs font-semibold transition-all"
-                style={inputMode === mode
-                  ? { backgroundColor: 'var(--primary)', color: '#fff' }
-                  : { backgroundColor: 'transparent', color: 'var(--text-3)' }}
-              >
-                {mode === 'direct' ? '직접 입력' : '인벤 계산'}
-              </button>
-            ))}
-          </div>
+      {/* ── 50/50: 사냥 기록 폼 + 이번 주 사냥 기록 ── */}
+      <div className="grid grid-cols-2 gap-4 items-start">
+        {/* Left: 사냥 기록 폼 */}
+        <Card title="사냥 기록" icon="🌲">
+          <form onSubmit={handleSubmit} className="space-y-3">
+            {/* 입력 모드 토글 */}
+            <div className="flex gap-0.5 p-0.5 rounded-xl" style={{ backgroundColor: 'var(--surface-2)', width: 'fit-content' }}>
+              {(['direct', 'calc'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => {
+                    if (mode === 'calc') {
+                      setCalcBefore({
+                        meso: String(activeServer?.inventoryMeso ?? ''),
+                        fragments: String(selectedChar?.solErdaFragments ?? ''),
+                      })
+                      setCalcAfter({ meso: '', fragments: '' })
+                    }
+                    setInputMode(mode)
+                  }}
+                  className="px-3 py-1 rounded-lg text-xs font-semibold transition-all"
+                  style={inputMode === mode
+                    ? { backgroundColor: 'var(--primary)', color: '#fff' }
+                    : { backgroundColor: 'transparent', color: 'var(--text-3)' }}
+                >
+                  {mode === 'direct' ? '직접 입력' : '인벤 계산'}
+                </button>
+              ))}
+            </div>
 
-          {inputMode === 'direct' ? (
+            {inputMode === 'direct' ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Input
+                    label="순수익 (메소)"
+                    type="number"
+                    placeholder="예: 500000000"
+                    value={form.income}
+                    onChange={(e) => setForm((p) => ({ ...p, income: e.target.value }))}
+                    min={0}
+                  />
+                  <QuickAmountButtons onAdd={(v) => setForm((p) => ({ ...p, income: String((Number(p.income) || 0) + v) }))} />
+                  {toKoreanAmount(form.income) && (
+                    <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-3)' }}>{toKoreanAmount(form.income)}</p>
+                  )}
+                </div>
+                <div>
+                  <Input
+                    label="솔 에르다 조각 개수 (선택)"
+                    type="number"
+                    placeholder="획득한 조각 수"
+                    value={form.solErdaFragments}
+                    onChange={(e) => setForm((p) => ({ ...p, solErdaFragments: e.target.value }))}
+                    min={0}
+                  />
+                  <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                    {[5, 10, 30].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setForm((p) => ({ ...p, solErdaFragments: String((Number(p.solErdaFragments) || 0) + n) }))}
+                        className="px-2 py-0.5 rounded-lg text-xs font-medium transition-all"
+                        style={{ backgroundColor: 'rgba(167,139,250,0.15)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.3)' }}
+                      >
+                        +{n}개
+                      </button>
+                    ))}
+                  </div>
+                  {selectedChar !== undefined && (
+                    <p className="text-xs mt-1 pl-0.5" style={{ color: '#a78bfa' }}>
+                      🔮 현재 보유: {selectedChar.solErdaFragments.toLocaleString()}개
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <p className="text-xs font-medium" style={{ color: 'var(--text-3)' }}>💰 메소</p>
+                  <Input
+                    label="사냥 전 메소"
+                    type="number"
+                    placeholder="0"
+                    value={calcBefore.meso}
+                    onChange={(e) => setCalcBefore((p) => ({ ...p, meso: e.target.value }))}
+                    min={0}
+                  />
+                  <Input
+                    label="사냥 후 메소"
+                    type="number"
+                    placeholder="0"
+                    value={calcAfter.meso}
+                    onChange={(e) => setCalcAfter((p) => ({ ...p, meso: e.target.value }))}
+                    min={0}
+                  />
+                  {calcAfter.meso !== '' && (() => {
+                    const diff = Number(calcAfter.meso) - Number(calcBefore.meso || '0')
+                    return (
+                      <p className="text-xs font-semibold pl-0.5" style={{ color: diff >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                        순수익 {diff >= 0 ? '+' : ''}{formatMeso(diff)} 메소
+                      </p>
+                    )
+                  })()}
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs font-medium" style={{ color: 'var(--text-3)' }}>🔮 솔 에르다 조각</p>
+                  <Input
+                    label="사냥 전 조각"
+                    type="number"
+                    placeholder="0"
+                    value={calcBefore.fragments}
+                    onChange={(e) => setCalcBefore((p) => ({ ...p, fragments: e.target.value }))}
+                    min={0}
+                  />
+                  <Input
+                    label="사냥 후 조각"
+                    type="number"
+                    placeholder="0"
+                    value={calcAfter.fragments}
+                    onChange={(e) => setCalcAfter((p) => ({ ...p, fragments: e.target.value }))}
+                    min={0}
+                  />
+                  {calcAfter.fragments !== '' && (() => {
+                    const diff = Number(calcAfter.fragments) - Number(calcBefore.fragments || '0')
+                    return (
+                      <p className="text-xs font-semibold pl-0.5" style={{ color: diff >= 0 ? '#a78bfa' : 'var(--red)' }}>
+                        획득 조각 {diff >= 0 ? '+' : ''}{diff}개
+                      </p>
+                    )
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {inputMode === 'direct' && form.solErdaFragments && Number(form.solErdaFragments) > 0 && erdaPrice > 0 && (
+              <p className="text-xs pl-1" style={{ color: 'var(--text-2)' }}>
+                🔮 {form.solErdaFragments}개 × {erdaPrice.toLocaleString()}메소 = {formatMeso(Number(form.solErdaFragments) * erdaPrice)} 메소
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Input
-                  label="순수익 (메소)"
+                  label="소재 수 (선택)"
                   type="number"
-                  placeholder="예: 500000000"
-                  value={form.income}
-                  onChange={(e) => setForm((p) => ({ ...p, income: e.target.value }))}
-                  min={0}
-                />
-                <QuickAmountButtons onAdd={(v) => setForm((p) => ({ ...p, income: String((Number(p.income) || 0) + v) }))} />
-                {toKoreanAmount(form.income) && (
-                  <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-3)' }}>{toKoreanAmount(form.income)}</p>
-                )}
-              </div>
-              <div>
-                <Input
-                  label="솔 에르다 조각 개수 (선택)"
-                  type="number"
-                  placeholder="획득한 조각 수"
-                  value={form.solErdaFragments}
-                  onChange={(e) => setForm((p) => ({ ...p, solErdaFragments: e.target.value }))}
-                  min={0}
+                  placeholder="예: 4"
+                  value={form.roundCount}
+                  onChange={(e) => setForm((p) => ({ ...p, roundCount: e.target.value }))}
+                  min={1}
                 />
                 <div className="flex gap-1.5 mt-1.5 flex-wrap">
-                  {[5, 10, 30].map((n) => (
+                  {[1, 2, 4, 6].map((n) => (
                     <button
                       key={n}
                       type="button"
-                      onClick={() => setForm((p) => ({ ...p, solErdaFragments: String((Number(p.solErdaFragments) || 0) + n) }))}
+                      onClick={() => setForm((p) => ({ ...p, roundCount: String(n) }))}
                       className="px-2 py-0.5 rounded-lg text-xs font-medium transition-all"
-                      style={{ backgroundColor: 'rgba(167,139,250,0.15)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.3)' }}
+                      style={
+                        form.roundCount === String(n)
+                          ? { backgroundColor: 'var(--primary)', color: '#fff' }
+                          : { backgroundColor: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }
+                      }
                     >
-                      +{n}개
+                      {n}소재
                     </button>
                   ))}
                 </div>
-                {selectedChar !== undefined && (
-                  <p className="text-xs mt-1 pl-0.5" style={{ color: '#a78bfa' }}>
-                    🔮 현재 보유: {selectedChar.solErdaFragments.toLocaleString()}개
+                {form.roundCount && Number(form.roundCount) >= 1 && (
+                  <p className="text-xs mt-1 pl-0.5" style={{ color: 'var(--text-3)' }}>
+                    ⏱ {Number(form.roundCount) * 30}분
                   </p>
                 )}
               </div>
+              <Input
+                label="날짜"
+                type="date"
+                value={form.sessionDate}
+                onChange={(e) => setForm((p) => ({ ...p, sessionDate: e.target.value }))}
+              />
             </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <p className="text-xs font-medium" style={{ color: 'var(--text-3)' }}>💰 메소</p>
-                <Input
-                  label="사냥 전 메소"
-                  type="number"
-                  placeholder="0"
-                  value={calcBefore.meso}
-                  onChange={(e) => setCalcBefore((p) => ({ ...p, meso: e.target.value }))}
-                  min={0}
-                />
-                <Input
-                  label="사냥 후 메소"
-                  type="number"
-                  placeholder="0"
-                  value={calcAfter.meso}
-                  onChange={(e) => setCalcAfter((p) => ({ ...p, meso: e.target.value }))}
-                  min={0}
-                />
-                {calcAfter.meso !== '' && (() => {
-                  const diff = Number(calcAfter.meso) - Number(calcBefore.meso || '0')
-                  return (
-                    <p className="text-xs font-semibold pl-0.5" style={{ color: diff >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                      순수익 {diff >= 0 ? '+' : ''}{formatMeso(diff)} 메소
-                    </p>
-                  )
-                })()}
-              </div>
-              <div className="space-y-2">
-                <p className="text-xs font-medium" style={{ color: 'var(--text-3)' }}>🔮 솔 에르다 조각</p>
-                <Input
-                  label="사냥 전 조각"
-                  type="number"
-                  placeholder="0"
-                  value={calcBefore.fragments}
-                  onChange={(e) => setCalcBefore((p) => ({ ...p, fragments: e.target.value }))}
-                  min={0}
-                />
-                <Input
-                  label="사냥 후 조각"
-                  type="number"
-                  placeholder="0"
-                  value={calcAfter.fragments}
-                  onChange={(e) => setCalcAfter((p) => ({ ...p, fragments: e.target.value }))}
-                  min={0}
-                />
-                {calcAfter.fragments !== '' && (() => {
-                  const diff = Number(calcAfter.fragments) - Number(calcBefore.fragments || '0')
-                  return (
-                    <p className="text-xs font-semibold pl-0.5" style={{ color: diff >= 0 ? '#a78bfa' : 'var(--red)' }}>
-                      획득 조각 {diff >= 0 ? '+' : ''}{diff}개
-                    </p>
-                  )
-                })()}
-              </div>
+            <div className="flex justify-end">
+              <Button type="submit" loading={submitting} disabled={!selectedCharId || characters.length === 0}>
+                기록하기
+              </Button>
             </div>
-          )}
+          </form>
+        </Card>
 
-          {inputMode === 'direct' && form.solErdaFragments && Number(form.solErdaFragments) > 0 && erdaPrice > 0 && (
-            <p className="text-xs pl-1" style={{ color: 'var(--text-2)' }}>
-              🔮 {form.solErdaFragments}개 × {erdaPrice.toLocaleString()}메소 = {formatMeso(Number(form.solErdaFragments) * erdaPrice)} 메소
-            </p>
-          )}
-          <Input
-            label="날짜"
-            type="date"
-            value={form.sessionDate}
-            onChange={(e) => setForm((p) => ({ ...p, sessionDate: e.target.value }))}
-          />
-          <div className="flex justify-end">
-            <Button type="submit" loading={submitting} disabled={!selectedCharId || characters.length === 0}>
-              기록하기
-            </Button>
+        {/* Right: 이번 주 사냥 기록 */}
+        <div
+          className="rounded-2xl overflow-hidden"
+          style={{ backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', boxShadow: 'var(--shadow)' }}
+        >
+          <div
+            className="flex items-center gap-2 px-3 py-2.5 shrink-0"
+            style={{ borderBottom: '1px solid var(--border)' }}
+          >
+            <span className="text-lg">📋</span>
+            <h2 className="font-semibold text-base" style={{ color: 'var(--text)' }}>이번 주 사냥 기록</h2>
           </div>
-        </form>
-      </Card>
-
-      {/* 이번 주 기록 */}
-      <Card title="이번 주 사냥 기록" icon="📋">
-        {sessions.length === 0 ? (
-          <p className="text-sm text-center py-6" style={{ color: 'var(--text-3)' }}>이번 주 사냥 기록이 없습니다.</p>
-        ) : (
-          <div className="space-y-1.5">
-            {sessions.map((sess: HuntingSession) => (
-              <div key={sess.id} className="list-row">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>{formatDateTime(sess.sessionDate)}</p>
-                    {sess.solErdaFragments > 0 && (
-                      <span className="text-xs" style={{ color: '#a78bfa' }}>🔮 {sess.solErdaFragments}개</span>
-                    )}
+          <div className="overflow-y-auto" style={{ maxHeight: '460px' }}>
+            {sessions.length === 0 ? (
+              <div className="px-4 py-8 flex flex-col items-center gap-2">
+                <span className="text-3xl opacity-30">🌲</span>
+                <p className="text-sm text-center" style={{ color: 'var(--text-3)' }}>이번 주 사냥 기록이 없습니다.</p>
+              </div>
+            ) : (
+              <div className="space-y-1.5 p-3">
+                {sessions.map((sess: HuntingSession) => (
+                  <div key={sess.id} className="list-row">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>{formatDateTime(sess.sessionDate)}</p>
+                        {sess.roundCount != null && sess.roundCount > 0 && (
+                          <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-2)' }}>
+                            {sess.roundCount}소재
+                          </span>
+                        )}
+                        {sess.solErdaFragments > 0 && (
+                          <span className="text-xs" style={{ color: '#a78bfa' }}>🔮 {sess.solErdaFragments}개</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {sess.characterName && (
+                          <p className="text-xs" style={{ color: 'var(--text-3)' }}>{sess.characterName}</p>
+                        )}
+                        {sess.roundCount != null && sess.roundCount > 0 && (
+                          <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+                            소재당 {formatMeso(Math.round(sess.totalIncome / sess.roundCount))}
+                            {sess.solErdaFragments > 0 && ` · 🔮 ${Math.round(sess.solErdaFragments / sess.roundCount)}개`}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <p className="font-semibold text-sm" style={{ color: 'var(--green)' }}>+{formatMeso(sess.totalIncome)}</p>
+                      <button
+                        onClick={() => openEdit(sess)}
+                        className="text-xs px-1.5 py-0.5 rounded transition-colors"
+                        style={{ color: 'var(--primary)', backgroundColor: 'var(--primary-dim)' }}
+                        title="수정"
+                      >✏️</button>
+                      <button
+                        onClick={() => handleDelete(sess.id)}
+                        className="text-xs px-1.5 py-0.5 rounded transition-colors"
+                        style={{ color: 'var(--text-3)', backgroundColor: 'var(--surface-2)' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--red)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-3)')}
+                        title="삭제"
+                      >🗑️</button>
+                    </div>
                   </div>
-                  {sess.characterName && (
-                    <p className="text-xs" style={{ color: 'var(--text-3)' }}>{sess.characterName}</p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <p className="font-semibold text-sm" style={{ color: 'var(--green)' }}>+{formatMeso(sess.totalIncome)}</p>
-                  <button
-                    onClick={() => openEdit(sess)}
-                    className="text-xs px-1.5 py-0.5 rounded transition-colors"
-                    style={{ color: 'var(--primary)', backgroundColor: 'var(--primary-dim)' }}
-                    title="수정"
-                  >✏️</button>
-                  <button
-                    onClick={() => handleDelete(sess.id)}
-                    className="text-xs px-1.5 py-0.5 rounded transition-colors"
-                    style={{ color: 'var(--text-3)', backgroundColor: 'var(--surface-2)' }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--red)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-3)')}
-                    title="삭제"
-                  >🗑️</button>
-                </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
-        )}
-      </Card>
+        </div>
+      </div>
 
       {/* 편집 모달 */}
       {editingSession && (
@@ -406,14 +495,31 @@ export default function HuntingPage() {
                   <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-3)' }}>{toKoreanAmount(editForm.income)}</p>
                 )}
               </div>
-              <Input
-                label="솔 에르다 조각 개수 (선택)"
-                type="number"
-                placeholder="0"
-                value={editForm.solErdaFragments}
-                onChange={(e) => setEditForm((p) => ({ ...p, solErdaFragments: e.target.value }))}
-                min={0}
-              />
+              <div className="grid grid-cols-2 gap-3">
+                <Input
+                  label="솔 에르다 조각 (선택)"
+                  type="number"
+                  placeholder="0"
+                  value={editForm.solErdaFragments}
+                  onChange={(e) => setEditForm((p) => ({ ...p, solErdaFragments: e.target.value }))}
+                  min={0}
+                />
+                <div>
+                  <Input
+                    label="소재 수 (선택)"
+                    type="number"
+                    placeholder="예: 4"
+                    value={editForm.roundCount}
+                    onChange={(e) => setEditForm((p) => ({ ...p, roundCount: e.target.value }))}
+                    min={1}
+                  />
+                  {editForm.roundCount && Number(editForm.roundCount) >= 1 && (
+                    <p className="text-xs mt-1 pl-0.5" style={{ color: 'var(--text-3)' }}>
+                      ⏱ {Number(editForm.roundCount) * 30}분
+                    </p>
+                  )}
+                </div>
+              </div>
               <Input
                 label="날짜"
                 type="date"

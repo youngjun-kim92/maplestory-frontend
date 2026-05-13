@@ -5,12 +5,15 @@ import { favoritesApi } from '../api/favorites'
 import type { FavoriteItem } from '../api/favorites'
 import { useAuth } from '../contexts/AuthContext'
 import type { BossDropItem, BossKill, BossMaster, DopingItem, MapleCharacter, ResetType } from '../types'
-import { formatMeso, toDateString, withCurrentTime, formatDateTime, difficultyLabel } from '../utils/format'
+import { formatMeso, toDateString, withCurrentTime, formatDateTime, difficultyLabel, sortDifficulties, getWeekStart } from '../utils/format'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Select from '../components/ui/Select'
 import Input from '../components/ui/Input'
 import Toast from '../components/ui/Toast'
+
+let _bossListCache: BossMaster[] | null = null
+let _dopingListCache: DopingItem[] | null = null
 
 const DROP_CATEGORY_LABELS: Record<string, string> = {
   dark_accessory:    '칠흑 장신구',
@@ -40,6 +43,7 @@ export default function BossPage() {
   const [dopingFavorites, setDopingFavorites] = useState<FavoriteItem[]>([])
   const [dopingItems, setDopingItems] = useState<DopingItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [killsLoading, setKillsLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [savingSingleFav, setSavingSingleFav] = useState(false)
   const [selectedCharId, setSelectedCharId] = useState('')
@@ -59,26 +63,44 @@ export default function BossPage() {
   const [checkedDrops, setCheckedDrops] = useState<Set<string>>(new Set())
   const [editingKillId, setEditingKillId] = useState<number | null>(null)
   const [editPartySize, setEditPartySize] = useState(1)
+  const [showFavorites, setShowFavorites] = useState(false)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const [list, chars, dopings] = await Promise.all([
-        bossApi.getBossList(),
+      const [bossList, chars, dopingList] = await Promise.all([
+        _bossListCache ?? bossApi.getBossList().then(r => { _bossListCache = r.data; return r.data }),
         charactersApi.getCharacters(),
-        bossApi.getDopingList(),
+        _dopingListCache ?? bossApi.getDopingList().then(r => { _dopingListCache = r.data; return r.data }),
       ])
-      setBossList(list.data)
+      setBossList(bossList)
       const charList = chars.data
       setCharacters(charList)
-      setDopingItems(dopings.data)
+      setDopingItems(dopingList)
       const mainChar = charList.find((c) => c.isMain) ?? charList[0]
-      if (mainChar) {
-        setSelectedCharId(String(mainChar.id))
-      } else {
-        setSelectedCharId('')
+      const charId = mainChar ? String(mainChar.id) : ''
+      setSelectedCharId(charId)
+      setLoading(false)
+
+      if (charId) {
+        const charIdNum = Number(charId)
+        setKillsLoading(true)
+        try {
+          const [kills, allKills, bFavs, dFavs] = await Promise.all([
+            bossApi.getWeeklyBossKills({ characterId: charIdNum }),
+            bossApi.getWeeklyBossKills(),
+            favoritesApi.getAll('BOSS', { characterId: charIdNum }),
+            favoritesApi.getAll('DOPING', { characterId: charIdNum }),
+          ])
+          setWeeklyKills(kills.data)
+          setAllWeeklyKills(allKills.data)
+          setBossFavorites(bFavs.data)
+          setDopingFavorites(dFavs.data)
+        } finally {
+          setKillsLoading(false)
+        }
       }
-    } finally {
+    } catch {
       setLoading(false)
     }
   }, [])
@@ -107,13 +129,16 @@ export default function BossPage() {
 
   useEffect(() => { fetchData() }, [fetchData, activeServerId])
 
-  useEffect(() => {
-    if (selectedCharId) {
-      fetchFavorites(selectedCharId)
-      fetchKills(selectedCharId)
-      fetchAllKills()
+  const handleCharChange = useCallback(async (charId: string) => {
+    setSelectedCharId(charId)
+    if (!charId) return
+    setKillsLoading(true)
+    try {
+      await Promise.all([fetchKills(charId), fetchAllKills(), fetchFavorites(charId)])
+    } finally {
+      setKillsLoading(false)
     }
-  }, [selectedCharId, fetchFavorites, fetchKills, fetchAllKills])
+  }, [fetchKills, fetchAllKills, fetchFavorites])
 
   useEffect(() => {
     if (!form.bossName || !form.difficulty) {
@@ -126,14 +151,19 @@ export default function BossPage() {
       .catch(() => setDropItems([]))
   }, [form.bossName, form.difficulty])
 
-  const filteredBossList = form.resetFilter === 'all'
-    ? bossList
-    : bossList.filter((b) => b.resetType === form.resetFilter)
+  const filteredBossList = useMemo(
+    () => form.resetFilter === 'all' ? bossList : bossList.filter((b) => b.resetType === form.resetFilter),
+    [bossList, form.resetFilter]
+  )
 
-  const uniqueBossNames = [...new Set(filteredBossList.map((b) => b.bossName))]
-  const difficultiesForBoss = filteredBossList
-    .filter((b) => b.bossName === form.bossName)
-    .map((b) => b.difficulty)
+  const uniqueBossNames = useMemo(
+    () => [...new Set(filteredBossList.map((b) => b.bossName))],
+    [filteredBossList]
+  )
+  const difficultiesForBoss = useMemo(
+    () => sortDifficulties(filteredBossList.filter((b) => b.bossName === form.bossName).map((b) => b.difficulty)),
+    [filteredBossList, form.bossName]
+  )
 
   const selectedBoss = bossList.find(
     (b) => b.bossName === form.bossName && b.difficulty === form.difficulty
@@ -218,9 +248,7 @@ export default function BossPage() {
         setCheckedDrops(new Set())
       }
 
-      await fetchKills(selectedCharId)
-      await fetchAllKills()
-      await refreshUser()
+      await Promise.all([fetchKills(selectedCharId), fetchAllKills(), refreshUser()])
     } catch (err: any) {
       const status = err?.response?.status
       const msg: string = err?.response?.data?.message ?? ''
@@ -313,17 +341,13 @@ export default function BossPage() {
   const handleDeleteKill = async (killId: number) => {
     if (!confirm('이 기록을 삭제하시겠습니까?')) return
     await bossApi.deleteBossKill(killId)
-    await fetchKills(selectedCharId)
-    await fetchAllKills()
-    await refreshUser()
+    await Promise.all([fetchKills(selectedCharId), fetchAllKills(), refreshUser()])
   }
 
   const handleUpdateKill = async (killId: number, partySize: number) => {
     await bossApi.updateBossKill(killId, { partySize })
     setEditingKillId(null)
-    await fetchKills(selectedCharId)
-    await fetchAllKills()
-    await refreshUser()
+    await Promise.all([fetchKills(selectedCharId), fetchAllKills(), refreshUser()])
   }
 
   const totalWeeklyRevenue = allWeeklyKills.reduce((s, k) => s + (k.income ?? k.crystalPrice), 0)
@@ -351,12 +375,15 @@ export default function BossPage() {
         <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
       )}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>⚔️ 보스 처치</h1>
+        <div>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>⚔️ 보스 처치</h1>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>📅 {toDateString(getWeekStart())} 주 (목요일 기준)</p>
+        </div>
         {characters.length > 0 && (
           <select
             className="form-field text-sm min-w-[120px] max-w-[200px] w-auto"
             value={selectedCharId}
-            onChange={(e) => setSelectedCharId(e.target.value)}
+            onChange={(e) => handleCharChange(e.target.value)}
           >
             {characters.map((c) => (
               <option key={c.id} value={String(c.id)} style={{ backgroundColor: 'var(--surface-2)' }}>
@@ -404,440 +431,463 @@ export default function BossPage() {
 
       {/* ── 즐겨찾기 섹션 ── */}
       <div className="rounded-xl overflow-hidden" style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)' }}>
-        <div className="flex items-center justify-between px-4 py-2.5" style={{ borderBottom: '1px solid var(--border)' }}>
+        <div className="flex items-center justify-between px-4 py-2.5" style={{ borderBottom: showFavorites ? '1px solid var(--border)' : 'none' }}>
           <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>⭐ 즐겨찾기</p>
-        </div>
-        <div className="px-4 py-2.5 text-xs" style={{ backgroundColor: 'var(--surface-2)', borderBottom: '1px solid var(--border)', color: 'var(--text-2)' }}>
-          자주 사용하는 보스 설정을 저장해두면 클릭 한 번으로 바로 입력됩니다.
-          캐릭터를 선택한 뒤 <span style={{ color: '#fbbf24' }}>★ 즐겨찾기 등록</span> 버튼으로 저장하세요.
-        </div>
-        <div className="p-3 space-y-2.5">
-          {bossFavorites.length === 0 ? (
-            <p className="text-sm text-center py-4" style={{ color: 'var(--text-3)' }}>
-              보스 처치 기록에서 "⭐ 즐겨찾기 저장" 버튼으로 추가해보세요!
-            </p>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {bossFavorites.map((fav) => {
-                const relatedDopings = dopingFavorites.filter((d) => d.bossName === fav.bossName)
-                return (
-                  <div
-                    key={fav.id}
-                    className="relative rounded-xl p-3 cursor-pointer transition-all"
-                    style={{ backgroundColor: 'var(--surface-2)', border: '1.5px solid var(--border)' }}
-                    onClick={() => applyFavorite(fav)}
-                  >
-                    <div className="absolute top-1.5 right-1.5">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleDeleteFav(fav.id) }}
-                        className="w-4 h-4 flex items-center justify-center rounded text-xs"
-                        style={{ backgroundColor: 'var(--surface)', color: 'var(--red)', border: '1px solid rgba(220,38,38,0.25)' }}
-                      >✕</button>
-                    </div>
-                    <p className="text-sm font-semibold pr-10 leading-tight" style={{ color: 'var(--text)' }}>{fav.label}</p>
-                    {fav.bossName && (
-                      <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
-                        {fav.bossName}
-                        {fav.difficulty && ` · ${difficultyLabel(fav.difficulty)}`}
-                        {fav.partySize && fav.partySize > 1 && ` · ${fav.partySize}인`}
-                      </p>
-                    )}
-                    {relatedDopings.length > 0 && (
-                      <div className="mt-1.5 space-y-0.5">
-                        {relatedDopings.map((d) => (
-                          <p key={d.id} className="text-xs" style={{ color: 'var(--text-3)' }}>
-                            💊 {d.label}{d.amount ? ` ${formatMeso(d.amount)}` : ''}
-                          </p>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ── 보스 처치 기록 폼 ── */}
-      <Card icon="⚔️">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>보스 처치 기록</p>
           <button
             type="button"
-            onClick={handleSaveSingleBossFav}
-            disabled={savingSingleFav || !form.bossName || !form.difficulty || !selectedCharId}
-            className="text-xs px-2.5 py-1.5 rounded-lg font-medium"
-            style={
-              alreadySaved
-                ? { backgroundColor: 'rgba(251,191,36,0.25)', color: '#f59e0b', border: '1.5px solid rgba(251,191,36,0.5)' }
-                : form.bossName && form.difficulty && selectedCharId
-                  ? { backgroundColor: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }
-                  : { backgroundColor: 'var(--surface-2)', color: 'var(--text-3)', border: '1px solid var(--border)', opacity: 0.5, cursor: 'not-allowed' }
-            }
-            title="현재 보스·난이도·파티인원·도핑을 즐겨찾기로 저장"
+            onClick={() => setShowFavorites(p => !p)}
+            className="text-xs px-2 py-0.5 rounded"
+            style={{ color: 'var(--text-3)', backgroundColor: 'var(--surface-2)' }}
           >
-            {savingSingleFav ? '저장 중...' : alreadySaved ? '⭐ 즐겨찾기 저장됨' : '★ 즐겨찾기 등록'}
+            {showFavorites ? '접기 ▲' : '펼치기 ▼'}
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-3">
-          {characters.length === 0 && (
-            <div className="p-3 rounded-xl text-sm" style={{ backgroundColor: 'var(--primary-dim)', border: '1px solid var(--primary-glow)' }}>
-              <p style={{ color: 'var(--primary)' }}>
-                캐릭터를 먼저 등록해주세요.{' '}
-                <a href="/characters" className="underline font-semibold">캐릭터 등록 →</a>
-              </p>
+        {showFavorites && (
+          <>
+            <div className="px-4 py-2.5 text-xs" style={{ backgroundColor: 'var(--surface-2)', borderBottom: '1px solid var(--border)', color: 'var(--text-2)' }}>
+              자주 사용하는 보스 설정을 저장해두면 클릭 한 번으로 바로 입력됩니다.
+              캐릭터를 선택한 뒤 <span style={{ color: '#fbbf24' }}>★ 즐겨찾기 등록</span> 버튼으로 저장하세요.
             </div>
-          )}
-
-          {selectedCharId && (
-            <div className="flex items-center gap-4 px-3 py-2 rounded-lg text-xs" style={{ backgroundColor: 'var(--surface-2)' }}>
-              <span style={{ color: 'var(--text-2)' }}>
-                이 캐릭터 주간 보스:
-                <span className="font-bold ml-1" style={{ color: charWeeklyCount >= WEEKLY_BOSS_MAX_PER_CHAR ? 'var(--red)' : 'var(--green)' }}>
-                  {charWeeklyCount} / {WEEKLY_BOSS_MAX_PER_CHAR}
-                </span>
-              </span>
-              <span style={{ color: 'var(--text-2)' }}>
-                전체:
-                <span className="font-bold ml-1" style={{ color: totalWeeklyCount >= WEEKLY_BOSS_MAX_TOTAL ? 'var(--red)' : 'var(--text)' }}>
-                  {totalWeeklyCount} / {WEEKLY_BOSS_MAX_TOTAL}
-                </span>
-              </span>
-              <span className="text-xs" style={{ color: 'var(--text-3)' }}>일간·월간: 제한 없음</span>
-            </div>
-          )}
-
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-2)' }}>보스 유형</p>
-            <div className="flex gap-1.5 flex-wrap">
-              {RESET_TYPE_TABS.map((tab) => (
-                <button
-                  key={tab.key}
-                  type="button"
-                  onClick={() => handleResetFilterChange(tab.key)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-                  style={
-                    form.resetFilter === tab.key
-                      ? { backgroundColor: 'rgba(249,115,22,0.18)', color: 'var(--primary)', border: '1px solid rgba(249,115,22,0.4)' }
-                      : { backgroundColor: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border-2)' }
-                  }
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Select
-              label="보스 선택"
-              options={[
-                { value: '', label: '보스를 선택하세요' },
-                ...uniqueBossNames.map((n) => ({ value: n, label: n })),
-              ]}
-              value={form.bossName}
-              onChange={(e) => handleBossNameChange(e.target.value)}
-            />
-            <Select
-              label="난이도"
-              options={
-                difficultiesForBoss.length > 0
-                  ? difficultiesForBoss.map((d) => ({ value: d, label: difficultyLabel(d) }))
-                  : [{ value: '', label: '보스를 먼저 선택하세요' }]
-              }
-              value={form.difficulty}
-              onChange={(e) => setForm((p) => ({ ...p, difficulty: e.target.value }))}
-              disabled={!form.bossName}
-            />
-          </div>
-
-          {selectedBoss && (
-            <div className="flex items-center justify-between px-3 py-2 rounded-xl" style={{ backgroundColor: 'var(--bg)', border: '1px solid rgba(249,115,22,0.4)' }}>
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-medium" style={{ color: 'var(--primary)' }}>결정석 가격:</span>
-                <span className="font-bold" style={{ color: 'var(--text)' }}>{formatMeso(selectedBoss.crystalPrice)}</span>
-              </div>
-              {isWeeklyBossSelected && (
-                <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(249,115,22,0.12)', color: 'var(--primary)' }}>
-                  주간 보스
-                </span>
-              )}
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              label="처치 날짜"
-              type="date"
-              value={form.killDate}
-              onChange={(e) => setForm((p) => ({ ...p, killDate: e.target.value }))}
-            />
-            <Select
-              label="파티 인원"
-              options={Array.from({ length: maxPartySize }, (_, i) => i + 1).map((n) => ({ value: String(n), label: `${n}인` }))}
-              value={String(form.partySize)}
-              onChange={(e) => setForm((p) => ({ ...p, partySize: Number(e.target.value) }))}
-            />
-          </div>
-
-          {dopingItems.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-2)' }}>
-                💊 도핑 (중복 선택 가능, 선택 시 지출 자동 기록)
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {dopingItems.map((item) => {
-                  const checked = selectedDopings.includes(item.id)
-                  return (
-                    <label
-                      key={item.id}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg cursor-pointer select-none transition-all text-sm"
-                      style={
-                        checked
-                          ? { backgroundColor: 'var(--primary-dim)', color: 'var(--primary)', border: '1.5px solid var(--primary-glow)' }
-                          : { backgroundColor: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }
-                      }
-                      title={item.effect}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() =>
-                          setSelectedDopings((prev) =>
-                            prev.includes(item.id) ? prev.filter((x) => x !== item.id) : [...prev, item.id]
-                          )
-                        }
-                        className="w-3.5 h-3.5"
-                        style={{ accentColor: 'var(--primary)' }}
-                      />
-                      <span>{item.name}</span>
-                      <span className="text-xs ml-1" style={{ color: checked ? 'var(--primary)' : 'var(--text-3)' }}>
-                        {item.price.toLocaleString()}
-                      </span>
-                    </label>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {dropItems.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-2)' }}>
-                📦 드랍 물욕템 체크리스트
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {dropItems.map((item) => {
-                  const checked = checkedDrops.has(item.itemName)
-                  return (
-                    <label
-                      key={item.itemName}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg cursor-pointer select-none transition-all text-sm"
-                      style={
-                        checked
-                          ? { backgroundColor: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1.5px solid rgba(251,191,36,0.3)' }
-                          : { backgroundColor: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }
-                      }
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() =>
-                          setCheckedDrops((prev) => {
-                            const next = new Set(prev)
-                            if (next.has(item.itemName)) next.delete(item.itemName)
-                            else next.add(item.itemName)
-                            return next
-                          })
-                        }
-                        className="sr-only"
-                      />
-                      <span>{item.itemName}</span>
-                      <span className="text-xs ml-1" style={{ color: checked ? '#fbbf24' : 'var(--text-3)' }}>
-                        {DROP_CATEGORY_LABELS[item.itemCategory] ?? item.itemCategory}
-                      </span>
-                    </label>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {charError && <p className="text-xs" style={{ color: 'var(--red)' }}>{charError}</p>}
-          {isDopingInsufficientMeso && (
-            <div className="text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: 'rgba(220,38,38,0.08)', color: 'var(--red)', border: '1px solid rgba(220,38,38,0.2)' }}>
-              ⚠️ 현재 보유 메소({formatMeso(activeServer?.totalMeso ?? 0)})보다 도핑 비용({formatMeso(dopingTotal)})이 많습니다. 인벤토리/창고 메소를 먼저 업데이트해주세요.
-            </div>
-          )}
-          <div className="flex justify-end">
-            <Button type="submit" loading={submitting} disabled={!form.bossName || !form.difficulty || characters.length === 0 || isDopingInsufficientMeso}>
-              기록하기
-            </Button>
-          </div>
-        </form>
-      </Card>
-
-      {/* ── 이번 주 처치 목록 ── */}
-      <div>
-        <p className="text-sm font-semibold mb-2" style={{ color: 'var(--text)' }}>📋 이번 주 보스 처치 목록</p>
-
-        {weeklyKills.length > 0 && (
-          <div className="flex items-center gap-2 mb-2">
-            <span
-              className="text-xs px-2.5 py-1 rounded-full shrink-0 font-medium"
-              style={{
-                backgroundColor: charWeeklyCount >= WEEKLY_BOSS_MAX_PER_CHAR
-                  ? 'rgba(220,38,38,0.12)'
-                  : 'rgba(63,185,80,0.12)',
-                color: charWeeklyCount >= WEEKLY_BOSS_MAX_PER_CHAR ? 'var(--red)' : 'var(--green)',
-              }}
-            >
-              주간 {charWeeklyCount}/{WEEKLY_BOSS_MAX_PER_CHAR}
-            </span>
-          </div>
-        )}
-
-        {weeklyKills.length === 0 ? (
-          <div
-            className="rounded-xl px-4 py-8 text-sm text-center"
-            style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-3)' }}
-          >
-            {selectedChar
-              ? `${selectedChar.name}의 이번 주 처치 기록이 없습니다.`
-              : '이번 주 처치 기록이 없습니다.'}
-          </div>
-        ) : (
-          <div
-            className="rounded-xl overflow-hidden"
-            style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)' }}
-          >
-            <div
-              className="flex items-center justify-between px-3 py-2"
-              style={{ backgroundColor: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}
-            >
-              <span className="text-xs" style={{ color: 'var(--text-2)' }}>
-                {weeklyKills.length}회 처치
-              </span>
-              <span className="text-xs font-semibold" style={{ color: 'var(--primary)' }}>
-                +{formatMeso(weeklyKills.reduce((s, k) => s + (k.income ?? k.crystalPrice), 0))}
-              </span>
-            </div>
-            <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
-              {weeklyKills.map((kill) => {
-                const income = kill.income ?? kill.crystalPrice
-                const expense = kill.totalExpense ?? 0
-                const net = income - expense
-                const isEditing = editingKillId === kill.id
-                return (
-                  <div key={kill.id} className="px-3 py-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>{kill.bossName}</span>
-                        <span className="text-xs ml-1.5" style={{ color: 'var(--text-2)' }}>{difficultyLabel(kill.difficulty)}</span>
-                        {isEditing ? (
-                          <span className="inline-flex items-center gap-1 ml-1">
-                            <select
-                              value={editPartySize}
-                              onChange={(e) => setEditPartySize(Number(e.target.value))}
-                              className="text-xs px-1 py-0.5 rounded border"
-                              style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text)', borderColor: 'var(--border)' }}
-                            >
-                              {Array.from({ length: 6 }, (_, i) => i + 1).map((n) => (
-                                <option key={n} value={n}>{n}인</option>
-                              ))}
-                            </select>
-                            <button
-                              onClick={() => handleUpdateKill(kill.id, editPartySize)}
-                              className="text-xs px-1.5 py-0.5 rounded font-medium"
-                              style={{ backgroundColor: 'rgba(63,185,80,0.15)', color: 'var(--green)', border: '1px solid rgba(63,185,80,0.3)' }}
-                            >저장</button>
-                            <button
-                              onClick={() => setEditingKillId(null)}
-                              className="text-xs px-1.5 py-0.5 rounded"
-                              style={{ color: 'var(--text-3)' }}
-                            >취소</button>
-                          </span>
-                        ) : (
-                          kill.partySize && kill.partySize > 1 && (
-                            <span className="text-xs ml-1" style={{ color: 'var(--text-3)' }}>{kill.partySize}인</span>
-                          )
-                        )}
-                        <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{formatDateTime(kill.killDate ?? '')}</p>
-                      </div>
-                      <div className="flex items-start gap-2 shrink-0">
-                        <div className="text-right">
-                          <p className="font-semibold text-sm" style={{ color: 'var(--primary)' }}>
-                            +{formatMeso(income)}
-                          </p>
-                          {expense > 0 && (
-                            <p className="text-xs" style={{ color: 'var(--red)' }}>
-                              -{formatMeso(expense)}
-                            </p>
-                          )}
-                          {expense > 0 && (
-                            <p className="text-xs font-semibold" style={{ color: net >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                              {net >= 0 ? '+' : ''}{formatMeso(net)}
-                            </p>
-                          )}
+            <div className="p-3 space-y-2.5">
+              {bossFavorites.length === 0 ? (
+                <p className="text-sm text-center py-4" style={{ color: 'var(--text-3)' }}>
+                  보스 처치 기록에서 "⭐ 즐겨찾기 저장" 버튼으로 추가해보세요!
+                </p>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {bossFavorites.map((fav) => {
+                    const relatedDopings = dopingFavorites.filter((d) => d.bossName === fav.bossName)
+                    return (
+                      <div
+                        key={fav.id}
+                        className="relative rounded-xl p-3 cursor-pointer transition-all"
+                        style={{ backgroundColor: 'var(--surface-2)', border: '1.5px solid var(--border)' }}
+                        onClick={() => applyFavorite(fav)}
+                      >
+                        <div className="absolute top-1.5 right-1.5">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleDeleteFav(fav.id) }}
+                            className="w-4 h-4 flex items-center justify-center rounded text-xs"
+                            style={{ backgroundColor: 'var(--surface)', color: 'var(--red)', border: '1px solid rgba(220,38,38,0.25)' }}
+                          >✕</button>
                         </div>
-                        {!isEditing && (
-                          <div className="flex flex-col gap-1 mt-0.5">
-                            <button
-                              onClick={() => { setEditingKillId(kill.id); setEditPartySize(kill.partySize ?? 1) }}
-                              className="text-xs px-1.5 py-0.5 rounded transition-colors"
-                              style={{ color: 'var(--text-3)', backgroundColor: 'var(--surface-2)' }}
-                              title="인원 수정"
-                            >✏️</button>
-                            <button
-                              onClick={() => handleDeleteKill(kill.id)}
-                              className="text-xs px-1.5 py-0.5 rounded transition-colors"
-                              style={{ color: 'var(--text-3)', backgroundColor: 'var(--surface-2)' }}
-                              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--red)')}
-                              onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-3)')}
-                              title="삭제"
-                            >✕</button>
+                        <p className="text-sm font-semibold pr-10 leading-tight" style={{ color: 'var(--text)' }}>{fav.label}</p>
+                        {fav.bossName && (
+                          <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
+                            {fav.bossName}
+                            {fav.difficulty && ` · ${difficultyLabel(fav.difficulty)}`}
+                            {fav.partySize && fav.partySize > 1 && ` · ${fav.partySize}인`}
+                          </p>
+                        )}
+                        {relatedDopings.length > 0 && (
+                          <div className="mt-1.5 space-y-0.5">
+                            {relatedDopings.map((d) => (
+                              <p key={d.id} className="text-xs" style={{ color: 'var(--text-3)' }}>
+                                💊 {d.label}{d.amount ? ` ${formatMeso(d.amount)}` : ''}
+                              </p>
+                            ))}
                           </div>
                         )}
                       </div>
-                    </div>
-
-                    {/* 드랍 아이템 인라인 칩 */}
-                    {kill.drops && kill.drops.length > 0 && (
-                      <div className="mt-1.5 flex flex-wrap gap-1">
-                        {kill.drops.map((drop) => (
-                          <span
-                            key={drop.id}
-                            className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full"
-                            style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
-                          >
-                            🎁 {drop.itemName}
-                            <span
-                              className="px-1 py-0.5 rounded-full font-medium"
-                              style={
-                                drop.status === 'sold'
-                                  ? { backgroundColor: 'rgba(63,185,80,0.15)', color: 'var(--green)' }
-                                  : drop.status === 'listed'
-                                  ? { backgroundColor: 'rgba(59,130,246,0.12)', color: '#60a5fa' }
-                                  : { color: 'var(--text-3)' }
-                              }
-                            >
-                              {drop.status === 'sold'
-                                ? `판매완료${drop.saleAmount ? ' ' + formatMeso(drop.saleAmount) : ''}`
-                                : drop.status === 'listed'
-                                ? '등록중'
-                                : '보유중'}
-                            </span>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+                    )
+                  })}
+                </div>
+              )}
             </div>
-          </div>
+          </>
         )}
+      </div>
+
+      {/* ── 50/50: 처치 기록 폼 + 이번 주 목록 ── */}
+      <div className="grid grid-cols-2 gap-4 items-start">
+        {/* Left: 처치 기록 폼 */}
+        <Card icon="⚔️" title="보스 처치 기록">
+          <div className="flex items-center justify-between mb-3">
+            {selectedCharId ? (
+              <span
+                className="text-xs px-2.5 py-1.5 rounded-lg font-medium"
+                style={{
+                  backgroundColor: charWeeklyCount >= WEEKLY_BOSS_MAX_PER_CHAR ? 'rgba(220,38,38,0.1)' : 'var(--surface-2)',
+                  border: `1px solid ${charWeeklyCount >= WEEKLY_BOSS_MAX_PER_CHAR ? 'rgba(220,38,38,0.3)' : 'var(--border)'}`,
+                  color: 'var(--text-2)',
+                }}
+              >
+                이 캐릭터 주간 보스{' '}
+                <span className="font-bold" style={{ color: charWeeklyCount >= WEEKLY_BOSS_MAX_PER_CHAR ? 'var(--red)' : 'var(--green)' }}>
+                  {charWeeklyCount}/{WEEKLY_BOSS_MAX_PER_CHAR}
+                </span>
+              </span>
+            ) : <div />}
+            <button
+              type="button"
+              onClick={handleSaveSingleBossFav}
+              disabled={savingSingleFav || !form.bossName || !form.difficulty || !selectedCharId}
+              className="text-xs px-2.5 py-1.5 rounded-lg font-medium"
+              style={
+                alreadySaved
+                  ? { backgroundColor: 'rgba(251,191,36,0.25)', color: '#f59e0b', border: '1.5px solid rgba(251,191,36,0.5)' }
+                  : form.bossName && form.difficulty && selectedCharId
+                    ? { backgroundColor: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }
+                    : { backgroundColor: 'var(--surface-2)', color: 'var(--text-3)', border: '1px solid var(--border)', opacity: 0.5, cursor: 'not-allowed' }
+              }
+              title="현재 보스·난이도·파티인원·도핑을 즐겨찾기로 저장"
+            >
+              {savingSingleFav ? '저장 중...' : alreadySaved ? '⭐ 즐겨찾기 저장됨' : '★ 즐겨찾기 등록'}
+            </button>
+          </div>
+          <form onSubmit={handleSubmit} className="space-y-3">
+            {characters.length === 0 && (
+              <div className="p-3 rounded-xl text-sm" style={{ backgroundColor: 'var(--primary-dim)', border: '1px solid var(--primary-glow)' }}>
+                <p style={{ color: 'var(--primary)' }}>
+                  캐릭터를 먼저 등록해주세요.{' '}
+                  <a href="/characters" className="underline font-semibold">캐릭터 등록 →</a>
+                </p>
+              </div>
+            )}
+
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-2)' }}>보스 유형</p>
+              <div className="flex gap-1.5 flex-wrap">
+                {RESET_TYPE_TABS.map((tab) => (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => handleResetFilterChange(tab.key)}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                    style={
+                      form.resetFilter === tab.key
+                        ? { backgroundColor: 'rgba(249,115,22,0.18)', color: 'var(--primary)', border: '1px solid rgba(249,115,22,0.4)' }
+                        : { backgroundColor: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border-2)' }
+                    }
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Select
+                label="보스 선택"
+                options={[
+                  { value: '', label: '보스를 선택하세요' },
+                  ...uniqueBossNames.map((n) => ({ value: n, label: n })),
+                ]}
+                value={form.bossName}
+                onChange={(e) => handleBossNameChange(e.target.value)}
+              />
+              <Select
+                label="난이도"
+                options={
+                  difficultiesForBoss.length > 0
+                    ? difficultiesForBoss.map((d) => ({ value: d, label: difficultyLabel(d) }))
+                    : [{ value: '', label: '보스를 먼저 선택하세요' }]
+                }
+                value={form.difficulty}
+                onChange={(e) => setForm((p) => ({ ...p, difficulty: e.target.value }))}
+                disabled={!form.bossName}
+              />
+            </div>
+
+            {selectedBoss && (
+              <div className="flex items-center justify-between px-3 py-2 rounded-xl" style={{ backgroundColor: 'var(--bg)', border: '1px solid rgba(249,115,22,0.4)' }}>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium" style={{ color: 'var(--primary)' }}>결정석 가격:</span>
+                  <span className="font-bold" style={{ color: 'var(--text)' }}>{formatMeso(selectedBoss.crystalPrice)}</span>
+                </div>
+                {isWeeklyBossSelected && (
+                  <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(249,115,22,0.12)', color: 'var(--primary)' }}>
+                    주간 보스
+                  </span>
+                )}
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="처치 날짜"
+                type="date"
+                value={form.killDate}
+                onChange={(e) => setForm((p) => ({ ...p, killDate: e.target.value }))}
+              />
+              <Select
+                label="파티 인원"
+                options={Array.from({ length: maxPartySize }, (_, i) => i + 1).map((n) => ({ value: String(n), label: `${n}인` }))}
+                value={String(form.partySize)}
+                onChange={(e) => setForm((p) => ({ ...p, partySize: Number(e.target.value) }))}
+              />
+            </div>
+
+            {dopingItems.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-2)' }}>
+                  💊 도핑 (중복 선택 가능, 선택 시 지출 자동 기록)
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {dopingItems.map((item) => {
+                    const checked = selectedDopings.includes(item.id)
+                    return (
+                      <label
+                        key={item.id}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg cursor-pointer select-none transition-all text-sm"
+                        style={
+                          checked
+                            ? { backgroundColor: 'var(--primary-dim)', color: 'var(--primary)', border: '1.5px solid var(--primary-glow)' }
+                            : { backgroundColor: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }
+                        }
+                        title={item.effect}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() =>
+                            setSelectedDopings((prev) =>
+                              prev.includes(item.id) ? prev.filter((x) => x !== item.id) : [...prev, item.id]
+                            )
+                          }
+                          className="w-3.5 h-3.5"
+                          style={{ accentColor: 'var(--primary)' }}
+                        />
+                        <span>{item.name}</span>
+                        <span className="text-xs ml-1" style={{ color: checked ? 'var(--primary)' : 'var(--text-3)' }}>
+                          {item.price.toLocaleString()}
+                        </span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {dropItems.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-2)' }}>
+                  📦 드랍 물욕템 체크리스트
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {dropItems.map((item) => {
+                    const checked = checkedDrops.has(item.itemName)
+                    return (
+                      <label
+                        key={item.itemName}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg cursor-pointer select-none transition-all text-sm"
+                        style={
+                          checked
+                            ? { backgroundColor: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1.5px solid rgba(251,191,36,0.3)' }
+                            : { backgroundColor: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }
+                        }
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() =>
+                            setCheckedDrops((prev) => {
+                              const next = new Set(prev)
+                              if (next.has(item.itemName)) next.delete(item.itemName)
+                              else next.add(item.itemName)
+                              return next
+                            })
+                          }
+                          className="sr-only"
+                        />
+                        <span>{item.itemName}</span>
+                        <span className="text-xs ml-1" style={{ color: checked ? '#fbbf24' : 'var(--text-3)' }}>
+                          {DROP_CATEGORY_LABELS[item.itemCategory] ?? item.itemCategory}
+                        </span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {charError && <p className="text-xs" style={{ color: 'var(--red)' }}>{charError}</p>}
+            {isDopingInsufficientMeso && (
+              <div className="text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: 'rgba(220,38,38,0.08)', color: 'var(--red)', border: '1px solid rgba(220,38,38,0.2)' }}>
+                ⚠️ 현재 보유 메소({formatMeso(activeServer?.totalMeso ?? 0)})보다 도핑 비용({formatMeso(dopingTotal)})이 많습니다. 인벤토리/창고 메소를 먼저 업데이트해주세요.
+              </div>
+            )}
+            <div className="flex justify-end">
+              <Button type="submit" loading={submitting} disabled={!form.bossName || !form.difficulty || characters.length === 0 || isDopingInsufficientMeso}>
+                기록하기
+              </Button>
+            </div>
+          </form>
+        </Card>
+
+        {/* Right: 이번 주 처치 목록 */}
+        <div
+          className="rounded-2xl overflow-hidden"
+          style={{ backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', boxShadow: 'var(--shadow)' }}
+        >
+          <div
+            className="flex items-center justify-between px-3 py-2.5 shrink-0"
+            style={{ borderBottom: '1px solid var(--border)' }}
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-lg">📋</span>
+              <p className="font-semibold text-base" style={{ color: 'var(--text)' }}>이번 주 보스 처치 목록</p>
+            </div>
+            {weeklyKills.length > 0 && (
+              <div className="flex items-center gap-2">
+                <span
+                  className="text-xs px-2.5 py-1 rounded-full font-medium shrink-0"
+                  style={{
+                    backgroundColor: charWeeklyCount >= WEEKLY_BOSS_MAX_PER_CHAR ? 'rgba(220,38,38,0.12)' : 'rgba(63,185,80,0.12)',
+                    color: charWeeklyCount >= WEEKLY_BOSS_MAX_PER_CHAR ? 'var(--red)' : 'var(--green)',
+                  }}
+                >
+                  주간 {charWeeklyCount}/{WEEKLY_BOSS_MAX_PER_CHAR}
+                </span>
+                <span className="text-xs font-semibold" style={{ color: 'var(--primary)' }}>
+                  +{formatMeso(weeklyKills.reduce((s, k) => s + (k.income ?? k.crystalPrice), 0))}
+                </span>
+              </div>
+            )}
+          </div>
+          <div>
+            {killsLoading ? (
+              <div className="px-4 py-8 flex items-center justify-center">
+                <p className="text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>불러오는 중...</p>
+              </div>
+            ) : weeklyKills.length === 0 ? (
+              <div className="px-4 py-8 flex flex-col items-center gap-2">
+                <span className="text-3xl opacity-30">⚔️</span>
+                <p className="text-sm text-center" style={{ color: 'var(--text-3)' }}>
+                  {selectedChar
+                    ? `${selectedChar.name}의 이번 주 처치 기록이 없습니다.`
+                    : '이번 주 처치 기록이 없습니다.'}
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+                {weeklyKills.map((kill) => {
+                  const income = kill.income ?? kill.crystalPrice
+                  const expense = kill.totalExpense ?? 0
+                  const net = income - expense
+                  const isEditing = editingKillId === kill.id
+                  return (
+                    <div key={kill.id} className="px-3 py-2">
+                      <div className="flex items-center gap-3">
+                        {/* 보스 정보 */}
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>{kill.bossName}</span>
+                          <span className="text-xs ml-1.5" style={{ color: 'var(--text-2)' }}>{difficultyLabel(kill.difficulty)}</span>
+                          {isEditing ? (
+                            <span className="inline-flex items-center gap-1 ml-1">
+                              <select
+                                value={editPartySize}
+                                onChange={(e) => setEditPartySize(Number(e.target.value))}
+                                className="text-xs px-1 py-0.5 rounded border"
+                                style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text)', borderColor: 'var(--border)' }}
+                              >
+                                {Array.from({ length: 6 }, (_, i) => i + 1).map((n) => (
+                                  <option key={n} value={n}>{n}인</option>
+                                ))}
+                              </select>
+                              <button
+                                onClick={() => handleUpdateKill(kill.id, editPartySize)}
+                                className="text-xs px-1.5 py-0.5 rounded font-medium"
+                                style={{ backgroundColor: 'rgba(63,185,80,0.15)', color: 'var(--green)', border: '1px solid rgba(63,185,80,0.3)' }}
+                              >저장</button>
+                              <button
+                                onClick={() => setEditingKillId(null)}
+                                className="text-xs px-1.5 py-0.5 rounded"
+                                style={{ color: 'var(--text-3)' }}
+                              >취소</button>
+                            </span>
+                          ) : (
+                            kill.partySize && kill.partySize > 1 && (
+                              <span className="text-xs ml-1" style={{ color: 'var(--text-3)' }}>{kill.partySize}인</span>
+                            )
+                          )}
+                          <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{formatDateTime(kill.killDate ?? '')}</p>
+                        </div>
+                        {/* 수입 / 지출 / 순수익 */}
+                        <div className="flex gap-5">
+                          <div className="text-center">
+                            <p className="text-xs mb-0.5" style={{ color: 'var(--text-3)' }}>수입</p>
+                            <p className="font-semibold text-sm" style={{ color: 'var(--primary)' }}>+{formatMeso(income)}</p>
+                          </div>
+                          {expense > 0 && (
+                            <div className="text-center">
+                              <p className="text-xs mb-0.5" style={{ color: 'var(--text-3)' }}>지출</p>
+                              <p className="font-semibold text-sm" style={{ color: 'var(--red)' }}>-{formatMeso(expense)}</p>
+                            </div>
+                          )}
+                          {expense > 0 && (
+                            <div className="text-center">
+                              <p className="text-xs mb-0.5" style={{ color: 'var(--text-3)' }}>순수익</p>
+                              <p className="font-semibold text-sm" style={{ color: net >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                                {net >= 0 ? '+' : ''}{formatMeso(net)}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                        {/* 수정 / 삭제 버튼 */}
+                        <div className="flex gap-1 justify-end">
+                          {!isEditing && (
+                            <>
+                              <button
+                                onClick={() => { setEditingKillId(kill.id); setEditPartySize(kill.partySize ?? 1) }}
+                                className="text-xs px-1.5 py-0.5 rounded transition-colors"
+                                style={{ color: 'var(--primary)', backgroundColor: 'var(--primary-dim)' }}
+                                title="인원 수정"
+                              >✏️</button>
+                              <button
+                                onClick={() => handleDeleteKill(kill.id)}
+                                className="text-xs px-1.5 py-0.5 rounded transition-colors"
+                                style={{ color: 'var(--text-3)', backgroundColor: 'var(--surface-2)' }}
+                                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--red)')}
+                                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-3)')}
+                                title="삭제"
+                              >🗑️</button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 드랍 아이템 인라인 칩 */}
+                      {kill.drops && kill.drops.length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {kill.drops.map((drop) => (
+                            <span
+                              key={drop.id}
+                              className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full"
+                              style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
+                            >
+                              🎁 {drop.itemName}
+                              <span
+                                className="px-1 py-0.5 rounded-full font-medium"
+                                style={
+                                  drop.status === 'sold'
+                                    ? { backgroundColor: 'rgba(63,185,80,0.15)', color: 'var(--green)' }
+                                    : drop.status === 'listed'
+                                    ? { backgroundColor: 'rgba(59,130,246,0.12)', color: '#60a5fa' }
+                                    : drop.status === 'distributed'
+                                    ? { backgroundColor: 'rgba(167,139,250,0.12)', color: '#a78bfa' }
+                                    : { color: 'var(--text-3)' }
+                                }
+                              >
+                                {drop.status === 'sold'
+                                  ? `판매완료${drop.saleAmount ? ' ' + formatMeso(drop.saleAmount) : ''}`
+                                  : drop.status === 'listed'
+                                  ? '등록중'
+                                  : drop.status === 'distributed'
+                                  ? '파티분배'
+                                  : '보유중'}
+                              </span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
     </div>

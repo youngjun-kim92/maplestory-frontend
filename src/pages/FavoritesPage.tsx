@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { Star, Pill } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { favoritesApi, type FavoriteItem, type FavoriteType } from '../api/favorites'
 import { bossApi } from '../api/boss'
@@ -65,7 +66,7 @@ export default function FavoritesPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold font-heading" style={{ color: 'var(--text)' }}>⭐ 즐겨찾기</h1>
+        <h1 className="text-xl font-bold font-heading flex items-center gap-2" style={{ color: 'var(--text)' }}><Star size={20} strokeWidth={1.75} />즐겨찾기</h1>
         <Button size="sm" onClick={() => setShowAddModal(true)}>+ 추가</Button>
       </div>
 
@@ -88,7 +89,12 @@ export default function FavoritesPage() {
         <p className="text-sm text-center py-8 animate-pulse" style={{ color: 'var(--text-3)' }}>불러오는 중...</p>
       ) : items.length === 0 ? (
         <div className="text-center py-12">
-          <p className="text-3xl mb-2">{tab === 'BOSS' ? '⚔️' : '💊'}</p>
+          <div className="mb-2">
+            {tab === 'BOSS'
+              ? <img src="/maple-icons/boss.png" alt="" width={36} height={36} className="opacity-30 mx-auto" style={{ imageRendering: 'pixelated' }} />
+              : <span className="text-3xl">💊</span>
+            }
+          </div>
           <p className="text-sm" style={{ color: 'var(--text-3)' }}>
             {tab === 'BOSS' ? '자주 가는 보스를 템플릿으로 저장해보세요.' : '자주 쓰는 도핑을 템플릿으로 저장해보세요.'}
           </p>
@@ -213,7 +219,10 @@ function AddFavoriteModal({
       >
         <div className="flex items-center justify-between">
           <h2 className="font-bold text-base" style={{ color: 'var(--text)' }}>
-            {tab === 'BOSS' ? '⚔️ 보스 템플릿 추가' : '💊 도핑 템플릿 추가'}
+            {tab === 'BOSS'
+              ? <span className="flex items-center gap-1.5"><img src="/maple-icons/boss.png" alt="" width={18} height={18} style={{ imageRendering: 'pixelated' }} /> 보스 템플릿 추가</span>
+              : <span className="flex items-center gap-1.5"><Pill size={16} strokeWidth={1.75} />도핑 템플릿 추가</span>
+            }
           </h2>
           <button
             onClick={onClose}

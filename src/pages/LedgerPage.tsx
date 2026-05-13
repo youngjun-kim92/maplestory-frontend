@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
 import { ledgerApi } from '../api/ledger'
-import { authApi } from '../api/auth'
 import { charactersApi } from '../api/characters'
 import { useAuth } from '../contexts/AuthContext'
 import type { EntryCategory, LedgerEntry, MapleCharacter, WeeklyLedger } from '../types'
@@ -25,9 +24,13 @@ export default function LedgerPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [selectedCharId, setSelectedCharId] = useState<'all' | string>('all')
-  const [showMesoForm, setShowMesoForm] = useState(false)
-  const [mesoForm, setMesoForm] = useState({ inventoryMeso: '', storageMeso: '' })
-  const [mesoSubmitting, setMesoSubmitting] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editForm, setEditForm] = useState({ amount: '', description: '', entryDate: '' })
+  const [editSubmitting, setEditSubmitting] = useState(false)
+
+  const [inputMode, setInputMode] = useState<'direct' | 'calc'>('direct')
+  const [calcBefore, setCalcBefore] = useState({ meso: '' })
+  const [calcAfter, setCalcAfter] = useState({ meso: '' })
 
   const [form, setForm] = useState({
     category: 'cube' as EntryCategory,
@@ -65,21 +68,25 @@ export default function LedgerPage() {
     fetchLedger(selectedCharId)
   }, [selectedCharId, fetchLedger, initialized])
 
+  const calcAmount = Math.max(0, Number(calcBefore.meso || '0') - Number(calcAfter.meso || '0'))
+
   const handleSubmit = async (e: { preventDefault(): void }) => {
     e.preventDefault()
-    if (!form.amount || Number(form.amount) < 1) return
+    const submitAmount = inputMode === 'calc' ? calcAmount : Number(form.amount)
+    if (!submitAmount || submitAmount < 1) return
     setSubmitting(true)
     try {
       await ledgerApi.addEntry({
         type: 'expense',
         category: form.category,
-        amount: Number(form.amount),
+        amount: submitAmount,
         description: form.description,
         entryDate: withCurrentTime(form.entryDate),
         characterId: selectedCharId !== 'all' ? Number(selectedCharId) : null,
       })
       if (form.description.trim()) saveToHistory('ledger_memo', form.description.trim())
       setForm((p) => ({ ...p, amount: '', description: '' }))
+      setCalcAfter({ meso: '' })
       await fetchLedger(selectedCharId)
       await refreshUser()
     } finally {
@@ -90,23 +97,38 @@ export default function LedgerPage() {
   const handleDelete = async (id: number) => {
     if (!confirm('이 항목을 삭제하시겠습니까?')) return
     await ledgerApi.deleteEntry(id)
+    setEditingId(null)
     await fetchLedger(selectedCharId)
     await refreshUser()
   }
 
-  const handleMesoSubmit = async (e: { preventDefault(): void }) => {
-    e.preventDefault()
-    const inventory = Number(mesoForm.inventoryMeso)
-    const storage = Number(mesoForm.storageMeso)
-    if (isNaN(inventory) || isNaN(storage) || inventory < 0 || storage < 0) return
-    setMesoSubmitting(true)
+  const startEdit = (entry: LedgerEntry) => {
+    setEditingId(entry.id)
+    setEditForm({
+      amount: String(entry.amount),
+      description: entry.description || '',
+      entryDate: entry.entryDate.split('T')[0],
+    })
+  }
+
+  const handleEditSubmit = async (entry: LedgerEntry) => {
+    const amount = Number(editForm.amount)
+    if (!amount || amount < 1) return
+    setEditSubmitting(true)
     try {
-      await authApi.updateMesoBalance({ inventoryMeso: inventory, storageMeso: storage })
+      await ledgerApi.updateEntry(entry.id, {
+        type: entry.type,
+        category: entry.category,
+        amount,
+        description: editForm.description,
+        entryDate: withCurrentTime(editForm.entryDate),
+        characterId: entry.characterId,
+      })
+      setEditingId(null)
+      await fetchLedger(selectedCharId)
       await refreshUser()
-      setShowMesoForm(false)
-      setMesoForm({ inventoryMeso: '', storageMeso: '' })
     } finally {
-      setMesoSubmitting(false)
+      setEditSubmitting(false)
     }
   }
 
@@ -115,7 +137,8 @@ export default function LedgerPage() {
     (e) => e.type === 'expense' && !EXCLUDED_CATEGORIES.has(e.category)
   ) ?? []
 
-  const isInsufficientMeso = !!(form.amount && Number(form.amount) > 0 && Number(form.amount) > (activeServer?.totalMeso ?? 0))
+  const effectiveAmount = inputMode === 'calc' ? calcAmount : Number(form.amount)
+  const isInsufficientMeso = !!(effectiveAmount > 0 && effectiveAmount > (activeServer?.totalMeso ?? 0))
 
   if (loading) {
     return (
@@ -167,96 +190,6 @@ export default function LedgerPage() {
         </div>
       )}
 
-      {/* 지갑 현황 */}
-      <Card title="지갑 현황" icon="💰">
-        <div className="grid grid-cols-3 gap-3 mb-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--text-2)' }}>인벤토리</p>
-            <p className="font-bold text-base" style={{ color: 'var(--text)' }}>{formatMeso(activeServer?.inventoryMeso ?? 0)}</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--text-2)' }}>창고</p>
-            <p className="font-bold text-base" style={{ color: 'var(--text)' }}>{formatMeso(activeServer?.storageMeso ?? 0)}</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--text-2)' }}>합계</p>
-            <p className="font-bold text-base" style={{ color: 'var(--orange-light)' }}>{formatMeso(activeServer?.totalMeso ?? 0)}</p>
-          </div>
-        </div>
-        {!showMesoForm ? (
-          <Button size="sm" variant="ghost" onClick={() => {
-            setMesoForm({
-              inventoryMeso: String(activeServer?.inventoryMeso ?? 0),
-              storageMeso: String(activeServer?.storageMeso ?? 0),
-            })
-            setShowMesoForm(true)
-          }}>
-            메소 잔액 수정
-          </Button>
-        ) : (
-          <form onSubmit={handleMesoSubmit} className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Input
-                  label="인벤토리 메소"
-                  type="number"
-                  placeholder="예: 500000000"
-                  value={mesoForm.inventoryMeso}
-                  onChange={(e) => setMesoForm((p) => ({ ...p, inventoryMeso: e.target.value }))}
-                  min={0}
-                />
-                <QuickAmountButtons onAdd={(v) => setMesoForm((p) => ({ ...p, inventoryMeso: String((Number(p.inventoryMeso) || 0) + v) }))} />
-                {toKoreanAmount(mesoForm.inventoryMeso) && (
-                  <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-3)' }}>{toKoreanAmount(mesoForm.inventoryMeso)} 메소</p>
-                )}
-              </div>
-              <div>
-                <Input
-                  label="창고 메소"
-                  type="number"
-                  placeholder="예: 2000000000"
-                  value={mesoForm.storageMeso}
-                  onChange={(e) => setMesoForm((p) => ({ ...p, storageMeso: e.target.value }))}
-                  min={0}
-                />
-                <QuickAmountButtons onAdd={(v) => setMesoForm((p) => ({ ...p, storageMeso: String((Number(p.storageMeso) || 0) + v) }))} />
-                {toKoreanAmount(mesoForm.storageMeso) && (
-                  <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-3)' }}>{toKoreanAmount(mesoForm.storageMeso)} 메소</p>
-                )}
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setMesoForm((p) => ({
-                  inventoryMeso: '0',
-                  storageMeso: String((Number(p.storageMeso) || 0) + (Number(p.inventoryMeso) || 0)),
-                }))}
-                className="flex-1 text-xs px-2 py-1.5 rounded-lg transition-all"
-                style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }}
-              >
-                창고로 옮기기 →
-              </button>
-              <button
-                type="button"
-                onClick={() => setMesoForm((p) => ({
-                  storageMeso: '0',
-                  inventoryMeso: String((Number(p.inventoryMeso) || 0) + (Number(p.storageMeso) || 0)),
-                }))}
-                className="flex-1 text-xs px-2 py-1.5 rounded-lg transition-all"
-                style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }}
-              >
-                ← 인벤으로 옮기기
-              </button>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="ghost" onClick={() => setShowMesoForm(false)}>취소</Button>
-              <Button type="submit" loading={mesoSubmitting}>저장</Button>
-            </div>
-          </form>
-        )}
-      </Card>
-
       {/* 메소 강화 입력 폼 */}
       <Card title="메소 강화 지출" icon="🔩">
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -286,25 +219,84 @@ export default function LedgerPage() {
               ))}
             </div>
           </div>
-          <div>
-            <Input
-              label="금액 (메소)"
-              type="number"
-              placeholder="예: 100000000"
-              value={form.amount}
-              onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))}
-              min={1}
-            />
-            <QuickAmountButtons onAdd={(v) => setForm((p) => ({ ...p, amount: String((Number(p.amount) || 0) + v) }))} />
-            {toKoreanAmount(form.amount) && (
-              <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-3)' }}>{toKoreanAmount(form.amount)}</p>
-            )}
-            {isInsufficientMeso && (
-              <div className="text-xs px-3 py-2 rounded-lg mt-1.5" style={{ backgroundColor: 'rgba(220,38,38,0.08)', color: 'var(--red)', border: '1px solid rgba(220,38,38,0.2)' }}>
-                ⚠️ 현재 보유 메소({formatMeso(activeServer?.totalMeso ?? 0)})보다 지출이 많습니다. 인벤토리/창고 메소를 먼저 업데이트해주세요.
-              </div>
-            )}
+          <div className="flex gap-0.5 p-0.5 rounded-xl" style={{ backgroundColor: 'var(--surface-2)', width: 'fit-content' }}>
+            {(['direct', 'calc'] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => {
+                  setInputMode(mode)
+                  if (mode === 'calc') {
+                    setCalcBefore({ meso: String(activeServer?.inventoryMeso ?? 0) })
+                    setCalcAfter({ meso: '' })
+                  }
+                }}
+                className="px-3 py-1 rounded-lg text-xs font-semibold transition-all"
+                style={inputMode === mode
+                  ? { backgroundColor: 'var(--primary)', color: '#fff' }
+                  : { backgroundColor: 'transparent', color: 'var(--text-3)' }}
+              >{mode === 'direct' ? '직접 입력' : '인벤 계산'}</button>
+            ))}
           </div>
+          {inputMode === 'calc' ? (
+            <div className="space-y-2">
+              <div
+                className="px-3 py-2 rounded-lg text-xs"
+                style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)' }}
+              >
+                <span style={{ color: 'var(--text-3)' }}>현재 인벤 메소: </span>
+                <span className="font-semibold" style={{ color: 'var(--text-2)' }}>
+                  {formatMeso(Number(calcBefore.meso || '0'))}
+                </span>
+              </div>
+              <div>
+                <Input
+                  label="강화 후 남은 인벤 메소"
+                  type="number"
+                  placeholder="강화 후 인벤 메소 입력"
+                  value={calcAfter.meso}
+                  onChange={(e) => setCalcAfter({ meso: e.target.value })}
+                  min={0}
+                />
+                {calcAfter.meso !== '' && Number(calcAfter.meso) >= 0 && (
+                  <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-3)' }}>
+                    {formatMeso(Number(calcAfter.meso))}
+                  </p>
+                )}
+              </div>
+              {calcAmount > 0 && (
+                <div className="px-3 py-2 rounded-xl text-xs font-semibold"
+                  style={{ backgroundColor: 'rgba(220,38,38,0.08)', color: 'var(--red)', border: '1px solid rgba(220,38,38,0.2)' }}>
+                  💸 강화 비용: {formatMeso(calcAmount)} 메소
+                </div>
+              )}
+              {isInsufficientMeso && (
+                <div className="text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: 'rgba(220,38,38,0.08)', color: 'var(--red)', border: '1px solid rgba(220,38,38,0.2)' }}>
+                  ⚠️ 현재 보유 메소({formatMeso(activeServer?.totalMeso ?? 0)})보다 지출이 많습니다.
+                </div>
+              )}
+            </div>
+          ) : (
+            <div>
+              <Input
+                label="금액 (메소)"
+                type="number"
+                placeholder="예: 100000000"
+                value={form.amount}
+                onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))}
+                min={1}
+              />
+              <QuickAmountButtons onAdd={(v) => setForm((p) => ({ ...p, amount: String((Number(p.amount) || 0) + v) }))} />
+              {toKoreanAmount(form.amount) && (
+                <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-3)' }}>{toKoreanAmount(form.amount)}</p>
+              )}
+              {isInsufficientMeso && (
+                <div className="text-xs px-3 py-2 rounded-lg mt-1.5" style={{ backgroundColor: 'rgba(220,38,38,0.08)', color: 'var(--red)', border: '1px solid rgba(220,38,38,0.2)' }}>
+                  ⚠️ 현재 보유 메소({formatMeso(activeServer?.totalMeso ?? 0)})보다 지출이 많습니다. 설정에서 메소 잔액을 먼저 업데이트해주세요.
+                </div>
+              )}
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <Input
               label="날짜"
@@ -321,7 +313,7 @@ export default function LedgerPage() {
             />
           </div>
           <div className="flex justify-end">
-            <Button type="submit" loading={submitting} disabled={isInsufficientMeso}>기록하기</Button>
+            <Button type="submit" loading={submitting} disabled={isInsufficientMeso || (inputMode === 'calc' ? !calcAmount : !form.amount)}>기록하기</Button>
           </div>
         </form>
       </Card>
@@ -335,38 +327,94 @@ export default function LedgerPage() {
         ) : (
           <div className="space-y-1.5">
             {expenseEntries.map((entry: LedgerEntry) => (
-              <div key={entry.id} className="list-row">
-                <div className="flex items-center gap-3 min-w-0">
-                  <span
-                    className="text-xs px-2 py-0.5 rounded-lg shrink-0"
-                    style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-2)' }}
-                  >
-                    {CATEGORY_LABELS[entry.category] ?? entry.category}
-                  </span>
-                  <div className="min-w-0">
-                    <span className="text-sm truncate block" style={{ color: 'var(--text)' }}>
-                      {entry.description || CATEGORY_LABELS[entry.category]}
+              <div key={entry.id} className="rounded-lg overflow-hidden" style={{ border: editingId === entry.id ? '1px solid var(--primary-glow)' : '1px solid transparent' }}>
+                <div className="list-row">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span
+                      className="text-xs px-2 py-0.5 rounded-lg shrink-0"
+                      style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-2)' }}
+                    >
+                      {CATEGORY_LABELS[entry.category] ?? entry.category}
                     </span>
-                    {entry.characterName && (
-                      <span className="text-xs" style={{ color: 'var(--text-3)' }}>{entry.characterName}</span>
-                    )}
+                    <div className="min-w-0">
+                      <span className="text-sm truncate block" style={{ color: 'var(--text)' }}>
+                        {entry.description || CATEGORY_LABELS[entry.category]}
+                      </span>
+                      {entry.characterName && (
+                        <span className="text-xs" style={{ color: 'var(--text-3)' }}>{entry.characterName}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="text-right">
+                      <p className="font-semibold text-sm" style={{ color: 'var(--red)' }}>
+                        -{formatMeso(entry.amount)}
+                      </p>
+                      <p className="text-xs" style={{ color: 'var(--text-3)' }}>{formatDateTime(entry.entryDate)}</p>
+                    </div>
+                    <button
+                      onClick={() => editingId === entry.id ? setEditingId(null) : startEdit(entry)}
+                      title="수정"
+                      className="text-xs px-1.5 py-0.5 rounded transition-colors"
+                      style={{ color: 'var(--primary)', backgroundColor: 'var(--primary-dim)' }}
+                    >✏️</button>
+                    <button
+                      onClick={() => handleDelete(entry.id)}
+                      title="삭제"
+                      className="text-xs px-1.5 py-0.5 rounded transition-colors"
+                      style={{ color: 'var(--text-3)', backgroundColor: 'var(--surface-2)' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--red)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-3)')}
+                    >🗑️</button>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <div className="text-right">
-                    <p className="font-semibold text-sm" style={{ color: 'var(--red)' }}>
-                      -{formatMeso(entry.amount)}
-                    </p>
-                    <p className="text-xs" style={{ color: 'var(--text-3)' }}>{formatDateTime(entry.entryDate)}</p>
+                {editingId === entry.id && (
+                  <div className="px-3 pb-3 pt-2 space-y-2" style={{ backgroundColor: 'var(--surface-2)' }}>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <p className="text-xs mb-1" style={{ color: 'var(--text-3)' }}>금액</p>
+                        <input
+                          type="number"
+                          className="form-field text-sm w-full"
+                          value={editForm.amount}
+                          onChange={(e) => setEditForm((p) => ({ ...p, amount: e.target.value }))}
+                          min={1}
+                        />
+                      </div>
+                      <div>
+                        <p className="text-xs mb-1" style={{ color: 'var(--text-3)' }}>날짜</p>
+                        <input
+                          type="date"
+                          className="form-field text-sm w-full"
+                          value={editForm.entryDate}
+                          onChange={(e) => setEditForm((p) => ({ ...p, entryDate: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs mb-1" style={{ color: 'var(--text-3)' }}>메모</p>
+                      <input
+                        type="text"
+                        className="form-field text-sm w-full"
+                        value={editForm.description}
+                        onChange={(e) => setEditForm((p) => ({ ...p, description: e.target.value }))}
+                      />
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => setEditingId(null)}
+                        className="text-xs px-3 py-1.5 rounded-lg"
+                        style={{ backgroundColor: 'var(--surface)', color: 'var(--text-2)', border: '1px solid var(--border)' }}
+                      >취소</button>
+                      <button
+                        onClick={() => handleEditSubmit(entry)}
+                        disabled={editSubmitting}
+                        className="text-xs px-3 py-1.5 rounded-lg font-semibold"
+                        style={{ backgroundColor: 'var(--primary)', color: '#fff' }}
+                      >{editSubmitting ? '저장 중...' : '저장'}</button>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => handleDelete(entry.id)}
-                    className="text-sm transition-colors"
-                    style={{ color: 'var(--text-3)' }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--red)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-3)')}
-                  >✕</button>
-                </div>
+                )}
               </div>
             ))}
           </div>

@@ -87,4 +87,25 @@ export const bossApi = {
 
   updateBossKill: (killId: number, data: { partySize: number }) =>
     client.patch<BossKill>(`/boss/kills/${killId}`, data),
+
+  // 파티 분배 처리 (→ distributed, 가계부 수입 반영)
+  distributeDrop: (dropId: number, data: { amount: number; distributeDate: string }) =>
+    client.patch<BossDrop>(`/boss/drops/${dropId}/distribute`, data),
+
+  // 드랍 기록 수정 (아이템명, 판매금액/날짜)
+  updateDrop: (dropId: number, data: { itemName?: string; saleAmount?: number; saleDate?: string; isPcCafe?: boolean }) =>
+    client.patch<BossDrop>(`/boss/drops/${dropId}`, data),
+
+  // 드랍 기록 삭제 (sold/distributed면 가계부 항목도 함께 삭제)
+  deleteDrop: (dropId: number) =>
+    client.delete(`/boss/drops/${dropId}`),
+
+  // sold/distributed/listed → holding 롤백 (가계부 원상복구)
+  rollbackDrop: (dropId: number) =>
+    client.patch<BossDrop>(`/boss/drops/${dropId}/rollback`),
+}
+
+export function prefetchBossPage(_serverId: number | null): void {
+  bossApi.getBossList().catch(() => {})
+  bossApi.getDopingList().catch(() => {})
 }

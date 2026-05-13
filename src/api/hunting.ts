@@ -8,7 +8,7 @@ export const huntingApi = {
   getWeeklySessions: (params?: { week?: string; characterId?: number }) =>
     client.get<HuntingSession[]>('/hunting/sessions', { params }),
 
-  updateSession: (id: number, data: { income: number; solErdaFragments?: number; sessionDate: string }) =>
+  updateSession: (id: number, data: { income: number; solErdaFragments?: number; sessionDate: string; roundCount?: number | null }) =>
     client.patch<HuntingSession>(`/hunting/sessions/${id}`, data),
 
   deleteSession: (id: number) =>

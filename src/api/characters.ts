@@ -2,19 +2,14 @@ import client from './client'
 import type { CharacterRequest, CharacterROI, CharacterStatsResponse, MapleCharacter } from '../types'
 
 let _cache: MapleCharacter[] | null = null
-let _cacheServerId: string | null = null
 
-export const bustCharacterCache = () => { _cache = null; _cacheServerId = null }
-
-const bust = bustCharacterCache
+const bust = () => { _cache = null }
 
 export const charactersApi = {
   getCharacters: async (): Promise<{ data: MapleCharacter[] }> => {
-    const currentServerId = localStorage.getItem('activeServerId')
-    if (_cache && _cacheServerId === currentServerId) return { data: _cache }
+    if (_cache) return { data: _cache }
     const res = await client.get<MapleCharacter[]>('/characters')
-    _cache = res.data.length > 0 ? res.data : null
-    _cacheServerId = res.data.length > 0 ? currentServerId : null
+    if (res.data.length > 0) _cache = res.data
     return res
   },
 
@@ -45,6 +40,8 @@ export const charactersApi = {
   getCharacterROI: (id: number) =>
     client.get<CharacterROI>(`/characters/${id}/roi`),
 
-  getCharacterStats: () =>
-    client.get<CharacterStatsResponse[]>('/characters/stats'),
+  getCharacterStats: (weeks?: number) =>
+    client.get<CharacterStatsResponse[]>('/characters/stats', { params: weeks ? { weeks } : {} }),
 }
+
+export const bustCharacterCache = () => { _cache = null }

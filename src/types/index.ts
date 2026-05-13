@@ -133,7 +133,7 @@ export interface LedgerStat {
 
 // ====== 보스 드랍 타입 ======
 export type ItemCategory = 'dark_accessory' | 'radiant_accessory' | 'dawn_accessory' | 'other'
-export type DropStatus = 'holding' | 'listed' | 'sold'
+export type DropStatus = 'holding' | 'listed' | 'sold' | 'distributed'
 
 export interface BossDropItem {
   id: number
@@ -228,6 +228,7 @@ export interface HuntingSession {
   solErdaFragments: number
   solErdaValue: number
   totalIncome: number
+  roundCount: number | null
   sessionDate: string
   characterId: number | null
   characterName: string | null
@@ -238,6 +239,7 @@ export interface HuntingSessionRequest {
   solErdaFragments?: number
   sessionDate: string
   characterId?: number | null
+  roundCount?: number | null
 }
 
 export interface HuntingStats {

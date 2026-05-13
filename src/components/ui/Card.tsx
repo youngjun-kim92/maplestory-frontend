@@ -1,13 +1,14 @@
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 
 interface CardProps {
   children: ReactNode
   className?: string
+  style?: CSSProperties
   title?: string
-  icon?: string
+  icon?: ReactNode
 }
 
-export default function Card({ children, className = '', title, icon }: CardProps) {
+export default function Card({ children, className = '', style, title, icon }: CardProps) {
   return (
     <div
       className={`rounded-2xl ${className}`}
@@ -16,6 +17,7 @@ export default function Card({ children, className = '', title, icon }: CardProp
         border: '1.5px solid var(--border)',
         boxShadow: 'var(--shadow)',
         padding: '0.5rem 0.75rem',
+        ...style,
       }}
     >
       {(title || icon) && (
