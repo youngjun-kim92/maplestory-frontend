@@ -111,8 +111,6 @@ export function difficultyLabel(difficulty: string): string {
   return DIFFICULTY_LABELS[difficulty.toLowerCase()] ?? difficulty
 }
 
-export const CATEGORY_ICON_IMGS: Record<string, string> = {}
-
 const DIFFICULTY_ORDER = ['easy', 'normal', 'hard', 'chaos', 'extreme']
 
 export function sortDifficulties(difficulties: string[]): string[] {
@@ -122,6 +120,8 @@ export function sortDifficulties(difficulties: string[]): string[] {
     return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi)
   })
 }
+
+export const CATEGORY_ICON_IMGS: Record<string, string> = {}
 
 export const CATEGORY_ICONS: Record<string, string> = {
   boss: '⚔️',

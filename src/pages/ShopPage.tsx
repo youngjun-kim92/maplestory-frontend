@@ -3,13 +3,11 @@ import { ledgerApi } from '../api/ledger'
 import { charactersApi } from '../api/characters'
 import { bossApi } from '../api/boss'
 import type { DopingItem, EntryCategory, LedgerEntry, MapleCharacter } from '../types'
-import { formatMeso, formatDateTime, toDateString, withCurrentTime, CATEGORY_LABELS, CATEGORY_ICONS } from '../utils/format'
+import { formatMeso, formatDateKo, toDateString, CATEGORY_LABELS, CATEGORY_ICONS } from '../utils/format'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
-import AutocompleteInput from '../components/ui/AutocompleteInput'
 import QuickAmountButtons from '../components/ui/QuickAmountButtons'
 import Select from '../components/ui/Select'
-import { saveToHistory } from '../utils/autocomplete'
 
 const SHOP_CATEGORIES = new Set<EntryCategory>(['trade', 'doping', 'other'])
 
@@ -41,9 +39,9 @@ export default function ShopPage() {
   const [success, setSuccess] = useState<string | null>(null)
 
   const fetchEntries = useCallback(async () => {
-    if (!selectedCharId) return
     try {
-      const res = await ledgerApi.getWeeklyLedger({ characterId: Number(selectedCharId) })
+      const params = selectedCharId ? { characterId: Number(selectedCharId) } : undefined
+      const res = await ledgerApi.getWeeklyLedger(params)
       setEntries(res.data.entries.filter((e) => SHOP_CATEGORIES.has(e.category)))
     } catch {
       setEntries([])
@@ -51,16 +49,10 @@ export default function ShopPage() {
   }, [selectedCharId])
 
   useEffect(() => {
-    Promise.all([
-      charactersApi.getCharacters(),
-      bossApi.getDopingList(),
-    ]).then(([chars, dopings]) => {
-      const charList = chars.data
-      setCharacters(charList)
-      const mainChar = charList.find((c) => c.isMain) ?? charList[0]
-      if (mainChar) setSelectedCharId(String(mainChar.id))
-      setDopingList(dopings.data)
+    charactersApi.getCharacters().then((r) => {
+      setCharacters(r.data)
     }).catch(() => {})
+    bossApi.getDopingList().then((r) => setDopingList(r.data)).catch(() => {})
   }, [])
 
   useEffect(() => { fetchEntries() }, [fetchEntries])
@@ -82,10 +74,9 @@ export default function ShopPage() {
         category: 'trade',
         amount,
         description: incomeForm.itemName.trim(),
-        entryDate: withCurrentTime(incomeForm.date),
+        entryDate: incomeForm.date,
         characterId: selectedCharId ? Number(selectedCharId) : null,
       })
-      saveToHistory('shop_income', incomeForm.itemName.trim())
       setIncomeForm({ itemName: '', amount: '', date: toDateString() })
       await fetchEntries()
       showSuccess('판매 수입이 기록되었습니다.')
@@ -109,10 +100,9 @@ export default function ShopPage() {
         category: expenseForm.category,
         amount,
         description: expenseForm.itemName.trim(),
-        entryDate: withCurrentTime(expenseForm.date),
+        entryDate: expenseForm.date,
         characterId: selectedCharId ? Number(selectedCharId) : null,
       })
-      saveToHistory('shop_expense', expenseForm.itemName.trim())
       setExpenseForm((p) => ({ ...p, selectedDopingId: '', itemName: '', amount: '', date: toDateString() }))
       await fetchEntries()
       showSuccess('구매 지출이 기록되었습니다.')
@@ -154,28 +144,19 @@ export default function ShopPage() {
   const totalIncome = incomeEntries.reduce((s, e) => s + e.amount, 0)
   const totalExpense = expenseEntries.reduce((s, e) => s + e.amount, 0)
 
+  const charOptions = [
+    { value: '', label: '전체 캐릭터' },
+    ...characters.map((c) => ({ value: String(c.id), label: `${c.isMain ? '⭐ ' : ''}${c.name}` })),
+  ]
+
   return (
     <div className="space-y-4">
       {/* 헤더 */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>🛒 상점</h1>
-        </div>
-        {characters.length > 0 ? (
-          <select
-            className="form-field text-sm min-w-[120px] max-w-[200px] w-auto"
-            value={selectedCharId}
-            onChange={(e) => setSelectedCharId(e.target.value)}
-          >
-            {characters.map((c) => (
-              <option key={c.id} value={String(c.id)} style={{ backgroundColor: 'var(--surface-2)' }}>
-                {c.isMain ? `⭐ ${c.name}` : c.name}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <a href="/characters" className="text-xs underline" style={{ color: 'var(--primary)' }}>캐릭터 등록 →</a>
-        )}
+      <div>
+        <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>🛒 상점</h1>
+        <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>
+          직거래·개인 상점 수입과 아이템 구매 비용을 기록하세요
+        </p>
       </div>
 
       {/* 성공 토스트 */}
@@ -187,6 +168,14 @@ export default function ShopPage() {
           ✅ {success}
         </div>
       )}
+
+      {/* 캐릭터 선택 드랍박스 */}
+      <Select
+        label="캐릭터 선택"
+        value={selectedCharId}
+        onChange={(e) => setSelectedCharId(e.target.value)}
+        options={charOptions}
+      />
 
       {/* 주간 요약 */}
       <div className="grid grid-cols-2 gap-3">
@@ -230,10 +219,9 @@ export default function ShopPage() {
             <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>💰 판매 수입 기록</h3>
             <form onSubmit={handleIncomeSubmit} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
-                <AutocompleteInput
+                <Input
                   label="아이템명 / 거래 내용"
                   placeholder="예: 아케인셰이드 단검"
-                  historyKey="shop_income"
                   value={incomeForm.itemName}
                   onChange={(e) => setIncomeForm((p) => ({ ...p, itemName: e.target.value }))}
                 />
@@ -311,10 +299,9 @@ export default function ShopPage() {
                 />
               )}
 
-              <AutocompleteInput
+              <Input
                 label="아이템명 / 내용"
                 placeholder={expenseForm.category === 'doping' ? '예: 알레리아 영약' : '예: 경험의 비약 30%'}
-                historyKey="shop_expense"
                 value={expenseForm.itemName}
                 onChange={(e) => setExpenseForm((p) => ({ ...p, itemName: e.target.value }))}
               />
@@ -369,7 +356,7 @@ export default function ShopPage() {
                       </p>
                       <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                         <span className="text-xs" style={{ color: 'var(--text-3)' }}>
-                          {formatDateTime(entry.entryDate)}
+                          {formatDateKo(entry.entryDate)}
                           {entry.characterName && ` · ${entry.characterName}`}
                         </span>
                         <span

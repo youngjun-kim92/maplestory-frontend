@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { PenLine, Calculator } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { bossApi } from '../api/boss'
 import { ledgerApi } from '../api/ledger'
@@ -76,6 +77,7 @@ function BossSection({
   const [resetFilter, setResetFilter] = useState<ResetType | 'all'>('all')
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState({
     bossName: '', difficulty: '', partySize: '1',
     killDate: toDateString(), characterId: '',
@@ -163,20 +165,23 @@ function BossSection({
           bossApi.recordDrop(res.data.id, itemName)
         ))
       }
+      setError(null)
+      setError(null)
       setSuccess(true)
       setSelectedItems(new Set())
       setForm((p) => ({ ...p, bossName: '', difficulty: '', partySize: '1' }))
       await refreshUser()
       setTimeout(() => setSuccess(false), 3000)
-    } catch {
-      // 에러는 무시 (추후 에러 표시 추가 가능)
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      setError(msg ?? '보스 처치 기록에 실패했습니다.')
     } finally {
       setSubmitting(false)
     }
   }
 
   return (
-    <Card title="보스 처치 기록" icon="⚔️">
+    <Card title="보스 처치 기록" icon={<img src="/maple-icons/boss.png" alt="" width={20} height={20} style={{ imageRendering: 'pixelated' }} />}>
       {success && (
         <div
           className="mb-3 p-3 rounded-xl"
@@ -186,6 +191,14 @@ function BossSection({
             ✅ 보스 처치 기록 완료!
             {selectedItems.size === 0 && ' (드랍 아이템 없음)'}
           </p>
+        </div>
+      )}
+      {error && (
+        <div
+          className="mb-3 p-3 rounded-xl"
+          style={{ backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)' }}
+        >
+          <p className="text-sm font-semibold" style={{ color: 'var(--red)' }}>❌ {error}</p>
         </div>
       )}
 
@@ -378,6 +391,9 @@ function GeneralSection({ characters }: { characters: MapleCharacter[] }) {
     amount: '', fragments: '', description: '',
     entryDate: toDateString(), characterId: '',
   })
+  const [inputMode, setInputMode] = useState<'direct' | 'calc'>('direct')
+  const [calcBefore, setCalcBefore] = useState({ meso: '' })
+  const [calcAfter, setCalcAfter] = useState({ meso: '' })
 
   // 캐릭터 로드 시 메인캐릭터를 기본값으로 설정
   useEffect(() => {
@@ -385,10 +401,15 @@ function GeneralSection({ characters }: { characters: MapleCharacter[] }) {
     if (main) setForm((p) => ({ ...p, characterId: String(main.id) }))
   }, [characters])
 
+  const calcAmount = Math.max(0, Number(calcBefore.meso || '0') - Number(calcAfter.meso || '0'))
+
   const handleTypeChange = (t: EntryType) => {
     setType(t)
     setCategory(t === 'income' ? 'hunting' : 'cube')
     setForm((p) => ({ ...p, amount: '', fragments: '' }))
+    setInputMode('direct')
+    setCalcBefore({ meso: '' })
+    setCalcAfter({ meso: '' })
   }
 
   const catOptions = type === 'income' ? INCOME_CATS : EXPENSE_CATS
@@ -404,7 +425,7 @@ function GeneralSection({ characters }: { characters: MapleCharacter[] }) {
 
   const handleSubmit = async (e: { preventDefault(): void }) => {
     e.preventDefault()
-    const amount = isSolErda ? solAmount : Number(form.amount)
+    const amount = isSolErda ? solAmount : (inputMode === 'calc' ? calcAmount : Number(form.amount))
     if (!amount || amount < 1) return
     setSubmitting(true)
     setError(null)
@@ -419,6 +440,8 @@ function GeneralSection({ characters }: { characters: MapleCharacter[] }) {
         solErdaFragments: isHunting && form.fragments ? Number(form.fragments) : null,
       })
       setForm((p) => ({ ...p, amount: '', fragments: '', description: '' }))
+      setCalcBefore({ meso: '' })
+      setCalcAfter({ meso: '' })
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
       await refreshUser()
@@ -509,6 +532,56 @@ function GeneralSection({ characters }: { characters: MapleCharacter[] }) {
             ))}
           </div>
 
+          {/* 인벤 계산 토글 — 지출이고 솔에르다가 아닐 때 */}
+          {type === 'expense' && !isSolErda && (
+            <div className="flex gap-2">
+              {([['direct', <span key="d" className="flex items-center gap-1"><PenLine size={13} strokeWidth={1.75} />직접 입력</span>], ['calc', <span key="c" className="flex items-center gap-1"><Calculator size={13} strokeWidth={1.75} />인벤 계산</span>]] as const).map(([mode, label]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => {
+                    setInputMode(mode)
+                    if (mode === 'calc') {
+                      setCalcBefore({ meso: String(activeServer?.inventoryMeso ?? 0) })
+                      setCalcAfter({ meso: '' })
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                  style={
+                    inputMode === mode
+                      ? { backgroundColor: 'var(--primary-dim)', color: 'var(--primary)', border: '1.5px solid var(--primary-glow)' }
+                      : { backgroundColor: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }
+                  }
+                >{label}</button>
+              ))}
+            </div>
+          )}
+
+          {/* 인벤 계산 토글 — 지출이고 솔에르다가 아닐 때 */}
+          {type === 'expense' && !isSolErda && (
+            <div className="flex gap-2">
+              {([['direct', <span key="d" className="flex items-center gap-1"><PenLine size={13} strokeWidth={1.75} />직접 입력</span>], ['calc', <span key="c" className="flex items-center gap-1"><Calculator size={13} strokeWidth={1.75} />인벤 계산</span>]] as const).map(([mode, label]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => {
+                    setInputMode(mode)
+                    if (mode === 'calc') {
+                      setCalcBefore({ meso: String(activeServer?.inventoryMeso ?? 0) })
+                      setCalcAfter({ meso: '' })
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                  style={
+                    inputMode === mode
+                      ? { backgroundColor: 'var(--primary-dim)', color: 'var(--primary)', border: '1.5px solid var(--primary-glow)' }
+                      : { backgroundColor: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }
+                  }
+                >{label}</button>
+              ))}
+            </div>
+          )}
+
           {/* 금액 / 솔 에르다 조각 */}
           {isSolErda ? (
             solPrice > 0 ? (
@@ -545,24 +618,59 @@ function GeneralSection({ characters }: { characters: MapleCharacter[] }) {
             )
           ) : (
             <div className="space-y-3">
-              <div>
-                <Input
-                  label="금액 (메소)"
-                  type="number"
-                  placeholder="예: 50000000"
-                  value={form.amount}
-                  onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))}
-                  min={1}
-                />
-                <QuickAmountButtons
-                  onAdd={(v) => setForm((p) => ({ ...p, amount: String((Number(p.amount) || 0) + v) }))}
-                />
-                {form.amount && Number(form.amount) > 0 && (
-                  <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-2)' }}>
-                    = {formatMeso(Number(form.amount))} 메소
-                  </p>
-                )}
-              </div>
+              {type === 'expense' && inputMode === 'calc' ? (
+                <div className="space-y-2">
+                  <div
+                    className="px-3 py-2 rounded-lg text-xs"
+                    style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)' }}
+                  >
+                    <span style={{ color: 'var(--text-3)' }}>현재 인벤 메소: </span>
+                    <span className="font-semibold" style={{ color: 'var(--text-2)' }}>
+                      {formatMeso(Number(calcBefore.meso || '0'))}
+                    </span>
+                  </div>
+                  <div>
+                    <Input
+                      label="강화 후 남은 인벤 메소"
+                      type="number"
+                      placeholder="강화 후 인벤 메소 입력"
+                      value={calcAfter.meso}
+                      onChange={(e) => setCalcAfter({ meso: e.target.value })}
+                      min={0}
+                    />
+                    {calcAfter.meso !== '' && Number(calcAfter.meso) >= 0 && (
+                      <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-3)' }}>
+                        {formatMeso(Number(calcAfter.meso))}
+                      </p>
+                    )}
+                  </div>
+                  {calcAmount > 0 && (
+                    <div className="px-3 py-2 rounded-xl text-xs font-semibold"
+                      style={{ backgroundColor: 'rgba(220,38,38,0.08)', color: 'var(--red)', border: '1px solid rgba(220,38,38,0.2)' }}>
+                      💸 강화 비용: {formatMeso(calcAmount)} 메소
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <Input
+                    label="금액 (메소)"
+                    type="number"
+                    placeholder="예: 50000000"
+                    value={form.amount}
+                    onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))}
+                    min={1}
+                  />
+                  <QuickAmountButtons
+                    onAdd={(v) => setForm((p) => ({ ...p, amount: String((Number(p.amount) || 0) + v) }))}
+                  />
+                  {form.amount && Number(form.amount) > 0 && (
+                    <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-2)' }}>
+                      = {formatMeso(Number(form.amount))} 메소
+                    </p>
+                  )}
+                </div>
+              )}
               {isHunting && (
                 <div>
                   <Input
@@ -611,7 +719,7 @@ function GeneralSection({ characters }: { characters: MapleCharacter[] }) {
           <Button
             type="submit"
             loading={submitting}
-            disabled={isSolErda ? (!form.fragments || !solPrice) : !form.amount}
+            disabled={isSolErda ? (!form.fragments || !solPrice) : (inputMode === 'calc' ? !calcAmount : !form.amount)}
             className="w-full"
           >
             기록하기
