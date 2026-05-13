@@ -341,4 +341,6 @@ export interface CharacterStatsResponse {
   totalExpense: number
   netProfit: number
   entryCount: number
+  incomeByCategory?: Record<string, number>
+  expenseByCategory?: Record<string, number>
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid, PieChart, Pie, Cell } from 'recharts'
 import { ledgerApi } from '../api/ledger'
@@ -6,9 +6,11 @@ import { authApi } from '../api/auth'
 import { bossApi } from '../api/boss'
 import { charactersApi } from '../api/characters'
 import client from '../api/client'
+import { dashboardCache, fetchDashboardParallel } from '../api/dashboardCache'
+import type { DashboardSnapshot } from '../api/dashboardCache'
 import { useAuth } from '../contexts/AuthContext'
 import type {
-  BossDrop, BossKill, CharacterStatsResponse, EntryCategory, EntryType, LedgerEntry, LedgerStat,
+  BossDrop, BossDropItem, BossKill, CharacterStatsResponse, EntryCategory, EntryType, LedgerEntry, LedgerStat,
   MapleCharacter, WeeklyLedger, WeeklySummary,
 } from '../types'
 import {
@@ -19,10 +21,11 @@ import {
   toDateString,
   withCurrentTime,
   toKoreanAmount,
-  CATEGORY_ICONS,
   CATEGORY_LABELS,
   difficultyLabel,
 } from '../utils/format'
+import MapleIcon from '../components/MapleIcon'
+import { BarChart2, User, Coins, Star, Store } from 'lucide-react'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import Select from '../components/ui/Select'
@@ -93,6 +96,8 @@ export default function DashboardPage() {
   const [statsLoading, setStatsLoading] = useState(true)
 
   const [charStats, setCharStats] = useState<CharacterStatsResponse[]>([])
+  const [charStats4w, setCharStats4w] = useState<CharacterStatsResponse[]>([])
+  const [charStatsTab, setCharStatsTab] = useState<'all' | '4w'>('all')
   const [charBossCounts, setCharBossCounts] = useState<Map<number, number>>(new Map())
   const [serverSummaries, setServerSummaries] = useState<Record<number, { income: number; expense: number }>>({})
   const isMultiServer = (user?.serverProfiles?.length ?? 0) >= 2
@@ -103,6 +108,22 @@ export default function DashboardPage() {
   const [sellingId, setSellingId] = useState<number | null>(null)
   const [sellForm, setSellForm] = useState({ saleAmount: '', saleDate: toDateString(), isPcCafe: false })
   const [sellSubmitting, setSellSubmitting] = useState(false)
+  const [sellInputMode, setSellInputMode] = useState<'direct' | 'calc'>('direct')
+  const [sellCalcBefore, setSellCalcBefore] = useState({ meso: '' })
+  const [sellCalcAfter, setSellCalcAfter] = useState({ meso: '' })
+
+  const [distributingId, setDistributingId] = useState<number | null>(null)
+  const [distributeForm, setDistributeForm] = useState({ amount: '', date: toDateString() })
+  const [distributeSubmitting, setDistributeSubmitting] = useState(false)
+  const [distributeInputMode, setDistributeInputMode] = useState<'direct' | 'calc'>('direct')
+  const [distributeCalcBefore, setDistributeCalcBefore] = useState({ meso: '' })
+  const [distributeCalcAfter, setDistributeCalcAfter] = useState({ meso: '' })
+
+  const [editingDropId, setEditingDropId] = useState<number | null>(null)
+  const [dropEditForm, setDropEditForm] = useState({ itemName: '', saleAmount: '', saleDate: '', isPcCafe: false })
+  const [dropEditSubmitting, setDropEditSubmitting] = useState(false)
+  const [dropRollbackSubmitting, setDropRollbackSubmitting] = useState(false)
+  const [dropEditItems, setDropEditItems] = useState<BossDropItem[]>([])
 
   const [showCalendar, setShowCalendar] = useState(false)
   const [calendarViewDate, setCalendarViewDate] = useState<{ year: number; month: number }>(() => {
@@ -126,10 +147,83 @@ export default function DashboardPage() {
   // 달력 일별 데이터 (해당 월 전체 주 fetch)
   const [calendarDayMap, setCalendarDayMap] = useState<Map<string, { income: number; expense: number; erda: number }>>(new Map())
 
+  const [expandedCharId, setExpandedCharId] = useState<number | null>(null)
+  const [expandedServerWeekId, setExpandedServerWeekId] = useState<number | null>(null)
+  const [serverWeekChars, setServerWeekChars] = useState<Record<number, { loading: boolean; chars: Array<{ id: number; name: string; income: Map<string, number>; expense: Map<string, number> }> }>>({})
+  const [serverStatTab, setServerStatTab] = useState<'all' | '4w'>('all')
+  const [expandedServerStatId, setExpandedServerStatId] = useState<number | null>(null)
+  const [serverStatData, setServerStatData] = useState<Record<number, { loading: boolean; all: CharacterStatsResponse[] | null; w4: CharacterStatsResponse[] | null }>>({})
+
   const weekStartStr = toDateString(weekStart)
   const weekEnd = new Date(weekStart)
   weekEnd.setDate(weekEnd.getDate() + 6)
   const isThisWeek = weekStartStr === toDateString(getWeekStart())
+
+  const handleServerWeekExpand = async (spId: number) => {
+    if (expandedServerWeekId === spId) { setExpandedServerWeekId(null); return }
+    setExpandedServerWeekId(spId)
+    if (serverWeekChars[spId] !== undefined) return
+    setServerWeekChars((prev) => ({ ...prev, [spId]: { loading: true, chars: [] } }))
+    try {
+      const res = await client.get('/ledger', {
+        params: { week: weekStartStr },
+        headers: { 'X-Server-Profile-Id': String(spId) },
+      })
+      const fetchedEntries: LedgerEntry[] = res.data.entries ?? []
+      const map = new Map<number, { id: number; name: string; income: Map<string, number>; expense: Map<string, number> }>()
+      for (const entry of fetchedEntries) {
+        if (!entry.characterId) continue
+        if (!map.has(entry.characterId)) {
+          map.set(entry.characterId, { id: entry.characterId, name: entry.characterName ?? '?', income: new Map(), expense: new Map() })
+        }
+        const d = map.get(entry.characterId)!
+        const m = entry.type === 'income' ? d.income : d.expense
+        m.set(entry.category, (m.get(entry.category) ?? 0) + entry.amount)
+      }
+      setServerWeekChars((prev) => ({ ...prev, [spId]: { loading: false, chars: [...map.values()] } }))
+    } catch {
+      setServerWeekChars((prev) => ({ ...prev, [spId]: { loading: false, chars: [] } }))
+    }
+  }
+
+  const handleServerStatExpand = async (spId: number) => {
+    if (expandedServerStatId === spId) { setExpandedServerStatId(null); return }
+    setExpandedServerStatId(spId)
+    if (serverStatData[spId] !== undefined) return
+    setServerStatData((prev) => ({ ...prev, [spId]: { loading: true, all: null, w4: null } }))
+    try {
+      const [allRes, w4Res] = await Promise.all([
+        client.get('/characters/stats', { headers: { 'X-Server-Profile-Id': String(spId) } }),
+        client.get('/characters/stats', { params: { weeks: 4 }, headers: { 'X-Server-Profile-Id': String(spId) } }),
+      ])
+      setServerStatData((prev) => ({ ...prev, [spId]: { loading: false, all: allRes.data, w4: w4Res.data } }))
+    } catch {
+      setServerStatData((prev) => ({ ...prev, [spId]: { loading: false, all: [], w4: [] } }))
+    }
+  }
+
+  const charWeeklyBreakdown = useMemo(() => {
+    if (!ledger?.entries?.length) return []
+    const map = new Map<number, { name: string; isMain: boolean; income: Map<string, number>; expense: Map<string, number> }>()
+    for (const entry of ledger.entries) {
+      if (!entry.characterId) continue
+      if (!map.has(entry.characterId)) {
+        const char = characters.find((c) => c.id === entry.characterId)
+        map.set(entry.characterId, {
+          name: entry.characterName ?? char?.name ?? '?',
+          isMain: char?.isMain ?? false,
+          income: new Map(),
+          expense: new Map(),
+        })
+      }
+      const d = map.get(entry.characterId)!
+      const m = entry.type === 'income' ? d.income : d.expense
+      m.set(entry.category, (m.get(entry.category) ?? 0) + entry.amount)
+    }
+    return [...map.entries()]
+      .map(([id, d]) => ({ id, ...d }))
+      .sort((a, b) => (a.isMain ? -1 : b.isMain ? 1 : 0))
+  }, [ledger?.entries, characters])
 
   // 항상 목요일 기준 week 파라미터 전달
   const fetchLedger = useCallback(async () => {
@@ -164,47 +258,66 @@ export default function DashboardPage() {
     }
   }, [weekStartStr, activeServerId])
 
-  useEffect(() => { fetchLedger() }, [fetchLedger])
-  useEffect(() => { fetchAllWeeks() }, [fetchAllWeeks])
-  useEffect(() => { fetchDrops() }, [fetchDrops])
-  useEffect(() => {
-    bossApi.getWeeklyBossKills({ week: weekStartStr })
-      .then(r => setWeeklyBossKills(r.data))
-      .catch(() => setWeeklyBossKills([]))
-  }, [weekStartStr, activeServerId])
-  useEffect(() => {
-    charactersApi.getCharacters().then((r) => {
-      setCharacters(r.data)
-      const main = r.data.find((c) => c.isMain) ?? r.data[0]
-      setSelectedCharId(main?.id ?? 'all')
-    })
-  }, [activeServerId])
+  const applySnapshot = useCallback((snap: DashboardSnapshot) => {
+    setLedger(snap.ledger)
+    setAllWeeks(snap.allWeeks)
+    setDrops(snap.drops)
+    setWeeklyBossKills(snap.weeklyBossKills)
+    setCharacters(snap.characters)
+    const main = snap.characters.find((c) => c.isMain) ?? snap.characters[0]
+    setSelectedCharId(main?.id ?? 'all')
+    setCharStats(snap.charStats)
+    setCharStats4w(snap.charStats4w)
+    setCatStats(snap.catStats)
+    setCharBossCounts(snap.charBossCounts)
+    setLoading(false)
+    setAllWeeksLoading(false)
+    setStatsLoading(false)
+    setDropsLoading(false)
+  }, [])
 
+  // 초기 로드 + 서버 변경: 항상 현재 주로 리셋 후 캐시 우선 렌더링
   useEffect(() => {
-    charactersApi.getCharacterStats().then((r) => setCharStats(r.data)).catch(() => {})
-  }, [activeServerId])
+    setWeekStart(getWeekStart())
+    const ws = toDateString(getWeekStart())
+    const cached = dashboardCache.get(activeServerId ?? null, ws)
+    if (cached) {
+      applySnapshot(cached)
+      fetchDashboardParallel(ws).then((snap) => {
+        dashboardCache.set(activeServerId ?? null, snap)
+        applySnapshot(snap)
+      }).catch(() => {})
+    } else {
+      setLoading(true); setAllWeeksLoading(true); setStatsLoading(true); setDropsLoading(true)
+      fetchDashboardParallel(ws)
+        .then((snap) => { dashboardCache.set(activeServerId ?? null, snap); applySnapshot(snap) })
+        .catch(() => { setLoading(false); setAllWeeksLoading(false); setStatsLoading(false); setDropsLoading(false) })
+    }
+  }, [activeServerId, applySnapshot])
 
+  // 주간 네비게이션: 현재 주가 아닐 때만 주차별 데이터 갱신
   useEffect(() => {
-    setStatsLoading(true)
-    ledgerApi.getCategoryStats(4)
-      .then((res) => setCatStats(res.data))
-      .catch(() => {})
-      .finally(() => setStatsLoading(false))
-  }, [activeServerId])
+    if (weekStartStr === toDateString(getWeekStart())) return
+    setLoading(true); setDropsLoading(true)
+    Promise.all([
+      ledgerApi.getWeeklyLedger({ week: weekStartStr }),
+      bossApi.getWeeklyDrops(weekStartStr).catch(() => ({ data: [] as import('../types').BossDrop[] })),
+      bossApi.getWeeklyBossKills({ week: weekStartStr }),
+      bossApi.getWeeklyCharacterCounts(weekStartStr),
+    ]).then(([ledger, drops, kills, bossCounts]) => {
+      setLedger(ledger.data)
+      setDrops(drops.data)
+      setWeeklyBossKills(kills.data)
+      const map = new Map<number, number>()
+      bossCounts.data.forEach((d: { characterId: number; weeklyBossCount: number }) => map.set(d.characterId, d.weeklyBossCount))
+      setCharBossCounts(map)
+    }).catch(() => {}).finally(() => { setLoading(false); setDropsLoading(false) })
+  }, [weekStartStr])
 
-  useEffect(() => {
-    bossApi.getWeeklyCharacterCounts(weekStartStr)
-      .then(r => {
-        const map = new Map<number, number>()
-        r.data.forEach(d => map.set(d.characterId, d.weeklyBossCount))
-        setCharBossCounts(map)
-      })
-      .catch(() => setCharBossCounts(new Map()))
-  }, [weekStartStr, activeServerId])
-
+  // 멀티 서버 요약 (주차/서버 변경 시 갱신)
   useEffect(() => {
     if (!isMultiServer || !user?.serverProfiles) return
-    Promise.all(
+    Promise.allSettled(
       user.serverProfiles.map(async (sp) => {
         const res = await client.get('/ledger', {
           params: { week: weekStartStr },
@@ -215,13 +328,20 @@ export default function DashboardPage() {
     )
       .then((results) => {
         const map: Record<number, { income: number; expense: number }> = {}
-        results.forEach(({ id, summary }) => {
-          map[id] = { income: summary.totalIncome, expense: summary.totalExpense }
+        results.forEach((r) => {
+          if (r.status === 'fulfilled') {
+            const { id, summary } = r.value
+            map[id] = { income: summary.totalIncome, expense: summary.totalExpense }
+          }
         })
         setServerSummaries(map)
       })
-      .catch(() => {})
   }, [isMultiServer, user?.serverProfiles, weekStartStr, activeServerId])
+
+  useEffect(() => {
+    setServerWeekChars({})
+    setExpandedServerWeekId(null)
+  }, [weekStartStr])
 
   const handleListDrop = async (dropId: number) => {
     try {
@@ -233,19 +353,131 @@ export default function DashboardPage() {
   const handleSellSubmit = async (e: { preventDefault(): void }) => {
     e.preventDefault()
     if (!sellingId) return
-    const amount = Number(sellForm.saleAmount)
+    const isSilverPlusForSell = ['SILVER', 'GOLD', 'DIAMOND', 'RED', 'BLACK'].includes(user?.mvpGrade ?? '')
+    const feeRateForSell = sellForm.isPcCafe || isSilverPlusForSell ? 0.03 : 0.05
+    let amount: number
+    if (sellInputMode === 'calc') {
+      const diff = Math.max(0, Number(sellCalcAfter.meso || '0') - Number(sellCalcBefore.meso || '0'))
+      if (!diff || diff < 1) return
+      // Back-calculate listing price: backend applies fee again, so we reverse it
+      amount = Math.round(diff / (1 - feeRateForSell))
+    } else {
+      amount = Number(sellForm.saleAmount)
+    }
     if (!amount || amount < 1) return
     setSellSubmitting(true)
     try {
       await bossApi.sellDrop(sellingId, { saleAmount: amount, saleDate: sellForm.saleDate, isPcCafe: sellForm.isPcCafe })
       setSellingId(null)
       setSellForm({ saleAmount: '', saleDate: toDateString(), isPcCafe: false })
+      setSellInputMode('direct')
+      setSellCalcBefore({ meso: '' })
+      setSellCalcAfter({ meso: '' })
       await fetchDrops()
       await fetchLedger()
       await fetchAllWeeks()
       await refreshUser()
     } finally {
       setSellSubmitting(false)
+    }
+  }
+
+  const openDistributeForm = (drop: BossDrop) => {
+    setDistributingId(drop.id)
+    setDistributeForm({ amount: '', date: toDateString() })
+    setDistributeInputMode('direct')
+    setDistributeCalcBefore({ meso: String(activeServer?.inventoryMeso ?? '') })
+    setDistributeCalcAfter({ meso: '' })
+    setSellingId(null)
+    setEditingDropId(null)
+  }
+
+  const handleDistributeSubmit = async (e: { preventDefault(): void }) => {
+    e.preventDefault()
+    if (!distributingId) return
+    let amount: number
+    if (distributeInputMode === 'calc') {
+      amount = Math.max(0, Number(distributeCalcAfter.meso || '0') - Number(distributeCalcBefore.meso || '0'))
+    } else {
+      amount = Number(distributeForm.amount)
+    }
+    if (!amount || amount < 1) return
+    setDistributeSubmitting(true)
+    try {
+      await bossApi.distributeDrop(distributingId, { amount, distributeDate: distributeForm.date })
+      setDistributingId(null)
+      await fetchDrops()
+      await fetchLedger()
+      await fetchAllWeeks()
+      await refreshUser()
+    } finally {
+      setDistributeSubmitting(false)
+    }
+  }
+
+  const handleDropDelete = async (dropId: number) => {
+    if (!confirm('드랍 기록을 삭제하시겠습니까?\n판매/분배 완료 항목은 가계부 내역도 함께 삭제됩니다.')) return
+    try {
+      await bossApi.deleteDrop(dropId)
+      await fetchDrops()
+      await fetchLedger()
+      await fetchAllWeeks()
+      await refreshUser()
+    } catch { /* ignore */ }
+  }
+
+  const openDropEditForm = async (drop: BossDrop) => {
+    setEditingDropId(drop.id)
+    setDropEditItems([])
+    setDropEditForm({
+      itemName: drop.itemName,
+      saleAmount: drop.saleAmount != null ? String(drop.saleAmount) : '',
+      saleDate: drop.saleDate ?? toDateString(),
+      isPcCafe: false,
+    })
+    setSellingId(null)
+    setDistributingId(null)
+    try {
+      const res = await bossApi.getDropItems(drop.bossName, drop.difficulty)
+      setDropEditItems(res.data)
+    } catch { /* 목록 없으면 텍스트 입력 fallback */ }
+  }
+
+  const handleDropRollback = async (dropId: number) => {
+    if (!confirm('처리를 취소하고 보유 중 상태로 되돌리겠습니까?\n가계부에 기록된 수입도 함께 삭제됩니다.')) return
+    setDropRollbackSubmitting(true)
+    try {
+      await bossApi.rollbackDrop(dropId)
+      setEditingDropId(null)
+      await fetchDrops()
+      await fetchLedger()
+      await fetchAllWeeks()
+      await refreshUser()
+    } finally {
+      setDropRollbackSubmitting(false)
+    }
+  }
+
+  const handleDropEditSubmit = async (e: { preventDefault(): void }, drop: BossDrop) => {
+    e.preventDefault()
+    if (!editingDropId) return
+    setDropEditSubmitting(true)
+    const payload: { itemName?: string; saleAmount?: number; saleDate?: string; isPcCafe?: boolean } = {}
+    if (dropEditForm.itemName && dropEditForm.itemName !== drop.itemName) payload.itemName = dropEditForm.itemName
+    if ((drop.status === 'sold' || drop.status === 'distributed') && dropEditForm.saleAmount) {
+      payload.saleAmount = Number(dropEditForm.saleAmount)
+      payload.saleDate = dropEditForm.saleDate
+      payload.isPcCafe = dropEditForm.isPcCafe
+    }
+    try {
+      await bossApi.updateDrop(editingDropId, payload)
+      setEditingDropId(null)
+      await fetchDrops()
+      await fetchLedger()
+      await fetchAllWeeks()
+      await refreshUser()
+    } finally {
+      setDropEditSubmitting(false)
     }
   }
 
@@ -409,11 +641,21 @@ export default function DashboardPage() {
 
   const safeNum = (v: number | null | undefined) => (v == null || isNaN(v) ? 0 : v)
 
-  const cumulativeIncome = allWeeks.reduce((s, w) => s + safeNum(w.totalIncome), 0)
-  const cumulativeExpense = allWeeks.reduce((s, w) => s + safeNum(w.totalExpense), 0)
-  const cumulativeNet = cumulativeIncome - cumulativeExpense
+  const last4Weeks = allWeeks.slice(0, 4)
+  const fourWeekIncome = last4Weeks.reduce((s, w) => s + safeNum(w.totalIncome), 0)
+  const fourWeekExpense = last4Weeks.reduce((s, w) => s + safeNum(w.totalExpense), 0)
+  const fourWeekNet = fourWeekIncome - fourWeekExpense
+  const fourWeekLabel = (() => {
+    if (last4Weeks.length === 0) return ''
+    const oldest = last4Weeks[last4Weeks.length - 1]
+    const newest = last4Weeks[0]
+    const startDate = new Date(oldest.weekStart + 'T00:00:00')
+    const endDate = new Date(newest.weekStart + 'T00:00:00')
+    endDate.setDate(endDate.getDate() + 6)
+    return `${startDate.getMonth() + 1}/${startDate.getDate()} ~ ${endDate.getMonth() + 1}/${endDate.getDate()}`
+  })()
 
-  const chartData = allWeeks.filter(w => w.weekStart <= weekStartStr).slice(0, 8).reverse().map((w) => ({
+  const chartData = allWeeks.filter(w => w.weekStart <= weekStartStr).slice(0, 4).reverse().map((w) => ({
     week: w.weekStart.slice(5).replace('-', '/'),
     수입: safeNum(w.totalIncome),
     지출: safeNum(w.totalExpense),
@@ -477,12 +719,12 @@ export default function DashboardPage() {
   const catStatsRange = `${catStatsStart.getMonth() + 1}/${catStatsStart.getDate()} ~ ${catStatsEnd.getMonth() + 1}/${catStatsEnd.getDate()}`
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {/* 헤더 */}
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>📊 대시보드</h1>
+            <h1 className="text-2xl font-bold flex items-center gap-2" style={{ color: 'var(--text)' }}><BarChart2 size={24} strokeWidth={1.75} />대시보드</h1>
             {activeServer && (
               <span
                 className="px-2 py-0.5 rounded-full text-xs font-semibold"
@@ -492,8 +734,8 @@ export default function DashboardPage() {
               </span>
             )}
           </div>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>
-            {formatWeekRange(weekStartStr, toDateString(weekEnd))}
+          <p className="text-sm font-semibold mt-1" style={{ color: 'var(--primary)' }}>
+            📅 {formatWeekRange(weekStartStr, toDateString(weekEnd))}
           </p>
         </div>
         <div className="flex items-center gap-1">
@@ -501,10 +743,12 @@ export default function DashboardPage() {
             className="week-nav-btn flex items-center gap-1"
             onClick={() => setShowCalendar((v) => !v)}
             title="달력으로 보기"
-            style={showCalendar ? { backgroundColor: 'var(--primary-dim)', color: 'var(--primary)', border: '1px solid var(--primary-glow)' } : {}}
+            style={showCalendar
+              ? { backgroundColor: 'var(--primary-dim)', color: 'var(--primary)', border: '1.5px solid var(--primary)' }
+              : { backgroundColor: 'var(--surface-2)', border: '1.5px solid var(--border-2)' }}
           >
             <span className="text-base">📅</span>
-            <span className="hidden sm:inline text-xs font-normal" style={{ color: showCalendar ? 'var(--primary)' : 'var(--text-2)' }}>
+            <span className="hidden sm:inline text-xs font-bold" style={{ color: showCalendar ? 'var(--primary)' : 'var(--text)' }}>
               오늘 {toDateString()}
             </span>
           </button>
@@ -616,14 +860,16 @@ export default function DashboardPage() {
                         {day && (
                           <>
                             <div
-                              className="w-6 h-6 flex items-center justify-center rounded-full"
-                              style={isToday ? { backgroundColor: 'var(--primary)' } : {}}
+                              className="flex items-center justify-center rounded-full"
+                              style={isToday
+                                ? { backgroundColor: 'var(--primary)', width: '28px', height: '28px', boxShadow: '0 0 0 3px var(--primary-glow)' }
+                                : { width: '24px', height: '24px' }}
                             >
                               <span
                                 style={{
-                                  fontSize: '11px',
+                                  fontSize: isToday ? '13px' : '11px',
                                   lineHeight: 1,
-                                  fontWeight: isToday ? 700 : 500,
+                                  fontWeight: isToday ? 800 : 500,
                                   color: isToday
                                     ? '#fff'
                                     : isInSelected
@@ -689,7 +935,7 @@ export default function DashboardPage() {
       {ledger && (
         <>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-3)' }}>
+            <p className="text-sm font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-2)' }}>
               💰 메소
             </p>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -755,7 +1001,7 @@ export default function DashboardPage() {
                 className="mt-3 rounded-xl p-4 space-y-3"
                 style={panelStyle}
               >
-                <p className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>💰 보유 메소 업데이트</p>
+                <p className="text-xs font-semibold flex items-center gap-1" style={{ color: 'var(--text-2)' }}><Coins size={13} strokeWidth={1.75} />보유 메소 업데이트</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Input
@@ -825,7 +1071,7 @@ export default function DashboardPage() {
               borderLeft: '3px solid #a78bfa',
             }}
           >
-            <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>🔮</span>
+            <img src="/maple-icons/arcane_symbol.png" alt="" width={18} height={18} style={{ imageRendering: 'pixelated' }} />
             <span className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>
               {isThisWeek ? '이번 주' : '해당 주'} 솔 에르다 조각
             </span>
@@ -843,7 +1089,7 @@ export default function DashboardPage() {
             key={c.id}
             className={`char-tab ${selectedCharId === c.id ? 'char-tab-active' : ''}`}
             onClick={() => setSelectedCharId(c.id)}
-          >{c.isMain ? '⭐ ' : ''}{c.name}</button>
+          >{c.isMain && <Star size={11} fill="currentColor" strokeWidth={0} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '3px', color: 'var(--primary)' }} />}{c.name}</button>
         ))}
         <button
           className="char-tab"
@@ -898,7 +1144,7 @@ export default function DashboardPage() {
                     <th className="px-3 py-2 text-left text-xs font-medium" style={{ ...thStyle, width: '56px' }}>유형</th>
                     <th className="px-3 py-2 text-left text-xs font-medium" style={thStyle}>내역</th>
                     <th className="px-3 py-2 text-right text-xs font-medium" style={{ ...thStyle, width: '110px' }}>메소</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium" style={{ color: '#a78bfa', width: '72px' }}>🔮 조각</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium" style={{ color: '#a78bfa', width: '72px', whiteSpace: 'nowrap' }}><span className="inline-flex items-center gap-1"><img src="/maple-icons/arcane_symbol.png" alt="" width={12} height={12} style={{ imageRendering: 'pixelated' }} /> 조각</span></th>
                     <th style={{ width: '56px' }}></th>
                   </tr>
                 </thead>
@@ -971,10 +1217,12 @@ export default function DashboardPage() {
                                 ? { backgroundColor: 'rgba(74,222,128,0.12)', color: 'var(--green)' }
                                 : drop.status === 'listed'
                                 ? { backgroundColor: 'rgba(234,179,8,0.12)', color: '#fbbf24' }
+                                : drop.status === 'distributed'
+                                ? { backgroundColor: 'rgba(167,139,250,0.12)', color: '#a78bfa' }
                                 : { backgroundColor: 'var(--primary-dim)', color: 'var(--primary)' }
                             }
                           >
-                            {drop.status === 'sold' ? '✅ 판매 완료' : drop.status === 'listed' ? '🏪 경매장 등록 중' : '📦 보유 중'}
+                            {drop.status === 'sold' ? '✔ 판매 완료' : drop.status === 'listed' ? <span className="inline-flex items-center gap-1"><Store size={11} strokeWidth={1.75} />경매장 등록 중</span> : drop.status === 'distributed' ? '파티 분배' : '보유 중'}
                           </span>
                         </div>
                         <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
@@ -985,21 +1233,48 @@ export default function DashboardPage() {
                         {formatMeso(drop.saleAmount)} 판매
                       </p>
                     )}
+                    {drop.status === 'distributed' && drop.saleAmount && (
+                      <p className="text-xs mt-0.5 font-medium" style={{ color: '#a78bfa' }}>
+                        {formatMeso(drop.saleAmount)} 수령
+                      </p>
+                    )}
                   </div>
-                  {drop.status === 'holding' && (
+                  <div className="flex gap-1.5 shrink-0 items-center flex-wrap justify-end">
+                    {drop.status === 'holding' && (<>
+                      <button
+                        onClick={() => handleListDrop(drop.id)}
+                        className="text-xs px-2.5 py-1.5 rounded-lg font-medium"
+                        style={{ backgroundColor: 'rgba(251,191,36,0.1)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }}
+                      >경매장 등록</button>
+                      <button
+                        onClick={() => openDistributeForm(drop)}
+                        className="text-xs px-2.5 py-1.5 rounded-lg font-medium"
+                        style={{ backgroundColor: 'rgba(167,139,250,0.1)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.3)' }}
+                      >파티 분배</button>
+                    </>)}
+                    {drop.status === 'listed' && (<>
+                      <button
+                        onClick={() => { setSellingId(drop.id); setSellForm({ saleAmount: '', saleDate: toDateString(), isPcCafe: false }); setDistributingId(null); setEditingDropId(null) }}
+                        className="text-xs px-2.5 py-1.5 rounded-lg font-medium"
+                        style={{ backgroundColor: 'var(--primary-dim)', color: 'var(--primary)', border: '1px solid var(--primary-glow)' }}
+                      >판매 처리</button>
+                      <button
+                        onClick={() => openDistributeForm(drop)}
+                        className="text-xs px-2.5 py-1.5 rounded-lg font-medium"
+                        style={{ backgroundColor: 'rgba(167,139,250,0.1)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.3)' }}
+                      >파티 분배</button>
+                    </>)}
                     <button
-                      onClick={() => handleListDrop(drop.id)}
-                      className="text-xs px-2.5 py-1.5 rounded-lg shrink-0 font-medium"
-                      style={{ backgroundColor: 'rgba(251,191,36,0.1)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }}
-                    >경매장 등록</button>
-                  )}
-                  {drop.status === 'listed' && (
+                      onClick={() => openDropEditForm(drop)}
+                      className="text-xs px-2.5 py-1.5 rounded-lg font-medium"
+                      style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }}
+                    >수정</button>
                     <button
-                      onClick={() => { setSellingId(drop.id); setSellForm({ saleAmount: '', saleDate: toDateString(), isPcCafe: false }) }}
-                      className="text-xs px-2.5 py-1.5 rounded-lg shrink-0 font-medium"
-                      style={{ backgroundColor: 'var(--primary-dim)', color: 'var(--primary)', border: '1px solid var(--primary-glow)' }}
-                    >판매 처리</button>
-                  )}
+                      onClick={() => handleDropDelete(drop.id)}
+                      className="text-xs px-2 py-1.5 rounded-lg font-medium"
+                      style={{ backgroundColor: 'rgba(239,68,68,0.08)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}
+                    >삭제</button>
+                  </div>
                 </div>
 
                 {sellingId === drop.id && drop.status === 'listed' && (
@@ -1009,48 +1284,116 @@ export default function DashboardPage() {
                     style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)' }}
                   >
                     <p className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>판매 처리 — {drop.itemName}</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Input
-                        label="판매 금액 (메소)"
-                        type="number"
-                        placeholder="예: 3500000000"
-                        value={sellForm.saleAmount}
-                        onChange={(e) => setSellForm((p) => ({ ...p, saleAmount: e.target.value }))}
-                        min={1}
-                      />
-                      <Input
-                        label="판매 날짜"
-                        type="date"
-                        value={sellForm.saleDate}
-                        onChange={(e) => setSellForm((p) => ({ ...p, saleDate: e.target.value }))}
-                      />
+                    {/* 입력 모드 토글 */}
+                    <div className="flex gap-0.5 p-0.5 rounded-xl" style={{ backgroundColor: 'var(--surface)', width: 'fit-content' }}>
+                      {(['direct', 'calc'] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => {
+                            setSellInputMode(mode)
+                            if (mode === 'calc') {
+                              setSellCalcBefore({ meso: String(activeServer?.inventoryMeso ?? '') })
+                              setSellCalcAfter({ meso: '' })
+                            }
+                          }}
+                          className="px-3 py-1 rounded-lg text-xs font-semibold transition-all"
+                          style={sellInputMode === mode
+                            ? { backgroundColor: 'var(--primary)', color: '#fff' }
+                            : { backgroundColor: 'transparent', color: 'var(--text-3)' }}
+                        >{mode === 'direct' ? '직접 입력' : '인벤 계산'}</button>
+                      ))}
                     </div>
-                    <QuickAmountButtons
-                      onAdd={(v) => setSellForm((p) => ({ ...p, saleAmount: String((Number(p.saleAmount) || 0) + v) }))}
-                    />
-                    {(() => {
-                      const saleAmt = Number(sellForm.saleAmount)
-                      const isSilverPlus = ['SILVER','GOLD','DIAMOND','RED','BLACK'].includes(user?.mvpGrade ?? '')
-                      const isDiscounted = sellForm.isPcCafe || isSilverPlus
-                      const feeRate = isDiscounted ? 0.03 : 0.05
-                      const net = saleAmt * (1 - feeRate)
-                      if (!saleAmt) return null
-                      return (
-                        <div className="space-y-1 text-xs" style={{ color: 'var(--text-2)' }}>
-                          {!user?.mvpGrade || user.mvpGrade === 'NORMAL' ? (
-                            <p style={{ color: 'var(--text-3)' }}>
-                              MVP 등급 미설정 — 수수료 5% 적용.{' '}
-                              <a href="/settings" className="underline" style={{ color: 'var(--primary)' }}>설정에서 변경 →</a>
-                            </p>
-                          ) : (
-                            <p>MVP: {user.mvpGrade} · 수수료 {(feeRate * 100).toFixed(0)}%{isDiscounted ? ' (실버+ / PC방)' : ''}</p>
-                          )}
-                          <p className="font-semibold" style={{ color: 'var(--green)' }}>
-                            예상 실수령: {formatMeso(Math.floor(net))} 메소
-                          </p>
+                    {sellInputMode === 'direct' ? (
+                      <>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input
+                            label="판매 금액 (메소)"
+                            type="number"
+                            placeholder="예: 3500000000"
+                            value={sellForm.saleAmount}
+                            onChange={(e) => setSellForm((p) => ({ ...p, saleAmount: e.target.value }))}
+                            min={1}
+                          />
+                          <Input
+                            label="판매 날짜"
+                            type="date"
+                            value={sellForm.saleDate}
+                            onChange={(e) => setSellForm((p) => ({ ...p, saleDate: e.target.value }))}
+                          />
                         </div>
-                      )
-                    })()}
+                        <QuickAmountButtons
+                          onAdd={(v) => setSellForm((p) => ({ ...p, saleAmount: String((Number(p.saleAmount) || 0) + v) }))}
+                        />
+                        {(() => {
+                          const saleAmt = Number(sellForm.saleAmount)
+                          const isSilverPlus = ['SILVER','GOLD','DIAMOND','RED','BLACK'].includes(user?.mvpGrade ?? '')
+                          const isDiscounted = sellForm.isPcCafe || isSilverPlus
+                          const feeRate = isDiscounted ? 0.03 : 0.05
+                          const net = saleAmt * (1 - feeRate)
+                          if (!saleAmt) return null
+                          return (
+                            <div className="space-y-1 text-xs" style={{ color: 'var(--text-2)' }}>
+                              {!user?.mvpGrade || user.mvpGrade === 'NORMAL' ? (
+                                <p style={{ color: 'var(--text-3)' }}>
+                                  MVP 등급 미설정 — 수수료 5% 적용.{' '}
+                                  <a href="/settings" className="underline" style={{ color: 'var(--primary)' }}>설정에서 변경 →</a>
+                                </p>
+                              ) : (
+                                <p>MVP: {user.mvpGrade} · 수수료 {(feeRate * 100).toFixed(0)}%{isDiscounted ? ' (실버+ / PC방)' : ''}</p>
+                              )}
+                              <p className="font-semibold" style={{ color: 'var(--green)' }}>
+                                예상 실수령: {formatMeso(Math.floor(net))} 메소
+                              </p>
+                            </div>
+                          )
+                        })()}
+                      </>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Input
+                              label="등록 전 인벤 메소"
+                              type="number"
+                              placeholder="보증금 납부 전"
+                              value={sellCalcBefore.meso}
+                              onChange={(e) => setSellCalcBefore({ meso: e.target.value })}
+                              min={0}
+                            />
+                          </div>
+                          <div>
+                            <Input
+                              label="수령 후 인벤 메소"
+                              type="number"
+                              placeholder="판매금 수령 후"
+                              value={sellCalcAfter.meso}
+                              onChange={(e) => setSellCalcAfter({ meso: e.target.value })}
+                              min={0}
+                            />
+                          </div>
+                        </div>
+                        {(() => {
+                          const diff = Number(sellCalcAfter.meso || '0') - Number(sellCalcBefore.meso || '0')
+                          if (!sellCalcAfter.meso || diff <= 0) return null
+                          return (
+                            <p className="text-xs font-semibold" style={{ color: 'var(--green)' }}>
+                              실수령: {formatMeso(diff)} 메소
+                              <span className="font-normal ml-1" style={{ color: 'var(--text-3)' }}>(수수료+보증금 포함)</span>
+                            </p>
+                          )
+                        })()}
+                        <Input
+                          label="판매 날짜"
+                          type="date"
+                          value={sellForm.saleDate}
+                          onChange={(e) => setSellForm((p) => ({ ...p, saleDate: e.target.value }))}
+                        />
+                        <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+                          💡 등록 전 메소 기준 → 수수료·보증금이 자동 상쇄됩니다.
+                        </p>
+                      </>
+                    )}
                     <label className="flex items-center gap-2 cursor-pointer select-none">
                       <input
                         type="checkbox"
@@ -1059,17 +1402,204 @@ export default function DashboardPage() {
                         className="w-3.5 h-3.5"
                         style={{ accentColor: 'var(--primary)' }}
                       />
-                      <span className="text-xs" style={{ color: 'var(--text-2)' }}>
-                        PC방 접속 중 (수수료 3% 적용)
-                      </span>
+                      <span className="text-xs" style={{ color: 'var(--text-2)' }}>PC방 접속 중 (수수료 3% 적용)</span>
                     </label>
                     <div className="flex gap-2">
                       <Button type="submit" size="sm" loading={sellSubmitting} className="flex-1">판매 완료 처리</Button>
                       <Button type="button" variant="ghost" size="sm" onClick={() => setSellingId(null)}>취소</Button>
                     </div>
-                    <p className="text-xs" style={{ color: 'var(--text-3)' }}>
-                      💡 판매 처리 시 경매장 수익으로 가계부에 자동 반영됩니다.
-                    </p>
+                  </form>
+                )}
+
+                {/* 파티 분배 폼 */}
+                {distributingId === drop.id && (
+                  <form
+                    onSubmit={handleDistributeSubmit}
+                    className="mt-2 p-3 rounded-xl space-y-2"
+                    style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)' }}
+                  >
+                    <p className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>파티 분배 — {drop.itemName}</p>
+                    <div className="flex gap-0.5 p-0.5 rounded-xl" style={{ backgroundColor: 'var(--surface)', width: 'fit-content' }}>
+                      {(['direct', 'calc'] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => {
+                            setDistributeInputMode(mode)
+                            if (mode === 'calc') setDistributeCalcBefore({ meso: String(activeServer?.inventoryMeso ?? '') })
+                          }}
+                          className="px-3 py-1 rounded-lg text-xs font-semibold transition-all"
+                          style={distributeInputMode === mode
+                            ? { backgroundColor: 'var(--surface-2)', color: 'var(--text-1)', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }
+                            : { color: 'var(--text-3)' }}
+                        >
+                          {mode === 'direct' ? '직접 입력' : '인벤 계산'}
+                        </button>
+                      ))}
+                    </div>
+
+                    {distributeInputMode === 'direct' ? (
+                      <div>
+                        <label className="text-xs" style={{ color: 'var(--text-2)' }}>받은 금액 (메소)</label>
+                        <input
+                          type="number" min={1}
+                          value={distributeForm.amount}
+                          onChange={(e) => setDistributeForm((f) => ({ ...f, amount: e.target.value }))}
+                          className="w-full mt-1 px-3 py-2 rounded-lg text-sm"
+                          style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-1)' }}
+                          placeholder="받은 메소 입력"
+                          required
+                        />
+                        {distributeForm.amount && Number(distributeForm.amount) > 0 && (
+                          <p className="text-xs font-semibold mt-1" style={{ color: 'var(--green)' }}>
+                            💫 {formatMeso(Number(distributeForm.amount))} 수령
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-xs" style={{ color: 'var(--text-2)' }}>분배 전 인벤 메소</label>
+                            <input
+                              type="number" min={0}
+                              value={distributeCalcBefore.meso}
+                              onChange={(e) => setDistributeCalcBefore({ meso: e.target.value })}
+                              className="w-full mt-1 px-3 py-2 rounded-lg text-sm"
+                              style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-1)' }}
+                              placeholder="0"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs" style={{ color: 'var(--text-2)' }}>수령 후 인벤 메소</label>
+                            <input
+                              type="number" min={0}
+                              value={distributeCalcAfter.meso}
+                              onChange={(e) => setDistributeCalcAfter({ meso: e.target.value })}
+                              className="w-full mt-1 px-3 py-2 rounded-lg text-sm"
+                              style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-1)' }}
+                              placeholder="0"
+                            />
+                          </div>
+                        </div>
+                        {distributeCalcBefore.meso && distributeCalcAfter.meso && (
+                          <p className="text-xs font-semibold" style={{ color: 'var(--green)' }}>
+                            받은 금액: {formatMeso(Math.max(0, Number(distributeCalcAfter.meso) - Number(distributeCalcBefore.meso)))}
+                          </p>
+                        )}
+                      </>
+                    )}
+
+                    <div>
+                      <label className="text-xs" style={{ color: 'var(--text-2)' }}>분배 날짜</label>
+                      <input
+                        type="date"
+                        value={distributeForm.date}
+                        onChange={(e) => setDistributeForm((f) => ({ ...f, date: e.target.value }))}
+                        className="w-full mt-1 px-3 py-2 rounded-lg text-sm"
+                        style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-1)' }}
+                        required
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button type="submit" size="sm" loading={distributeSubmitting} className="flex-1">파티 분배 처리</Button>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setDistributingId(null)}>취소</Button>
+                    </div>
+                  </form>
+                )}
+
+                {/* 드랍 수정 폼 */}
+                {editingDropId === drop.id && (
+                  <form
+                    onSubmit={(e) => handleDropEditSubmit(e, drop)}
+                    className="mt-2 p-3 rounded-xl space-y-2"
+                    style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)' }}
+                  >
+                    <p className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>드랍 수정 — {drop.bossName} {drop.difficulty}</p>
+
+                    {/* 아이템 이름: 드롭박스 or fallback */}
+                    <div>
+                      <label className="text-xs" style={{ color: 'var(--text-2)' }}>아이템 이름</label>
+                      {dropEditItems.length > 0 ? (
+                        <select
+                          value={dropEditForm.itemName}
+                          onChange={(e) => setDropEditForm((f) => ({ ...f, itemName: e.target.value }))}
+                          className="w-full mt-1 px-3 py-2 rounded-lg text-sm"
+                          style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-1)' }}
+                        >
+                          {dropEditItems.map((item) => (
+                            <option key={item.id} value={item.itemName}>{item.itemName}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          value={dropEditForm.itemName}
+                          onChange={(e) => setDropEditForm((f) => ({ ...f, itemName: e.target.value }))}
+                          className="w-full mt-1 px-3 py-2 rounded-lg text-sm"
+                          style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-1)' }}
+                        />
+                      )}
+                    </div>
+
+                    {/* sold/distributed: 금액·날짜 수정 */}
+                    {(drop.status === 'sold' || drop.status === 'distributed') && (
+                      <>
+                        <div>
+                          <label className="text-xs" style={{ color: 'var(--text-2)' }}>
+                            {drop.status === 'sold' ? '판매가 (등록 금액)' : '받은 금액'}
+                          </label>
+                          <input
+                            type="number" min={1}
+                            value={dropEditForm.saleAmount}
+                            onChange={(e) => setDropEditForm((f) => ({ ...f, saleAmount: e.target.value }))}
+                            className="w-full mt-1 px-3 py-2 rounded-lg text-sm"
+                            style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-1)' }}
+                            placeholder="금액 변경 시 입력"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs" style={{ color: 'var(--text-2)' }}>
+                            {drop.status === 'sold' ? '판매 날짜' : '분배 날짜'}
+                          </label>
+                          <input
+                            type="date"
+                            value={dropEditForm.saleDate}
+                            onChange={(e) => setDropEditForm((f) => ({ ...f, saleDate: e.target.value }))}
+                            className="w-full mt-1 px-3 py-2 rounded-lg text-sm"
+                            style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-1)' }}
+                          />
+                        </div>
+                        {drop.status === 'sold' && (
+                          <label className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: 'var(--text-2)' }}>
+                            <input
+                              type="checkbox"
+                              checked={dropEditForm.isPcCafe}
+                              onChange={(e) => setDropEditForm((f) => ({ ...f, isPcCafe: e.target.checked }))}
+                            />
+                            <span>PC방 접속 중 (수수료 3% 적용)</span>
+                          </label>
+                        )}
+                        {/* 처리 취소: 보유 중으로 롤백 */}
+                        <div className="pt-1" style={{ borderTop: '1px solid var(--border)' }}>
+                          <p className="text-xs mb-1.5" style={{ color: 'var(--text-3)' }}>처리를 취소하고 처음 상태로 되돌릴 수 있습니다.</p>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            loading={dropRollbackSubmitting}
+                            onClick={() => handleDropRollback(drop.id)}
+                            className="w-full"
+                            style={{ color: '#f87171', borderColor: 'rgba(239,68,68,0.3)' }}
+                          >↩ 처리 취소 (보유 중으로 되돌리기)</Button>
+                        </div>
+                      </>
+                    )}
+
+                    <div className="flex gap-2">
+                      <Button type="submit" size="sm" loading={dropEditSubmitting} className="flex-1">수정 완료</Button>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setEditingDropId(null)}>취소</Button>
+                    </div>
                   </form>
                 )}
               </div>
@@ -1080,12 +1610,159 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* 이번 주 캐릭터별 상세 (duplicate removed — moved above divider) */}
+      {false && charWeeklyBreakdown.length > 0 && (
+        <div className="rounded-xl overflow-hidden" style={panelStyle}>
+          <div className="dark-panel-header">
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+              📅 {isThisWeek ? '이번 주' : weekStartStr.slice(5).replace('-', '/') + ' 주'} 캐릭터별 상세
+            </h3>
+          </div>
+          <div className="p-4">
+            <div className="space-y-2.5">
+              {charWeeklyBreakdown.map((char) => {
+                const incomeEntries = [...char.income.entries()]
+                const expenseEntries = [...char.expense.entries()]
+                return (
+                  <div key={char.id} className="rounded-xl p-3" style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                    <p className="text-xs font-semibold mb-2" style={{ color: 'var(--text)' }}>
+                      {char.isMain && <Star size={11} fill="currentColor" strokeWidth={0} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '3px', color: 'var(--primary)' }} />}{char.name}
+                    </p>
+                    {incomeEntries.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mb-1.5">
+                        {incomeEntries.map(([cat, amt]) => (
+                          <span key={cat} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-lg"
+                            style={{ backgroundColor: 'rgba(22,163,74,0.1)', color: 'var(--green)', border: '1px solid rgba(22,163,74,0.2)' }}>
+                            <MapleIcon category={cat} size={13} /> {CATEGORY_LABELS[cat as EntryCategory] ?? cat} +{formatMeso(amt)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {expenseEntries.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {expenseEntries.map(([cat, amt]) => (
+                          <span key={cat} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-lg"
+                            style={{ backgroundColor: 'rgba(220,38,38,0.08)', color: 'var(--red)', border: '1px solid rgba(220,38,38,0.2)' }}>
+                            <MapleIcon category={cat} size={13} /> {CATEGORY_LABELS[cat as EntryCategory] ?? cat} -{formatMeso(amt)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 서버별 이번 주 현황 (서버 2개 이상인 경우만) */}
+      {isMultiServer && (
+        <div className="rounded-xl overflow-hidden" style={panelStyle}>
+          <div className="dark-panel-header">
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+              🗺️ 서버별 {isThisWeek ? '이번 주' : '해당 주'} 현황
+            </h3>
+          </div>
+          <div className="p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+            {user?.serverProfiles?.map((sp) => {
+              const s = serverSummaries[sp.id]
+              const net = (s?.income ?? 0) - (s?.expense ?? 0)
+              const isActive = sp.id === activeServer?.id
+              const isExpandedWeek = expandedServerWeekId === sp.id
+              const weekData = serverWeekChars[sp.id]
+              return (
+                <div
+                  key={sp.id}
+                  className="rounded-xl overflow-hidden"
+                  style={{
+                    border: `1.5px solid ${isActive ? 'var(--primary-glow)' : 'var(--border)'}`,
+                    backgroundColor: isActive ? 'var(--primary-dim)' : 'var(--surface-2)',
+                  }}
+                >
+                  <button
+                    className="w-full px-3 py-3 text-left"
+                    onClick={() => handleServerWeekExpand(sp.id)}
+                  >
+                    <p className="text-xs font-semibold mb-2 flex items-center justify-between" style={{ color: isActive ? 'var(--primary)' : 'var(--text-2)' }}>
+                      <span>{isActive ? '✓ ' : ''}{sp.worldDisplayName}</span>
+                      <span style={{ color: 'var(--text-3)' }}>{isExpandedWeek ? '▼' : '▶'}</span>
+                    </p>
+                    {s ? (
+                      <div className="space-y-0.5">
+                        <p className="text-xs flex justify-between">
+                          <span style={{ color: 'var(--text-3)' }}>수입</span>
+                          <span style={{ color: 'var(--green)' }}>+{formatMeso(s.income)}</span>
+                        </p>
+                        <p className="text-xs flex justify-between">
+                          <span style={{ color: 'var(--text-3)' }}>지출</span>
+                          <span style={{ color: 'var(--red)' }}>-{formatMeso(s.expense)}</span>
+                        </p>
+                        <p className="text-xs flex justify-between font-semibold pt-1" style={{ borderTop: '1px solid var(--border)' }}>
+                          <span style={{ color: 'var(--text-3)' }}>순수익</span>
+                          <span style={{ color: net >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                            {net >= 0 ? '+' : ''}{formatMeso(net)}
+                          </span>
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-xs animate-pulse" style={{ color: 'var(--text-3)' }}>로딩 중...</p>
+                    )}
+                  </button>
+                  {isExpandedWeek && (
+                    <div className="px-3 pb-3" style={{ borderTop: '1px solid var(--border)' }}>
+                      {!weekData || weekData.loading ? (
+                        <p className="text-xs animate-pulse pt-2" style={{ color: 'var(--text-3)' }}>로딩 중...</p>
+                      ) : weekData.chars.length === 0 ? (
+                        <p className="text-xs pt-2" style={{ color: 'var(--text-3)' }}>기록 없음</p>
+                      ) : (
+                        <div className="space-y-2 pt-2">
+                          {weekData.chars.map((char) => {
+                            const incEntries = [...char.income.entries()]
+                            const expEntries = [...char.expense.entries()]
+                            return (
+                              <div key={char.id} className="rounded-lg p-2" style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)' }}>
+                                <p className="text-xs font-semibold mb-1.5" style={{ color: 'var(--text)' }}>{char.name}</p>
+                                {incEntries.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mb-1">
+                                    {incEntries.map(([cat, amt]) => (
+                                      <span key={cat} className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded"
+                                        style={{ backgroundColor: 'rgba(22,163,74,0.1)', color: 'var(--green)', border: '1px solid rgba(22,163,74,0.2)' }}>
+                                        <MapleIcon category={cat} size={13} /> {CATEGORY_LABELS[cat as EntryCategory] ?? cat} +{formatMeso(amt)}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                                {expEntries.length > 0 && (
+                                  <div className="flex flex-wrap gap-1">
+                                    {expEntries.map(([cat, amt]) => (
+                                      <span key={cat} className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded"
+                                        style={{ backgroundColor: 'rgba(220,38,38,0.08)', color: 'var(--red)', border: '1px solid rgba(220,38,38,0.2)' }}>
+                                        <MapleIcon category={cat} size={13} /> {CATEGORY_LABELS[cat as EntryCategory] ?? cat} -{formatMeso(amt)}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* 이번 주 / 전체 통계 구분선 */}
-      <div className="flex items-center gap-3 my-2">
+      <div className="flex items-center gap-3 my-4">
         <div className="flex-1 h-px" style={{ backgroundColor: 'var(--border-2)' }} />
         <span
-          className="text-xs font-semibold px-3 py-1.5 rounded-full"
-          style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border-2)', color: 'var(--text-3)' }}
+          className="text-base font-bold px-4 py-2 rounded-full"
+          style={{ backgroundColor: 'var(--surface-2)', border: '1.5px solid var(--border)', color: 'var(--text)' }}
         >
           📊 전체 통계
         </span>
@@ -1095,7 +1772,7 @@ export default function DashboardPage() {
       {/* 전체 통계: 차트 + 누적 + 수익 구성 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="rounded-xl p-4" style={panelStyle}>
-          <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text)' }}>📈 주간 수익 추이</h3>
+          <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text)' }}>📈 주간 수익 추이 <span className="font-normal text-xs" style={{ color: 'var(--text-3)' }}>(최근 4주)</span></h3>
           {chartData.length > 0 ? (
             <ResponsiveContainer width="100%" height={120}>
               <BarChart data={chartData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
@@ -1117,12 +1794,19 @@ export default function DashboardPage() {
           )}
         </div>
         <div className="rounded-xl p-4" style={panelStyle}>
-          <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text)' }}>📋 전체 누적</h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>📋 4주 총계</h3>
+            {fourWeekLabel && (
+              <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-3)', border: '1px solid var(--border)' }}>
+                {fourWeekLabel}
+              </span>
+            )}
+          </div>
           <div className="space-y-2">
             {[
-              { label: '총 수입', value: cumulativeIncome, color: 'var(--green)', prefix: '+' },
-              { label: '총 지출', value: cumulativeExpense, color: 'var(--red)', prefix: '-' },
-              { label: '총 순수익', value: cumulativeNet, color: cumulativeNet >= 0 ? 'var(--primary)' : 'var(--red)', prefix: cumulativeNet >= 0 ? '+' : '' },
+              { label: '총 수입', value: fourWeekIncome, color: 'var(--green)', prefix: '+' },
+              { label: '총 지출', value: fourWeekExpense, color: 'var(--red)', prefix: '-' },
+              { label: '총 순수익', value: fourWeekNet, color: fourWeekNet >= 0 ? 'var(--primary)' : 'var(--red)', prefix: fourWeekNet >= 0 ? '+' : '' },
             ].map((item) => (
               <div key={item.label} className="flex items-center justify-between py-2 px-3 rounded-lg" style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)' }}>
                 <span className="text-xs" style={{ color: 'var(--text-3)' }}>{item.label}</span>
@@ -1133,7 +1817,7 @@ export default function DashboardPage() {
         </div>
         <div className="rounded-xl overflow-hidden" style={panelStyle}>
           <div className="dark-panel-header">
-            <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>📊 수익 구성 비율 ({catStatsRange})</h3>
+            <h3 className="text-sm font-semibold flex items-center gap-1.5" style={{ color: 'var(--text)' }}><BarChart2 size={15} strokeWidth={1.75} />수익 구성 비율 <span className="font-normal text-xs" style={{ color: 'var(--text-3)' }}>(최근 4주 · {catStatsRange})</span></h3>
           </div>
           {statsLoading ? (
             <p className="text-sm text-center py-6 animate-pulse" style={{ color: 'var(--text-3)' }}>불러오는 중...</p>
@@ -1151,12 +1835,12 @@ export default function DashboardPage() {
             return (
               <div className="p-4 space-y-4">
                 {[
-                  { label: '⚔️ 보스 + 경매장', value: bossAuction, pct: bossAuctionPct, color: 'var(--primary)', gradient: 'linear-gradient(90deg, var(--primary) 0%, var(--primary-light) 100%)' },
-                  { label: '🌲 사냥 + 솔 에르다', value: huntingSolErda, pct: huntingSolErdaPct, color: 'var(--green)', gradient: 'var(--green)' },
+                  { key: 'boss', label: <span className="inline-flex items-center gap-1"><img src="/maple-icons/boss.png" alt="" width={13} height={13} style={{ imageRendering: 'pixelated' }} /> 보스 + 경매장</span>, value: bossAuction, pct: bossAuctionPct, color: 'var(--primary)', gradient: 'linear-gradient(90deg, var(--primary) 0%, var(--primary-light) 100%)' },
+                  { key: 'hunting', label: <span className="inline-flex items-center gap-1"><img src="/maple-icons/emblem.png" alt="" width={13} height={13} style={{ imageRendering: 'pixelated' }} /> 사냥 + 솔 에르다</span>, value: huntingSolErda, pct: huntingSolErdaPct, color: 'var(--green)', gradient: 'var(--green)' },
                 ].map((row) => (
-                  <div key={row.label}>
+                  <div key={row.key}>
                     <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>{row.label}</span>
+                      <span className="text-xs font-medium flex items-center gap-1" style={{ color: 'var(--text-2)' }}>{row.label}</span>
                       <span className="text-xs font-bold" style={{ color: row.color }}>{row.pct.toFixed(1)}%</span>
                     </div>
                     <div className="rounded-full h-3 overflow-hidden" style={{ backgroundColor: 'var(--surface-2)' }}>
@@ -1260,7 +1944,7 @@ export default function DashboardPage() {
                     <th className="px-3 py-2 text-right text-xs font-medium" style={thStyle}>수입</th>
                     <th className="px-3 py-2 text-right text-xs font-medium" style={thStyle}>지출</th>
                     <th className="px-3 py-2 text-right text-xs font-medium" style={thStyle}>순수익</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium" style={{ color: '#a78bfa' }}>🔮 조각</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium" style={{ color: '#a78bfa' }}><span className="inline-flex items-center gap-1"><img src="/maple-icons/arcane_symbol.png" alt="" width={12} height={12} style={{ imageRendering: 'pixelated' }} /> 조각</span></th>
                     <th className="px-4 py-2 text-right text-xs font-medium" style={thStyle}>항목</th>
                   </tr>
                 </thead>
@@ -1325,14 +2009,16 @@ export default function DashboardPage() {
       {characters.length > 0 && (
         <div className="rounded-xl overflow-hidden" style={panelStyle}>
           <div className="dark-panel-header">
-            <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>🧙 캐릭터 현황</h3>
+            <h3 className="text-sm font-semibold flex items-center gap-1.5" style={{ color: 'var(--text)' }}><User size={15} strokeWidth={1.75} />캐릭터 현황</h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ backgroundColor: 'var(--surface-2)', position: 'sticky', top: 0 }}>
-                  {['캐릭터', '직업', '레벨', '주간 보스', '🔮 솔 에르다 조각'].map((h) => (
-                    <th key={h} className="px-3 py-2 text-left text-xs font-medium" style={thStyle}>{h}</th>
+                  {(['캐릭터', '직업', '레벨', '주간 보스', null] as const).map((h, i) => (
+                    <th key={i} className="px-3 py-2 text-left text-xs font-medium" style={thStyle}>
+                      {h === null ? <span className="inline-flex items-center gap-1"><img src="/maple-icons/arcane_symbol.png" alt="" width={12} height={12} style={{ imageRendering: 'pixelated' }} /> 솔 에르다 조각</span> : h}
+                    </th>
                   ))}
                 </tr>
               </thead>
@@ -1347,7 +2033,7 @@ export default function DashboardPage() {
                     style={{ borderBottom: i === characters.length - 1 ? 'none' : '1px solid var(--border)' }}
                   >
                     <td className="px-3 py-2.5 font-medium" style={{ color: 'var(--text)' }}>
-                      {c.isMain ? '⭐ ' : ''}{c.name}
+                      {c.isMain && <Star size={11} fill="currentColor" strokeWidth={0} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '3px', color: 'var(--primary)' }} />}{c.name}
                     </td>
                     <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--text-3)' }}>{c.jobClass ?? '—'}</td>
                     <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--text-3)' }}>{c.level > 0 ? `Lv.${c.level}` : '—'}</td>
@@ -1375,146 +2061,271 @@ export default function DashboardPage() {
       {charStats.length > 0 && (
         <div className="rounded-xl overflow-hidden" style={panelStyle}>
           <div className="dark-panel-header">
-            <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>📊 캐릭터별 수입/지출</h3>
+            <h3 className="text-sm font-semibold flex items-center gap-1.5" style={{ color: 'var(--text)' }}><BarChart2 size={15} strokeWidth={1.75} />캐릭터별 수입/지출</h3>
           </div>
 
-          {/* 차트 */}
-          {charStats.some(s => s.totalIncome > 0) && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4" style={{ borderBottom: '1px solid var(--border)' }}>
-              <div>
-                <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-2)' }}>캐릭터별 수입 분포</p>
-                <ResponsiveContainer width="100%" height={160}>
-                  <PieChart>
-                    <Pie
-                      data={charStats.filter(s => s.totalIncome > 0).map(s => ({ name: s.characterName, value: s.totalIncome }))}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={40}
-                      outerRadius={68}
-                      dataKey="value"
-                      paddingAngle={2}
-                    >
-                      {charStats.filter(s => s.totalIncome > 0).map((_, idx) => (
-                        <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      formatter={(v) => formatMeso(v as number)}
-                      contentStyle={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: '8px', fontSize: '11px' }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="flex flex-wrap gap-x-3 gap-y-1 justify-center mt-1">
-                  {charStats.filter(s => s.totalIncome > 0).map((s, idx) => (
-                    <span key={s.characterId} className="flex items-center gap-1 text-xs" style={{ color: 'var(--text-3)' }}>
-                      <span className="w-2 h-2 rounded-full inline-block shrink-0" style={{ backgroundColor: CHART_COLORS[idx % CHART_COLORS.length] }} />
-                      {s.characterName}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-2)' }}>수입 vs 지출 비교</p>
-                <ResponsiveContainer width="100%" height={160}>
-                  <BarChart
-                    data={charStats.map(s => ({ name: s.characterName, 수입: s.totalIncome, 지출: s.totalExpense }))}
-                    margin={{ top: 4, right: 0, left: 0, bottom: 0 }}
-                  >
-                    <XAxis dataKey="name" tick={{ fontSize: 9, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} />
-                    <YAxis hide />
-                    <Tooltip
-                      formatter={(v) => formatMeso(v as number)}
-                      contentStyle={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: '8px', fontSize: '11px' }}
-                      cursor={{ fill: 'var(--primary-dim)' }}
-                    />
-                    <CartesianGrid strokeDasharray="2 4" stroke="rgba(240,246,252,0.06)" vertical={false} />
-                    <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: '10px', color: 'var(--text-2)' }} />
-                    <Bar dataKey="수입" fill="#3fb950" radius={[3, 3, 0, 0]} maxBarSize={20} />
-                    <Bar dataKey="지출" fill="#f85149" radius={[3, 3, 0, 0]} maxBarSize={20} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+          {/* 전체 / 최근 4주 탭 */}
+          <div>
+            <div className="flex" style={{ borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface-2)' }}>
+              {([['all', '전체 누적'], ['4w', `최근 4주 (${catStatsRange})`]] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setCharStatsTab(key)}
+                  className="px-4 py-2 text-xs font-semibold transition-all"
+                  style={charStatsTab === key
+                    ? { color: 'var(--primary)', borderBottom: '2px solid var(--primary)', marginBottom: '-1px', backgroundColor: 'transparent' }
+                    : { color: 'var(--text-3)', borderBottom: '2px solid transparent', marginBottom: '-1px' }
+                  }
+                >
+                  {label}
+                </button>
+              ))}
             </div>
-          )}
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ backgroundColor: 'var(--surface-2)', position: 'sticky', top: 0 }}>
-                  {['캐릭터', '누적 수입', '누적 지출', '순이익'].map((h) => (
-                    <th key={h} className="px-3 py-2 text-left text-xs font-medium" style={thStyle}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {charStats.map((s, i) => (
-                  <tr
-                    key={s.characterId}
-                    className="table-row"
-                    style={{ borderBottom: i === charStats.length - 1 ? 'none' : '1px solid var(--border)' }}
-                  >
-                    <td className="px-3 py-2.5 font-medium" style={{ color: 'var(--text)' }}>
-                      {s.isMain ? '⭐ ' : ''}{s.characterName}
-                    </td>
-                    <td className="px-3 py-2.5 font-semibold" style={{ color: 'var(--green)' }}>
-                      {formatMeso(s.totalIncome)}
-                    </td>
-                    <td className="px-3 py-2.5 font-semibold" style={{ color: 'var(--red)' }}>
-                      {formatMeso(s.totalExpense)}
-                    </td>
-                    <td className="px-3 py-2.5 font-bold" style={{ color: s.netProfit >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                      {s.netProfit >= 0 ? '+' : ''}{formatMeso(s.netProfit)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            {(() => {
+              const rows = charStatsTab === 'all' ? charStats : charStats4w
+              return (
+                <>
+                  {rows.some(s => s.totalIncome > 0) && (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4" style={{ borderBottom: '1px solid var(--border)' }}>
+                      <div>
+                        <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-2)' }}>캐릭터별 수입 분포</p>
+                        <ResponsiveContainer width="100%" height={160}>
+                          <PieChart>
+                            <Pie
+                              data={rows.filter(s => s.totalIncome > 0).map(s => ({ name: s.characterName, value: s.totalIncome }))}
+                              cx="50%" cy="50%" innerRadius={40} outerRadius={68} dataKey="value" paddingAngle={2}
+                            >
+                              {rows.filter(s => s.totalIncome > 0).map((_, idx) => (
+                                <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
+                              ))}
+                            </Pie>
+                            <Tooltip formatter={(v) => formatMeso(v as number)} contentStyle={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: '8px', fontSize: '11px' }} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 justify-center mt-1">
+                          {rows.filter(s => s.totalIncome > 0).map((s, idx) => (
+                            <span key={s.characterId} className="flex items-center gap-1 text-xs" style={{ color: 'var(--text-3)' }}>
+                              <span className="w-2 h-2 rounded-full inline-block shrink-0" style={{ backgroundColor: CHART_COLORS[idx % CHART_COLORS.length] }} />
+                              {s.characterName}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-2)' }}>수입 vs 지출 비교</p>
+                        <ResponsiveContainer width="100%" height={160}>
+                          <BarChart data={rows.map(s => ({ name: s.characterName, 수입: s.totalIncome, 지출: s.totalExpense }))} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+                            <XAxis dataKey="name" tick={{ fontSize: 9, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} />
+                            <YAxis hide />
+                            <Tooltip formatter={(v) => formatMeso(v as number)} contentStyle={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: '8px', fontSize: '11px' }} cursor={{ fill: 'var(--primary-dim)' }} />
+                            <CartesianGrid strokeDasharray="2 4" stroke="rgba(240,246,252,0.06)" vertical={false} />
+                            <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: '10px', color: 'var(--text-2)' }} />
+                            <Bar dataKey="수입" fill="#3fb950" radius={[3, 3, 0, 0]} maxBarSize={20} />
+                            <Bar dataKey="지출" fill="#f85149" radius={[3, 3, 0, 0]} maxBarSize={20} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
+                  {rows.length > 0 ? (
+                    <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: 'var(--surface-2)' }}>
+                          {['캐릭터', '수입', '지출', '순이익'].map((h) => (
+                            <th key={h} className="px-3 py-2 text-left text-xs font-medium" style={thStyle}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((s, i) => {
+                          const isExpanded = expandedCharId === s.characterId
+                          const incomeEntries = Object.entries(s.incomeByCategory ?? {}) as [string, number][]
+                          const expenseEntries = Object.entries(s.expenseByCategory ?? {}) as [string, number][]
+                          const hasBreakdown = incomeEntries.length > 0 || expenseEntries.length > 0
+                          return (
+                            <Fragment key={s.characterId}>
+                              <tr
+                                key={s.characterId}
+                                className={`table-row ${hasBreakdown ? 'cursor-pointer select-none' : ''}`}
+                                onClick={() => hasBreakdown && setExpandedCharId(isExpanded ? null : s.characterId)}
+                                style={{ borderBottom: (!isExpanded && i === rows.length - 1) ? 'none' : '1px solid var(--border)' }}
+                              >
+                                <td className="px-3 py-2.5 font-medium" style={{ color: 'var(--text)' }}>
+                                  <span className="flex items-center gap-1.5">
+                                    {hasBreakdown && (
+                                      <span className="text-xs" style={{ color: 'var(--text-3)' }}>{isExpanded ? '▼' : '▶'}</span>
+                                    )}
+                                    {s.isMain && <Star size={11} fill="currentColor" strokeWidth={0} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '3px', color: 'var(--primary)' }} />}{s.characterName}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2.5 font-semibold" style={{ color: 'var(--green)' }}>{formatMeso(s.totalIncome)}</td>
+                                <td className="px-3 py-2.5 font-semibold" style={{ color: 'var(--red)' }}>{formatMeso(s.totalExpense)}</td>
+                                <td className="px-3 py-2.5 font-bold" style={{ color: s.netProfit >= 0 ? 'var(--green)' : 'var(--red)' }}>{s.netProfit >= 0 ? '+' : ''}{formatMeso(s.netProfit)}</td>
+                              </tr>
+                              {isExpanded && (
+                                <tr style={{ borderBottom: i === rows.length - 1 ? 'none' : '1px solid var(--border)' }}>
+                                  <td colSpan={4} className="px-4 py-3" style={{ backgroundColor: 'var(--surface-2)' }}>
+                                    <div className="grid grid-cols-2 gap-4">
+                                      <div>
+                                        <p className="text-xs font-semibold mb-2 flex items-center gap-1" style={{ color: 'var(--green)' }}><Coins size={12} strokeWidth={1.75} />수입 내역</p>
+                                        {incomeEntries.length > 0 ? (
+                                          <div className="space-y-1.5">
+                                            {incomeEntries.map(([cat, amt]) => {
+                                              const pct = s.totalIncome > 0 ? Math.round((amt / s.totalIncome) * 100) : 0
+                                              return (
+                                                <div key={cat}>
+                                                  <div className="flex items-center justify-between text-xs mb-0.5">
+                                                    <span style={{ color: 'var(--text-2)' }}><MapleIcon category={cat} size={13} /> {CATEGORY_LABELS[cat as EntryCategory] ?? cat}</span>
+                                                    <span className="font-semibold" style={{ color: 'var(--green)' }}>+{formatMeso(amt)}</span>
+                                                  </div>
+                                                  <div className="h-1 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--border)' }}>
+                                                    <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: 'var(--green)' }} />
+                                                  </div>
+                                                </div>
+                                              )
+                                            })}
+                                          </div>
+                                        ) : <p className="text-xs" style={{ color: 'var(--text-3)' }}>없음</p>}
+                                      </div>
+                                      <div>
+                                        <p className="text-xs font-semibold mb-2" style={{ color: 'var(--red)' }}>💸 지출 내역</p>
+                                        {expenseEntries.length > 0 ? (
+                                          <div className="space-y-1.5">
+                                            {expenseEntries.map(([cat, amt]) => {
+                                              const pct = s.totalExpense > 0 ? Math.round((amt / s.totalExpense) * 100) : 0
+                                              return (
+                                                <div key={cat}>
+                                                  <div className="flex items-center justify-between text-xs mb-0.5">
+                                                    <span style={{ color: 'var(--text-2)' }}><MapleIcon category={cat} size={13} /> {CATEGORY_LABELS[cat as EntryCategory] ?? cat}</span>
+                                                    <span className="font-semibold" style={{ color: 'var(--red)' }}>-{formatMeso(amt)}</span>
+                                                  </div>
+                                                  <div className="h-1 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--border)' }}>
+                                                    <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: 'var(--red)' }} />
+                                                  </div>
+                                                </div>
+                                              )
+                                            })}
+                                          </div>
+                                        ) : <p className="text-xs" style={{ color: 'var(--text-3)' }}>없음</p>}
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </Fragment>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <p className="text-xs text-center py-6" style={{ color: 'var(--text-3)' }}>기록 없음</p>
+                  )}
+                </>
+              )
+            })()}
           </div>
         </div>
       )}
 
-      {/* 서버별 이번 주 현황 (서버 2개 이상인 경우만) */}
+      {/* 서버별 전체/4주 통계 (서버 2개 이상인 경우만) */}
       {isMultiServer && (
-        <div>
-          <h3 className="text-sm font-semibold mb-2" style={{ color: 'var(--text-2)' }}>
-            🗺️ 서버별 {isThisWeek ? '이번 주' : '해당 주'} 현황
-          </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+        <div className="rounded-xl overflow-hidden" style={panelStyle}>
+          <div className="dark-panel-header flex items-center justify-between">
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>🗺️ 서버별 통계</h3>
+            <div className="flex gap-1">
+              {(['all', '4w'] as const).map((key) => (
+                <button
+                  key={key}
+                  onClick={() => setServerStatTab(key)}
+                  className="px-2 py-0.5 text-xs rounded font-semibold transition-all"
+                  style={serverStatTab === key
+                    ? { backgroundColor: 'var(--primary-dim)', color: 'var(--primary)', border: '1px solid var(--primary)' }
+                    : { backgroundColor: 'var(--surface-2)', color: 'var(--text-3)', border: '1px solid var(--border)' }
+                  }
+                >{key === 'all' ? '전체' : '4주'}</button>
+              ))}
+            </div>
+          </div>
+          <div className="p-4 space-y-2">
             {user?.serverProfiles?.map((sp) => {
-              const s = serverSummaries[sp.id]
-              const net = (s?.income ?? 0) - (s?.expense ?? 0)
               const isActive = sp.id === activeServer?.id
+              const isExpandedStat = expandedServerStatId === sp.id
+              const statData = serverStatData[sp.id]
+              const rows = statData ? (serverStatTab === 'all' ? statData.all : statData.w4) : null
               return (
                 <div
                   key={sp.id}
-                  className="rounded-xl px-3 py-3"
-                  style={{
-                    backgroundColor: isActive ? 'var(--primary-dim)' : 'var(--surface)',
-                    border: `1.5px solid ${isActive ? 'var(--primary-glow)' : 'var(--border)'}`,
-                  }}
+                  className="rounded-xl overflow-hidden"
+                  style={{ border: `1.5px solid ${isActive ? 'var(--primary-glow)' : 'var(--border)'}` }}
                 >
-                  <p className="text-xs font-semibold mb-2" style={{ color: isActive ? 'var(--primary)' : 'var(--text-2)' }}>
-                    {isActive ? '✓ ' : ''}{sp.worldDisplayName}
-                  </p>
-                  {s ? (
-                    <div className="space-y-0.5">
-                      <p className="text-xs flex justify-between">
-                        <span style={{ color: 'var(--text-3)' }}>수입</span>
-                        <span style={{ color: 'var(--green)' }}>+{formatMeso(s.income)}</span>
-                      </p>
-                      <p className="text-xs flex justify-between">
-                        <span style={{ color: 'var(--text-3)' }}>지출</span>
-                        <span style={{ color: 'var(--red)' }}>-{formatMeso(s.expense)}</span>
-                      </p>
-                      <p className="text-xs flex justify-between font-semibold pt-1" style={{ borderTop: '1px solid var(--border)' }}>
-                        <span style={{ color: 'var(--text-3)' }}>순수익</span>
-                        <span style={{ color: net >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                          {net >= 0 ? '+' : ''}{formatMeso(net)}
-                        </span>
-                      </p>
+                  <button
+                    className="w-full px-4 py-3 flex items-center justify-between text-left"
+                    style={{ backgroundColor: isActive ? 'var(--primary-dim)' : 'var(--surface-2)' }}
+                    onClick={() => handleServerStatExpand(sp.id)}
+                  >
+                    <span className="text-xs font-semibold" style={{ color: isActive ? 'var(--primary)' : 'var(--text-2)' }}>
+                      {isActive ? '✓ ' : ''}{sp.worldDisplayName}
+                    </span>
+                    <span className="text-xs" style={{ color: 'var(--text-3)' }}>{isExpandedStat ? '▼' : '▶'}</span>
+                  </button>
+                  {isExpandedStat && (
+                    <div>
+                      {!statData || statData.loading ? (
+                        <p className="text-xs animate-pulse px-4 py-3" style={{ color: 'var(--text-3)' }}>로딩 중...</p>
+                      ) : !rows || rows.length === 0 ? (
+                        <p className="text-xs px-4 py-3" style={{ color: 'var(--text-3)' }}>기록 없음</p>
+                      ) : (
+                        rows.map((s, i) => {
+                          const incEntries = Object.entries(s.incomeByCategory ?? {}) as [string, number][]
+                          const expEntries = Object.entries(s.expenseByCategory ?? {}) as [string, number][]
+                          const isPos = s.netProfit >= 0
+                          return (
+                            <div
+                              key={s.characterId}
+                              className="px-4 py-3 flex flex-col gap-2"
+                              style={{
+                                borderBottom: i < rows.length - 1 ? '1px solid var(--border)' : 'none',
+                                borderLeft: `3px solid ${isPos ? 'var(--green)' : 'var(--red)'}`,
+                              }}
+                            >
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+                                  {s.isMain && <Star size={11} fill="currentColor" strokeWidth={0} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '3px', color: 'var(--primary)' }} />}{s.characterName}
+                                </span>
+                                {incEntries.map(([cat, amt]) => {
+                                  const cc = CATEGORY_COLORS[cat] ?? { bg: 'rgba(63,185,80,0.12)', color: 'var(--green)' }
+                                  return (
+                                    <span
+                                      key={cat}
+                                      className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap"
+                                      style={{ backgroundColor: cc.bg, color: cc.color }}
+                                    >
+                                      <MapleIcon category={cat} size={13} /> {CATEGORY_LABELS[cat as EntryCategory] ?? cat}
+                                      <span className="font-bold">+{formatMeso(amt)}</span>
+                                    </span>
+                                  )
+                                })}
+                                {expEntries.map(([cat, amt]) => (
+                                  <span
+                                    key={cat}
+                                    className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap"
+                                    style={{ backgroundColor: 'rgba(248,81,73,0.1)', color: 'var(--red)' }}
+                                  >
+                                    <MapleIcon category={cat} size={13} /> {CATEGORY_LABELS[cat as EntryCategory] ?? cat}
+                                    <span className="font-bold">-{formatMeso(amt)}</span>
+                                  </span>
+                                ))}
+                              </div>
+                              <div className="flex items-center gap-4 text-xs">
+                                <span style={{ color: 'var(--text-3)' }}>수입 <span className="font-semibold" style={{ color: 'var(--green)' }}>+{formatMeso(s.totalIncome)}</span></span>
+                                {s.totalExpense > 0 && <span style={{ color: 'var(--text-3)' }}>지출 <span className="font-semibold" style={{ color: 'var(--red)' }}>-{formatMeso(s.totalExpense)}</span></span>}
+                                <span style={{ color: 'var(--text-3)' }}>순수익 <span className="font-bold text-sm" style={{ color: isPos ? 'var(--green)' : 'var(--red)' }}>{isPos ? '+' : ''}{formatMeso(s.netProfit)}</span></span>
+                              </div>
+                            </div>
+                          )
+                        })
+                      )}
                     </div>
-                  ) : (
-                    <p className="text-xs animate-pulse" style={{ color: 'var(--text-3)' }}>로딩 중...</p>
                   )}
                 </div>
               )
@@ -1631,7 +2442,6 @@ function EntryTableRow({
   isLast: boolean
 }) {
   const categoryKey = (entry.category ?? '').toLowerCase()
-  const icon = CATEGORY_ICONS[categoryKey] ?? '💫'
   const label = CATEGORY_LABELS[categoryKey] ?? entry.category
   const isIncome = (entry.type ?? '').toLowerCase() === 'income'
   const erdaCount = entry.solErdaFragments ?? 0
@@ -1657,7 +2467,7 @@ function EntryTableRow({
       </td>
       <td className="px-3 py-2.5">
         <div className="flex items-center gap-2">
-          <span className="text-base leading-none shrink-0">{icon}</span>
+          <span className="text-base leading-none shrink-0"><MapleIcon category={categoryKey} size={20} /></span>
           <div className="min-w-0">
             <p className="text-sm font-medium truncate" style={{ color: 'var(--text)' }}>
               {entry.description || label}
@@ -1746,7 +2556,7 @@ function BossGroupRows({
         </td>
         <td className="px-3 py-2.5">
           <div className="flex items-center gap-2">
-            <span className="text-base leading-none shrink-0">⚔️</span>
+            <span className="text-base leading-none shrink-0"><MapleIcon category="boss" size={20} /></span>
             <div className="min-w-0">
               <p className="text-sm font-medium truncate" style={{ color: 'var(--text)' }}>{bossEntry.description || '보스'}</p>
               <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
@@ -1858,7 +2668,7 @@ function KillGroupRows({
           </td>
           <td className="px-3 py-2.5">
             <div className="flex items-center gap-2">
-              <span className="text-base leading-none shrink-0">⚔️</span>
+              <span className="text-base leading-none shrink-0"><MapleIcon category="boss" size={20} /></span>
               <div className="min-w-0">
                 <p className="text-sm font-medium truncate" style={{ color: 'var(--text)' }}>{bossLabel} 결정석</p>
                 <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
@@ -1882,7 +2692,7 @@ function KillGroupRows({
         <tr style={{ borderBottom: dopings.length > 0 ? '1px solid rgba(240,246,252,0.08)' : (isLast ? 'none' : '1px solid var(--border)') }}>
           <td className="px-3 py-2" colSpan={4}>
             <div className="flex items-center gap-2">
-              <span className="text-base leading-none shrink-0">⚔️</span>
+              <span className="text-base leading-none shrink-0"><MapleIcon category="boss" size={20} /></span>
               <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>{bossLabel}</span>
               <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: 'rgba(168,85,247,0.12)', color: '#a855f7' }}>
                 도핑 {dopings.length}개
