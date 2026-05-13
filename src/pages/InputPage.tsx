@@ -166,7 +166,6 @@ function BossSection({
         ))
       }
       setError(null)
-      setError(null)
       setSuccess(true)
       setSelectedItems(new Set())
       setForm((p) => ({ ...p, bossName: '', difficulty: '', partySize: '1' }))
@@ -531,31 +530,6 @@ function GeneralSection({ characters }: { characters: MapleCharacter[] }) {
               </button>
             ))}
           </div>
-
-          {/* 인벤 계산 토글 — 지출이고 솔에르다가 아닐 때 */}
-          {type === 'expense' && !isSolErda && (
-            <div className="flex gap-2">
-              {([['direct', <span key="d" className="flex items-center gap-1"><PenLine size={13} strokeWidth={1.75} />직접 입력</span>], ['calc', <span key="c" className="flex items-center gap-1"><Calculator size={13} strokeWidth={1.75} />인벤 계산</span>]] as const).map(([mode, label]) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => {
-                    setInputMode(mode)
-                    if (mode === 'calc') {
-                      setCalcBefore({ meso: String(activeServer?.inventoryMeso ?? 0) })
-                      setCalcAfter({ meso: '' })
-                    }
-                  }}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-                  style={
-                    inputMode === mode
-                      ? { backgroundColor: 'var(--primary-dim)', color: 'var(--primary)', border: '1.5px solid var(--primary-glow)' }
-                      : { backgroundColor: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }
-                  }
-                >{label}</button>
-              ))}
-            </div>
-          )}
 
           {/* 인벤 계산 토글 — 지출이고 솔에르다가 아닐 때 */}
           {type === 'expense' && !isSolErda && (
