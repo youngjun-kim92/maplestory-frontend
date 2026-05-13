@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { Coins, TrendingDown, Package } from 'lucide-react'
 import { ledgerApi } from '../api/ledger'
 import { authApi } from '../api/auth'
 import { charactersApi } from '../api/characters'
@@ -311,8 +312,8 @@ export default function AuctionPage() {
           {/* 탭 */}
           <div className="col-start-1 row-start-1 flex gap-2">
             {([
-              { key: 'income', label: '💰 경매장 수입' },
-              { key: 'expense', label: '💸 경매장 지출' },
+              { key: 'income',  label: <span className="flex items-center gap-1"><Coins size={14} strokeWidth={1.75} />경매장 수입</span> },
+              { key: 'expense', label: <span className="flex items-center gap-1"><TrendingDown size={14} strokeWidth={1.75} />경매장 지출</span> },
             ] as const).map((t) => (
               <button
                 key={t.key}
@@ -326,11 +327,11 @@ export default function AuctionPage() {
           </div>
           <div className="col-start-1 row-start-2">
           {tab === 'income' ? (
-        <Card title="경매장 판매 수입" icon="💰">
+        <Card title="경매장 판매 수입" icon={<Coins size={18} strokeWidth={1.75} />}>
           <form onSubmit={handleIncomeSubmit} className="space-y-3">
             {/* 판매 유형 탭 */}
             <div className="flex gap-2">
-              {([['item', '🎁 아이템'], ['sol_erda', '🔮 솔 에르다 조각']] as const).map(([mode, label]) => (
+              {([['item', <span key="item" className="flex items-center gap-1"><Package size={13} strokeWidth={1.75} />아이템</span>], ['sol_erda', <span key="sol_erda" className="flex items-center gap-1"><img src="/maple-icons/arcane_symbol.png" alt="" width={14} height={14} style={{ imageRendering: 'pixelated' }} />솔 에르다 조각</span>]] as const).map(([mode, label]) => (
                 <button
                   key={mode}
                   type="button"
@@ -670,7 +671,7 @@ export default function AuctionPage() {
           <p className="text-sm text-center py-6" style={{ color: 'var(--text-3)' }}>이번 주 경매장 기록이 없습니다.</p>
         ) : (
           <div className="space-y-1.5">
-            {[...incomeEntries, ...expenseEntries].map((entry: LedgerEntry) => (
+            {[...auctionEntries].sort((a, b) => b.entryDate.localeCompare(a.entryDate)).map((entry: LedgerEntry) => (
               <div key={entry.id} className="rounded-lg overflow-hidden" style={{ border: editingId === entry.id ? '1px solid var(--primary-glow)' : '1px solid transparent' }}>
                 <div className="list-row">
                   <div className="flex items-center gap-3 min-w-0">

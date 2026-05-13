@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { Star } from 'lucide-react'
 import { bossApi } from '../api/boss'
 import { charactersApi } from '../api/characters'
 import { favoritesApi } from '../api/favorites'
@@ -432,7 +433,7 @@ export default function BossPage() {
       {/* ── 즐겨찾기 섹션 ── */}
       <div className="rounded-xl overflow-hidden" style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)' }}>
         <div className="flex items-center justify-between px-4 py-2.5" style={{ borderBottom: showFavorites ? '1px solid var(--border)' : 'none' }}>
-          <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>⭐ 즐겨찾기</p>
+          <p className="text-sm font-semibold flex items-center gap-1.5" style={{ color: 'var(--text)' }}><Star size={14} strokeWidth={1.75} />즐겨찾기</p>
           <button
             type="button"
             onClick={() => setShowFavorites(p => !p)}
@@ -501,7 +502,7 @@ export default function BossPage() {
       {/* ── 50/50: 처치 기록 폼 + 이번 주 목록 ── */}
       <div className="grid grid-cols-2 gap-4 items-start">
         {/* Left: 처치 기록 폼 */}
-        <Card icon="⚔️" title="보스 처치 기록">
+        <Card icon={<img src="/maple-icons/boss.png" alt="" width={20} height={20} style={{ imageRendering: 'pixelated' }} />} title="보스 처치 기록">
           <div className="flex items-center justify-between mb-3">
             {selectedCharId ? (
               <span
@@ -532,7 +533,7 @@ export default function BossPage() {
               }
               title="현재 보스·난이도·파티인원·도핑을 즐겨찾기로 저장"
             >
-              {savingSingleFav ? '저장 중...' : alreadySaved ? '⭐ 즐겨찾기 저장됨' : '★ 즐겨찾기 등록'}
+              {savingSingleFav ? '저장 중...' : alreadySaved ? <span className="flex items-center gap-1"><Star size={12} fill="currentColor" strokeWidth={0} />즐겨찾기 저장됨</span> : <span className="flex items-center gap-1"><Star size={12} strokeWidth={1.75} />즐겨찾기 등록</span>}
             </button>
           </div>
           <form onSubmit={handleSubmit} className="space-y-3">
@@ -752,7 +753,7 @@ export default function BossPage() {
               </div>
             ) : weeklyKills.length === 0 ? (
               <div className="px-4 py-8 flex flex-col items-center gap-2">
-                <span className="text-3xl opacity-30">⚔️</span>
+                <img src="/maple-icons/boss.png" alt="" width={36} height={36} className="opacity-30" style={{ imageRendering: 'pixelated' }} />
                 <p className="text-sm text-center" style={{ color: 'var(--text-3)' }}>
                   {selectedChar
                     ? `${selectedChar.name}의 이번 주 처치 기록이 없습니다.`

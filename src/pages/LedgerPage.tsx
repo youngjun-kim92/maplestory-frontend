@@ -152,7 +152,7 @@ export default function LedgerPage() {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>🔩 메소 강화</h1>
+          <h1 className="text-2xl font-bold flex items-center gap-2" style={{ color: 'var(--text)' }}><img src="/maple-icons/cube.png" alt="" width={26} height={26} style={{ imageRendering: 'pixelated' }} />메소 강화</h1>
           {ledger && (
             <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>
               📅 {ledger.weekStart} 주 (목요일 기준)
@@ -191,7 +191,7 @@ export default function LedgerPage() {
       )}
 
       {/* 메소 강화 입력 폼 */}
-      <Card title="메소 강화 지출" icon="🔩">
+      <Card title="메소 강화 지출" icon={<img src="/maple-icons/cube.png" alt="" width={20} height={20} style={{ imageRendering: 'pixelated' }} />}>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-2)' }}>카테고리</p>
@@ -319,13 +319,22 @@ export default function LedgerPage() {
       </Card>
 
       {/* 메소 강화 목록 */}
-      <Card title="이번 주 메소 강화 내역" icon="📋">
+      <div
+        className="rounded-2xl overflow-hidden flex flex-col"
+        style={{ backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', boxShadow: 'var(--shadow)', maxHeight: 'calc(100vh - 256px)' }}
+      >
+        <div className="flex items-center gap-2 px-3 py-2.5 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
+          <span className="text-lg">📋</span>
+          <h2 className="font-semibold text-base" style={{ color: 'var(--text)' }}>이번 주 메소 강화 내역</h2>
+          <span className="text-xs ml-auto" style={{ color: 'var(--text-3)' }}>{expenseEntries.length}건</span>
+        </div>
+        <div className="overflow-y-auto flex-1 min-h-0">
         {expenseEntries.length === 0 ? (
           <p className="text-sm text-center py-6" style={{ color: 'var(--text-3)' }}>
             이번 주 지출 기록이 없습니다.
           </p>
         ) : (
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 p-3">
             {expenseEntries.map((entry: LedgerEntry) => (
               <div key={entry.id} className="rounded-lg overflow-hidden" style={{ border: editingId === entry.id ? '1px solid var(--primary-glow)' : '1px solid transparent' }}>
                 <div className="list-row">
@@ -419,7 +428,8 @@ export default function LedgerPage() {
             ))}
           </div>
         )}
-      </Card>
+        </div>
+      </div>
     </div>
   )
 }

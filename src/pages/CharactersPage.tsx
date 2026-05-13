@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { User } from 'lucide-react'
 import { charactersApi } from '../api/characters'
 import { useAuth } from '../contexts/AuthContext'
 import type { CharacterROI, MapleCharacter } from '../types'
@@ -200,7 +201,7 @@ export default function CharactersPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold font-heading" style={{ color: 'var(--text)' }}>🧙 캐릭터 관리</h1>
+            <h1 className="text-2xl font-bold font-heading flex items-center gap-2" style={{ color: 'var(--text)' }}><User size={24} strokeWidth={1.75} />캐릭터 관리</h1>
             {activeServer && (
               <span
                 className="px-2 py-0.5 rounded-full text-xs font-semibold"
@@ -350,7 +351,7 @@ export default function CharactersPage() {
 
       {/* Add/Edit form */}
       {showForm && (
-        <Card title={editingId ? '캐릭터 수정' : '캐릭터 추가'} icon="🧙">
+        <Card title={editingId ? '캐릭터 수정' : '캐릭터 추가'} icon={<User size={18} strokeWidth={1.75} />}>
           {!editingId && characters.length === 0 && (
             <div
               className="mb-3 p-3 rounded-xl text-sm"
@@ -449,7 +450,7 @@ export default function CharactersPage() {
       {characters.length === 0 && (
         <Card>
           <div className="text-center py-8">
-            <p className="text-3xl mb-2">🧙</p>
+            <div className="mb-2 flex justify-center opacity-30"><User size={36} strokeWidth={1.5} /></div>
             <p className="text-sm" style={{ color: 'var(--text-3)' }}>캐릭터를 추가해보세요!</p>
           </div>
         </Card>
@@ -585,7 +586,7 @@ function CharacterCard({
 
       {/* 솔 에르다 조각 */}
       <div className="flex items-center gap-2 pt-2" style={{ borderTop: '1px solid var(--border)' }}>
-        <span className="text-xs" style={{ color: 'var(--text-2)' }}>🔮 솔 에르다 조각</span>
+        <span className="text-xs flex items-center gap-1" style={{ color: 'var(--text-2)' }}><img src="/maple-icons/arcane_symbol.png" alt="" width={13} height={13} style={{ imageRendering: 'pixelated' }} /> 솔 에르다 조각</span>
         <span className="font-semibold text-xs" style={{ color: 'var(--primary)' }}>
           {(char.solErdaFragments ?? 0).toLocaleString()}개
         </span>

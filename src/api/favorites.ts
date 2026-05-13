@@ -27,6 +27,9 @@ export interface FavoriteRequest {
 }
 
 export const favoritesApi = {
+  getAllFavorites: () =>
+    client.get<FavoriteItem[]>('/favorites'),
+
   getAll: (type: FavoriteType, params?: { bossName?: string; characterId?: number }) =>
     client.get<FavoriteItem[]>('/favorites', {
       params: { type, ...params },

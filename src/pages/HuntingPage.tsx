@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { Coins } from 'lucide-react'
 import { huntingApi } from '../api/hunting'
 import { charactersApi, bustCharacterCache } from '../api/characters'
 import { useAuth } from '../contexts/AuthContext'
@@ -282,7 +283,7 @@ export default function HuntingPage() {
             ) : (
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <p className="text-xs font-medium" style={{ color: 'var(--text-3)' }}>💰 메소</p>
+                  <p className="text-xs font-medium flex items-center gap-1" style={{ color: 'var(--text-3)' }}><Coins size={12} strokeWidth={1.75} />메소</p>
                   <Input
                     label="사냥 전 메소"
                     type="number"
@@ -406,7 +407,7 @@ export default function HuntingPage() {
           <div className="overflow-y-auto" style={{ maxHeight: '460px' }}>
             {sessions.length === 0 ? (
               <div className="px-4 py-8 flex flex-col items-center gap-2">
-                <span className="text-3xl opacity-30">🌲</span>
+                <img src="/maple-icons/emblem.png" alt="" width={36} height={36} className="opacity-30" style={{ imageRendering: 'pixelated' }} />
                 <p className="text-sm text-center" style={{ color: 'var(--text-3)' }}>이번 주 사냥 기록이 없습니다.</p>
               </div>
             ) : (
@@ -422,7 +423,10 @@ export default function HuntingPage() {
                           </span>
                         )}
                         {sess.solErdaFragments > 0 && (
-                          <span className="text-xs" style={{ color: '#a78bfa' }}>🔮 {sess.solErdaFragments}개</span>
+                          <span className="text-xs flex items-center gap-0.5" style={{ color: '#a78bfa' }}>
+                            <img src="/maple-icons/arcane_symbol.png" alt="" width={12} height={12} style={{ imageRendering: 'pixelated' }} />
+                            {sess.solErdaFragments}개
+                          </span>
                         )}
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
@@ -432,7 +436,7 @@ export default function HuntingPage() {
                         {sess.roundCount != null && sess.roundCount > 0 && (
                           <p className="text-xs" style={{ color: 'var(--text-3)' }}>
                             소재당 {formatMeso(Math.round(sess.totalIncome / sess.roundCount))}
-                            {sess.solErdaFragments > 0 && ` · 🔮 ${Math.round(sess.solErdaFragments / sess.roundCount)}개`}
+                            {sess.solErdaFragments > 0 && <> · <img src="/maple-icons/arcane_symbol.png" alt="" width={11} height={11} style={{ imageRendering: 'pixelated', verticalAlign: 'middle', display: 'inline' }} /> {Math.round(sess.solErdaFragments / sess.roundCount)}개</>}
                           </p>
                         )}
                       </div>
