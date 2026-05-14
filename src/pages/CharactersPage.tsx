@@ -440,21 +440,6 @@ export default function CharactersPage() {
                 </p>
               )}
             </div>
-            <div>
-              <Input
-                label="솔 에르다 조각 보유량"
-                type="number"
-                placeholder="0"
-                value={form.solErdaFragments}
-                onChange={(e) => setForm((p) => ({ ...p, solErdaFragments: e.target.value }))}
-                min={0}
-              />
-              {editingId && (
-                <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-3)' }}>
-                  사냥 기록 시 자동 누적됩니다. 맞지 않을 때만 수정하세요.
-                </p>
-              )}
-            </div>
             {form.initialInvestment && (
               <p className="text-xs pl-1" style={{ color: 'var(--text-2)' }}>
                 = {formatMeso(Number(form.initialInvestment))}
@@ -505,21 +490,6 @@ export default function CharactersPage() {
         </Card>
       )}
 
-      {/* 솔 에르다 조각 합계 */}
-      {characters.length > 0 && (
-        <Card icon="🔮" title="솔 에르다 조각 보유 현황">
-          <p className="text-xs mb-2" style={{ color: 'var(--text-2)' }}>
-            캐릭터별로 보유한 조각 수를 입력하면 합계를 확인할 수 있습니다.
-          </p>
-          <div
-            className="flex items-center justify-between px-3 py-2 rounded-xl"
-            style={{ backgroundColor: 'var(--primary-dim)', border: '1px solid var(--primary-glow)' }}
-          >
-            <span className="text-sm font-semibold" style={{ color: 'var(--text-2)' }}>전체 합계</span>
-            <span className="font-bold" style={{ color: 'var(--primary)' }}>{totalFragments.toLocaleString()}개</span>
-          </div>
-        </Card>
-      )}
 
       {/* Main characters */}
       {mainChars.length > 0 && (
@@ -643,13 +613,6 @@ function CharacterCard({
         </span>
       </div>
 
-      {/* 솔 에르다 조각 */}
-      <div className="flex items-center gap-2 pt-2" style={{ borderTop: '1px solid var(--border)' }}>
-        <span className="text-xs" style={{ color: 'var(--text-2)' }}>🔮 솔 에르다 조각</span>
-        <span className="font-semibold text-xs" style={{ color: 'var(--primary)' }}>
-          {(char.solErdaFragments ?? 0).toLocaleString()}개
-        </span>
-      </div>
 
       {/* ROI section */}
       {char.initialInvestment > 0 && (

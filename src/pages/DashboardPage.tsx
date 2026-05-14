@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid, PieChart, Pie, Cell } from 'recharts'
 import { ledgerApi } from '../api/ledger'
@@ -25,7 +25,6 @@ import {
   difficultyLabel,
 } from '../utils/format'
 import MapleIcon from '../components/MapleIcon'
-import { BarChart2, User, Coins, Star, Store } from 'lucide-react'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import Select from '../components/ui/Select'
@@ -561,6 +560,7 @@ export default function DashboardPage() {
   }
 
 
+
   const allEntries = ledger?.entries ?? []
   const entries =
     selectedCharId === 'all'
@@ -645,6 +645,9 @@ export default function DashboardPage() {
   const fourWeekIncome = last4Weeks.reduce((s, w) => s + safeNum(w.totalIncome), 0)
   const fourWeekExpense = last4Weeks.reduce((s, w) => s + safeNum(w.totalExpense), 0)
   const fourWeekNet = fourWeekIncome - fourWeekExpense
+  const cumulativeIncome = allWeeks.reduce((s, w) => s + safeNum(w.totalIncome), 0)
+  const cumulativeExpense = allWeeks.reduce((s, w) => s + safeNum(w.totalExpense), 0)
+  const cumulativeNet = cumulativeIncome - cumulativeExpense
   const fourWeekLabel = (() => {
     if (last4Weeks.length === 0) return ''
     const oldest = last4Weeks[last4Weeks.length - 1]
@@ -710,9 +713,26 @@ export default function DashboardPage() {
   const panelStyle = {
     backgroundColor: 'var(--surface)',
     border: '1px solid var(--border)',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
   }
 
-  const thStyle = { color: 'var(--text-3)' } as const
+  const cardHeaderStyle = {
+    padding: '0.65rem 1rem',
+    borderBottom: '1px solid var(--border)',
+    backgroundColor: 'var(--surface-2)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  } as const
+
+  const thStyle = {
+    color: 'var(--text-3)',
+    backgroundColor: 'var(--surface-2)',
+    fontWeight: 700,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+    fontSize: '11px',
+  } as const
 
   const catStatsStart = new Date(getWeekStart().getTime() - 21 * 86400000)
   const catStatsEnd = new Date(getWeekStart().getTime() + 6 * 86400000)
@@ -723,19 +743,19 @@ export default function DashboardPage() {
       {/* 헤더 */}
       <div className="flex items-center justify-between">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold flex items-center gap-2" style={{ color: 'var(--text)' }}><BarChart2 size={24} strokeWidth={1.75} />대시보드</h1>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-xl font-bold tracking-tight" style={{ color: 'var(--text)' }}>대시보드</h1>
             {activeServer && (
               <span
-                className="px-2 py-0.5 rounded-full text-xs font-semibold"
-                style={{ backgroundColor: 'var(--primary-dim)', color: 'var(--primary)', border: '1px solid var(--primary-glow)' }}
+                className="px-2.5 py-0.5 rounded-full text-xs font-medium"
+                style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }}
               >
-                🗺️ {activeServer.worldDisplayName}
+                {activeServer.worldDisplayName}
               </span>
             )}
           </div>
-          <p className="text-sm font-semibold mt-1" style={{ color: 'var(--primary)' }}>
-            📅 {formatWeekRange(weekStartStr, toDateString(weekEnd))}
+          <p className="text-xs mt-1 font-medium" style={{ color: 'var(--text-3)' }}>
+            {formatWeekRange(weekStartStr, toDateString(weekEnd))}
           </p>
         </div>
         <div className="flex items-center gap-1">
@@ -935,61 +955,58 @@ export default function DashboardPage() {
       {ledger && (
         <>
           <div>
-            <p className="text-sm font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-2)' }}>
-              💰 메소
-            </p>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {[
-                { label: '이번 주 수입', value: `+${formatMeso(ledger.summary.totalIncome)}`, color: 'var(--green)', icon: '📥' },
-                { label: '이번 주 지출', value: `-${formatMeso(ledger.summary.totalExpense)}`, color: 'var(--red)', icon: '📤' },
+                { label: '이번 주 수입', value: `+${formatMeso(ledger.summary.totalIncome)}`, sub: `${toKoreanAmount(String(ledger.summary.totalIncome))} 메소`, color: '#10b981', icon: '📥' },
+                { label: '이번 주 지출', value: `-${formatMeso(ledger.summary.totalExpense)}`, sub: `${toKoreanAmount(String(ledger.summary.totalExpense))} 메소`, color: '#ef4444', icon: '📤' },
                 {
-                  label: '순수익',
+                  label: '이번 주 순수익',
                   value: `${ledger.summary.netProfit >= 0 ? '+' : ''}${formatMeso(ledger.summary.netProfit)}`,
-                  color: ledger.summary.netProfit >= 0 ? 'var(--primary)' : 'var(--red)',
+                  sub: ledger.summary.netProfit >= 0 ? '흑자' : '적자',
+                  color: ledger.summary.netProfit >= 0 ? '#6366f1' : '#ef4444',
                   icon: ledger.summary.netProfit >= 0 ? '📈' : '📉',
                 },
                 {
-                  label: '현재 보유 메소',
+                  label: '보유 메소',
                   value: formatMeso(activeServer?.totalMeso ?? 0),
-                  color: 'var(--primary)',
+                  sub: `인벤 ${formatMeso(activeServer?.inventoryMeso ?? 0)} / 창고 ${formatMeso(activeServer?.storageMeso ?? 0)}`,
+                  color: '#6366f1',
                   icon: '🏦',
                   action: openMesoForm,
                 },
               ].map((kpi) => (
                 <div
                   key={kpi.label}
-                  className="relative overflow-hidden rounded-xl"
-                  style={{
-                    backgroundColor: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    borderLeft: `3px solid ${kpi.color}`,
-                    padding: '0.9rem 1rem',
-                  }}
+                  className="rounded-xl overflow-hidden"
+                  style={{ ...panelStyle, padding: 0 }}
                 >
-                  <div className="flex items-start justify-between gap-1">
-                    <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)', letterSpacing: '0.05em' }}>
+                  <div className="flex items-start justify-between px-4 pt-4 pb-1">
+                    <p className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--text-3)' }}>
                       {kpi.label}
+                    </p>
+                    <div
+                      className="w-9 h-9 rounded-full flex items-center justify-center text-base shrink-0"
+                      style={{ backgroundColor: `${kpi.color}18`, color: kpi.color }}
+                    >
+                      {kpi.icon}
+                    </div>
+                  </div>
+                  <div className="flex items-end justify-between px-4 pb-3">
+                    <p className="font-black leading-none" style={{ color: kpi.color, fontSize: 'clamp(1.05rem, 2.4vw, 1.45rem)' }}>
+                      {kpi.value}
                     </p>
                     {'action' in kpi && kpi.action && (
                       <button
                         onClick={kpi.action}
-                        className="text-xs px-1.5 py-0.5 rounded shrink-0"
-                        style={{ color: 'var(--primary)', backgroundColor: 'var(--primary-dim)', lineHeight: 1.4 }}
+                        className="text-xs px-2 py-0.5 rounded-full shrink-0"
+                        style={{ color: kpi.color, backgroundColor: `${kpi.color}18`, border: `1px solid ${kpi.color}40` }}
                       >수정</button>
                     )}
                   </div>
-                  <p
-                    className="font-bold mt-2 leading-none"
-                    style={{ color: kpi.color, fontSize: 'clamp(1rem, 2.2vw, 1.35rem)' }}
-                  >
-                    {kpi.value}
-                  </p>
-                  <span
-                    className="absolute bottom-2 right-2.5 select-none pointer-events-none"
-                    style={{ fontSize: '1.8rem', lineHeight: 1, opacity: 0.1 }}
-                  >
-                    {kpi.icon}
-                  </span>
+                  <div className="px-4 pb-3">
+                    <p className="text-xs" style={{ color: 'var(--text-3)' }}>{kpi.sub}</p>
+                  </div>
+                  <div style={{ height: '3px', background: `linear-gradient(90deg, ${kpi.color}, ${kpi.color}66)` }} />
                 </div>
               ))}
             </div>
@@ -1001,7 +1018,7 @@ export default function DashboardPage() {
                 className="mt-3 rounded-xl p-4 space-y-3"
                 style={panelStyle}
               >
-                <p className="text-xs font-semibold flex items-center gap-1" style={{ color: 'var(--text-2)' }}><Coins size={13} strokeWidth={1.75} />보유 메소 업데이트</p>
+                <p className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>💰 보유 메소 업데이트</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Input
@@ -1062,39 +1079,45 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* ── 솔 에르다 조각 (컴팩트) ── */}
+          {/* ── 솔 에르다 조각 ── */}
           <div
-            className="flex items-center gap-3 px-4 py-3 rounded-xl"
-            style={{
-              backgroundColor: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderLeft: '3px solid #a78bfa',
-            }}
+            className="rounded-xl overflow-hidden"
+            style={{ ...panelStyle, padding: 0 }}
           >
-            <img src="/maple-icons/arcane_symbol.png" alt="" width={18} height={18} style={{ imageRendering: 'pixelated' }} />
-            <span className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>
-              {isThisWeek ? '이번 주' : '해당 주'} 솔 에르다 조각
-            </span>
-            <span className="ml-auto font-bold text-xl" style={{ color: '#c4b5fd' }}>
-              {weeklyErdaFragments}개
-            </span>
+            <div className="flex items-center justify-between px-4 py-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm" style={{ backgroundColor: 'rgba(167,139,250,0.15)', color: '#a78bfa' }}>🔮</div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--text-3)' }}>{isThisWeek ? '이번 주' : '해당 주'} 솔 에르다 조각</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>캐릭터 누적 합산</p>
+                </div>
+              </div>
+              <p className="font-black text-2xl" style={{ color: '#c4b5fd' }}>{weeklyErdaFragments}<span className="text-sm font-semibold ml-1">개</span></p>
+            </div>
+            <div style={{ height: '3px', background: 'linear-gradient(90deg, #a78bfa, #a78bfa44)' }} />
           </div>
         </>
       )}
 
-      {/* 캐릭터 탭 */}
-      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+      {/* 캐릭터 탭 — Bootstrap nav-pills */}
+      <div
+        className="flex gap-1 overflow-x-auto pb-1 scrollbar-hide px-1 py-1 rounded-xl"
+        style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)', width: 'fit-content', maxWidth: '100%' }}
+      >
         {characters.map((c) => (
           <button
             key={c.id}
-            className={`char-tab ${selectedCharId === c.id ? 'char-tab-active' : ''}`}
             onClick={() => setSelectedCharId(c.id)}
-          >{c.isMain && <Star size={11} fill="currentColor" strokeWidth={0} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '3px', color: 'var(--primary)' }} />}{c.name}</button>
+            className="text-xs font-semibold px-3 py-1.5 rounded-lg shrink-0 transition-all"
+            style={selectedCharId === c.id
+              ? { backgroundColor: 'var(--primary)', color: '#fff', boxShadow: '0 1px 4px rgba(99,102,241,0.4)' }
+              : { backgroundColor: 'transparent', color: 'var(--text-2)' }}
+          >{c.isMain ? '⭐ ' : ''}{c.name}</button>
         ))}
         <button
-          className="char-tab"
-          style={{ borderStyle: 'dashed' }}
           onClick={() => navigate('/characters')}
+          className="text-xs px-3 py-1.5 rounded-lg shrink-0"
+          style={{ color: 'var(--text-3)', borderLeft: '1px solid var(--border)', paddingLeft: '0.75rem' }}
         >+ 추가</button>
       </div>
 
@@ -1103,23 +1126,26 @@ export default function DashboardPage() {
 
         {/* 왼쪽: 내역 테이블 */}
         <div className="lg:col-span-3 rounded-xl overflow-hidden" style={panelStyle}>
-          <div className="dark-panel-header">
-            <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+          <div style={cardHeaderStyle}>
+            <h3 className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--text-2)' }}>
               📋 {isThisWeek ? '이번 주' : '해당 주'} 내역
             </h3>
-            <span className="text-xs" style={{ color: 'var(--text-3)' }}>{filteredEntries.length}건</span>
+            <span
+              className="text-xs font-semibold px-2 py-0.5 rounded-full"
+              style={{ backgroundColor: 'var(--primary-dim)', color: 'var(--primary)' }}
+            >{filteredEntries.length}건</span>
           </div>
 
-          {/* 필터 바 */}
+          {/* 필터 바 — Bootstrap badge pills */}
           <div className="flex gap-1 px-3 py-2 overflow-x-auto scrollbar-hide" style={{ borderBottom: '1px solid var(--border)' }}>
             {ENTRY_FILTERS.map((f) => (
               <button
                 key={f.key}
                 onClick={() => setFilter(f.key)}
-                className="text-xs px-2.5 py-1 rounded-lg shrink-0 font-medium transition-all"
+                className="text-xs px-3 py-1 rounded-full shrink-0 font-semibold transition-all"
                 style={filter === f.key
-                  ? { backgroundColor: 'var(--primary-dim)', color: 'var(--primary)', border: '1px solid var(--primary-glow)' }
-                  : { backgroundColor: 'var(--surface-2)', color: 'var(--text-3)', border: '1px solid transparent' }}
+                  ? { backgroundColor: 'var(--primary)', color: '#fff', boxShadow: '0 1px 4px rgba(99,102,241,0.35)' }
+                  : { backgroundColor: 'var(--surface-2)', color: 'var(--text-3)', border: '1px solid var(--border)' }}
               >{f.label}</button>
             ))}
           </div>
@@ -1190,44 +1216,105 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* 오른쪽: 드랍 아이템 */}
-        <div className="lg:col-span-2 rounded-xl overflow-hidden" style={panelStyle}>
-          <div className="dark-panel-header">
-            <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
-              📦 {isThisWeek ? '이번 주' : '해당 주'} 드랍 아이템
-            </h3>
+        {/* 오른쪽: 차트 + 누적 */}
+        <div className="lg:col-span-2 space-y-4">
+
+          {chartData.length > 0 && (
+            <div className="rounded-xl overflow-hidden" style={{ ...panelStyle, padding: 0 }}>
+              <div style={cardHeaderStyle}>
+                <h3 className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--text-2)' }}>📈 주간 수익 추이</h3>
+              </div>
+              <div className="p-4">
+              <ResponsiveContainer width="100%" height={148}>
+                <BarChart data={chartData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+                  <XAxis
+                    dataKey="week"
+                    tick={{ fontSize: 10, fill: 'var(--text-3)' }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis hide />
+                  <Tooltip
+                    formatter={(v) => formatMeso(v as number)}
+                    contentStyle={{
+                      backgroundColor: 'var(--surface-2)',
+                      border: '1px solid var(--border-2)',
+                      borderRadius: '8px',
+                      fontSize: '11px',
+                    }}
+                    cursor={{ fill: 'var(--primary-dim)' }}
+                  />
+                  <CartesianGrid strokeDasharray="2 4" stroke="rgba(240,246,252,0.06)" vertical={false} />
+                  <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: '10px', color: 'var(--text-2)' }} />
+                  <Bar dataKey="수입" fill="#3fb950" radius={[3, 3, 0, 0]} maxBarSize={22} />
+                  <Bar dataKey="지출" fill="#f85149" radius={[3, 3, 0, 0]} maxBarSize={22} />
+                </BarChart>
+              </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          <div className="rounded-xl overflow-hidden" style={{ ...panelStyle, padding: 0 }}>
+            <div style={cardHeaderStyle}>
+              <h3 className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--text-2)' }}>📋 전체 누적</h3>
+            </div>
+            <div className="p-3 space-y-2">
+              {[
+                { label: '총 수입', value: cumulativeIncome, color: '#10b981', prefix: '+' },
+                { label: '총 지출', value: cumulativeExpense, color: '#ef4444', prefix: '-' },
+                { label: '총 순수익', value: cumulativeNet, color: cumulativeNet >= 0 ? '#6366f1' : '#ef4444', prefix: cumulativeNet >= 0 ? '+' : '' },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className="flex items-center justify-between py-2.5 px-3 rounded-lg"
+                  style={{ backgroundColor: 'var(--surface-2)', borderLeft: `3px solid ${item.color}` }}
+                >
+                  <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>{item.label}</span>
+                  <span className="text-sm font-bold" style={{ color: item.color }}>
+                    {item.prefix}{formatMeso(item.value)}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="overflow-y-auto" style={{ maxHeight: '340px' }}>
-            {dropsLoading ? (
-              <p className="text-sm text-center py-6 animate-pulse" style={{ color: 'var(--text-3)' }}>불러오는 중...</p>
-            ) : drops.length === 0 ? (
-              <p className="text-sm text-center py-6" style={{ color: 'var(--text-3)' }}>드랍 기록이 없어요</p>
-            ) : (
-              <div className="p-3 space-y-2">
-                {drops.map((drop) => (
-                  <div key={drop.id}>
-                    <div className="list-row">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{drop.itemName}</p>
-                          <span
-                            className="text-xs px-2 py-0.5 rounded-full"
-                            style={
-                              drop.status === 'sold'
-                                ? { backgroundColor: 'rgba(74,222,128,0.12)', color: 'var(--green)' }
-                                : drop.status === 'listed'
-                                ? { backgroundColor: 'rgba(234,179,8,0.12)', color: '#fbbf24' }
-                                : drop.status === 'distributed'
-                                ? { backgroundColor: 'rgba(167,139,250,0.12)', color: '#a78bfa' }
-                                : { backgroundColor: 'var(--primary-dim)', color: 'var(--primary)' }
-                            }
-                          >
-                            {drop.status === 'sold' ? '✔ 판매 완료' : drop.status === 'listed' ? <span className="inline-flex items-center gap-1"><Store size={11} strokeWidth={1.75} />경매장 등록 중</span> : drop.status === 'distributed' ? '파티 분배' : '보유 중'}
-                          </span>
-                        </div>
-                        <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
-                          {drop.bossName} {difficultyLabel(drop.difficulty)}{drop.characterName && ` • ${drop.characterName}`}
-                        </p>
+        </div>
+      </div>
+
+      {/* 드랍 아이템 */}
+      <div className="rounded-xl overflow-hidden" style={panelStyle}>
+        <div style={cardHeaderStyle}>
+          <h3 className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--text-2)' }}>
+            📦 {isThisWeek ? '이번 주' : '해당 주'} 드랍 아이템
+          </h3>
+        </div>
+        {dropsLoading ? (
+          <p className="text-sm text-center py-6 animate-pulse" style={{ color: 'var(--text-3)' }}>불러오는 중...</p>
+        ) : drops.length === 0 ? (
+          <p className="text-sm text-center py-6" style={{ color: 'var(--text-3)' }}>드랍 기록이 없어요</p>
+        ) : (
+          <div className="p-3 space-y-2">
+            {drops.map((drop) => (
+              <div key={drop.id}>
+                <div className="list-row">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{drop.itemName}</p>
+                      <span
+                        className="text-xs px-2 py-0.5 rounded-full"
+                        style={
+                          drop.status === 'sold'
+                            ? { backgroundColor: 'rgba(74,222,128,0.12)', color: 'var(--green)' }
+                            : drop.status === 'listed'
+                            ? { backgroundColor: 'rgba(234,179,8,0.12)', color: '#fbbf24' }
+                            : { backgroundColor: 'var(--primary-dim)', color: 'var(--primary)' }
+                        }
+                      >
+                        {drop.status === 'sold' ? '✅ 판매 완료' : drop.status === 'listed' ? '🏪 경매장 등록 중' : '📦 보유 중'}
+                      </span>
+                    </div>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
+                      {drop.bossName} {difficultyLabel(drop.difficulty)}{drop.characterName && ` • ${drop.characterName}`}
+                    </p>
                     {drop.status === 'sold' && drop.saleAmount && (
                       <p className="text-xs mt-0.5 font-medium" style={{ color: 'var(--green)' }}>
                         {formatMeso(drop.saleAmount)} 판매
@@ -1606,8 +1693,346 @@ export default function DashboardPage() {
             ))}
           </div>
         )}
+      </div>
+
+      {/* 이번 주 / 전체 통계 구분선 */}
+      <div className="flex items-center gap-4">
+        <div className="flex-1 h-px" style={{ backgroundColor: 'var(--border)' }} />
+        <span className="text-xs font-medium uppercase tracking-widest" style={{ color: 'var(--text-3)' }}>
+          전체 통계
+        </span>
+        <div className="flex-1 h-px" style={{ backgroundColor: 'var(--border)' }} />
+      </div>
+
+      {/* 전체 통계: 차트 + 누적 + 수익 구성 */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="rounded-xl p-4" style={panelStyle}>
+          <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text)' }}>📈 주간 수익 추이 <span className="font-normal text-xs" style={{ color: 'var(--text-3)' }}>(최근 4주)</span></h3>
+          {chartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={120}>
+              <BarChart data={chartData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+                <XAxis dataKey="week" tick={{ fontSize: 9, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} />
+                <YAxis hide />
+                <Tooltip
+                  formatter={(v) => formatMeso(v as number)}
+                  contentStyle={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: '8px', fontSize: '11px' }}
+                  cursor={{ fill: 'var(--primary-dim)' }}
+                />
+                <CartesianGrid strokeDasharray="2 4" stroke="rgba(240,246,252,0.06)" vertical={false} />
+                <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: '10px', color: 'var(--text-2)' }} />
+                <Bar dataKey="수입" fill="#3fb950" radius={[3, 3, 0, 0]} maxBarSize={18} />
+                <Bar dataKey="지출" fill="#f85149" radius={[3, 3, 0, 0]} maxBarSize={18} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="text-xs text-center py-6" style={{ color: 'var(--text-3)' }}>데이터 없음</p>
+          )}
+        </div>
+        <div className="rounded-xl p-4" style={panelStyle}>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>📋 4주 총계</h3>
+            {fourWeekLabel && (
+              <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-3)', border: '1px solid var(--border)' }}>
+                {fourWeekLabel}
+              </span>
+            )}
+          </div>
+          <div className="space-y-2">
+            {[
+              { label: '총 수입', value: fourWeekIncome, color: 'var(--green)', prefix: '+' },
+              { label: '총 지출', value: fourWeekExpense, color: 'var(--red)', prefix: '-' },
+              { label: '총 순수익', value: fourWeekNet, color: fourWeekNet >= 0 ? 'var(--primary)' : 'var(--red)', prefix: fourWeekNet >= 0 ? '+' : '' },
+            ].map((item) => (
+              <div key={item.label} className="flex items-center justify-between py-2 px-3 rounded-lg" style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                <span className="text-xs" style={{ color: 'var(--text-3)' }}>{item.label}</span>
+                <span className="text-sm font-bold" style={{ color: item.color }}>{item.prefix}{formatMeso(item.value)}</span>
+              </div>
+            ))}
           </div>
         </div>
+        <div className="rounded-xl overflow-hidden" style={panelStyle}>
+          <div className="dark-panel-header">
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>📊 수익 구성 비율 <span className="font-normal text-xs" style={{ color: 'var(--text-3)' }}>(최근 4주 · {catStatsRange})</span></h3>
+          </div>
+          {statsLoading ? (
+            <p className="text-sm text-center py-6 animate-pulse" style={{ color: 'var(--text-3)' }}>불러오는 중...</p>
+          ) : (() => {
+            const incomeStats = catStats.filter((s) => s.type === 'income')
+            const byCategory = Object.fromEntries(incomeStats.map((s) => [s.category, safeNum(s.total)]))
+            const bossAuction = safeNum(byCategory['boss']) + safeNum(byCategory['auction'])
+            const huntingSolErda = safeNum(byCategory['hunting']) + safeNum(byCategory['sol_erda'])
+            const totalIncome = Object.values(byCategory).reduce((a, b) => a + b, 0)
+            const bossAuctionPct = totalIncome > 0 ? (bossAuction / totalIncome) * 100 : 0
+            const huntingSolErdaPct = totalIncome > 0 ? (huntingSolErda / totalIncome) * 100 : 0
+            if (totalIncome === 0) {
+              return <p className="text-xs text-center py-6" style={{ color: 'var(--text-3)' }}>데이터 없음</p>
+            }
+            return (
+              <div className="p-4 space-y-4">
+                {[
+                  { key: 'boss', label: <span className="inline-flex items-center gap-1"><img src="/maple-icons/boss.png" alt="" width={13} height={13} style={{ imageRendering: 'pixelated' }} /> 보스 + 경매장</span>, value: bossAuction, pct: bossAuctionPct, color: 'var(--primary)', gradient: 'linear-gradient(90deg, var(--primary) 0%, var(--primary-light) 100%)' },
+                  { key: 'hunting', label: <span className="inline-flex items-center gap-1"><img src="/maple-icons/emblem.png" alt="" width={13} height={13} style={{ imageRendering: 'pixelated' }} /> 사냥 + 솔 에르다</span>, value: huntingSolErda, pct: huntingSolErdaPct, color: 'var(--green)', gradient: 'var(--green)' },
+                ].map((row) => (
+                  <div key={row.key}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-medium flex items-center gap-1" style={{ color: 'var(--text-2)' }}>{row.label}</span>
+                      <span className="text-xs font-bold" style={{ color: row.color }}>{row.pct.toFixed(1)}%</span>
+                    </div>
+                    <div className="rounded-full h-3 overflow-hidden" style={{ backgroundColor: 'var(--surface-2)' }}>
+                      <div className="h-full rounded-full transition-all" style={{ width: `${row.pct}%`, background: row.gradient }} />
+                    </div>
+                    <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>{formatMeso(row.value)}</p>
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
+        </div>
+      </div>
+
+      {/* 주별 기록 + 캐릭터 현황 2컬럼 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* 주별 기록 테이블 (솔 에르다 조각 + 항목 수 컬럼 포함) */}
+      <div className="rounded-xl overflow-hidden" style={panelStyle}>
+        <div style={cardHeaderStyle}>
+          {(() => {
+            // allWeeks is newest-first (API ORDER BY week_start DESC)
+            // page 0 = most recent 4 weeks; display each page oldest-first
+            const totalWeekPages = Math.ceil(allWeeks.length / 4)
+            const pageSlice = allWeeks.slice(weekPage * 4, (weekPage + 1) * 4)
+            const displayedWeeks = showAllWeeks
+              ? [...allWeeks].reverse()
+              : [...pageSlice].reverse()
+            const pageStart = displayedWeeks[0]?.weekStart
+            const pageEnd = displayedWeeks[displayedWeeks.length - 1]?.weekStart
+            const pageRangeText = (!showAllWeeks && pageStart && pageEnd)
+              ? `${pageStart.slice(5).replace('-', '/')} ~ ${pageEnd.slice(5).replace('-', '/')}`
+              : '전체'
+            return (
+              <>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>주별 기록</h3>
+                  {!showAllWeeks && allWeeks.length > 0 && (
+                    <span className="text-xs" style={{ color: 'var(--text-3)' }}>{pageRangeText}</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  {!showAllWeeks && (
+                    <>
+                      <button
+                        onClick={() => setWeekPage((p) => Math.min(p + 1, totalWeekPages - 1))}
+                        disabled={weekPage >= totalWeekPages - 1}
+                        className="px-2 py-0.5 text-xs rounded"
+                        style={{
+                          backgroundColor: 'var(--surface-2)',
+                          border: '1px solid var(--border)',
+                          color: weekPage >= totalWeekPages - 1 ? 'var(--text-3)' : 'var(--text-2)',
+                          cursor: weekPage >= totalWeekPages - 1 ? 'not-allowed' : 'pointer',
+                        }}
+                      >◀</button>
+                      <span className="text-xs px-1" style={{ color: 'var(--text-3)' }}>
+                        {totalWeekPages > 0 ? `${totalWeekPages - weekPage}/${totalWeekPages}` : ''}
+                      </span>
+                      <button
+                        onClick={() => setWeekPage((p) => Math.max(p - 1, 0))}
+                        disabled={weekPage === 0}
+                        className="px-2 py-0.5 text-xs rounded"
+                        style={{
+                          backgroundColor: 'var(--surface-2)',
+                          border: '1px solid var(--border)',
+                          color: weekPage === 0 ? 'var(--text-3)' : 'var(--text-2)',
+                          cursor: weekPage === 0 ? 'not-allowed' : 'pointer',
+                        }}
+                      >▶</button>
+                    </>
+                  )}
+                  <button
+                    onClick={() => { setShowAllWeeks((v) => !v); setWeekPage(0) }}
+                    className="ml-1 px-2 py-0.5 text-xs rounded"
+                    style={{
+                      backgroundColor: showAllWeeks ? 'var(--primary-dim)' : 'var(--surface-2)',
+                      border: `1px solid ${showAllWeeks ? 'var(--primary)' : 'var(--border)'}`,
+                      color: showAllWeeks ? 'var(--primary)' : 'var(--text-2)',
+                      cursor: 'pointer',
+                    }}
+                  >전체</button>
+                </div>
+              </>
+            )
+          })()}
+        </div>
+        {allWeeksLoading ? (
+          <p className="text-sm text-center py-6 animate-pulse" style={{ color: 'var(--text-3)' }}>불러오는 중...</p>
+        ) : allWeeks.length === 0 ? (
+          <p className="text-sm text-center py-6" style={{ color: 'var(--text-3)' }}>아직 기록이 없어요</p>
+        ) : (() => {
+          const pageSlice = allWeeks.slice(weekPage * 4, (weekPage + 1) * 4)
+          const displayedWeeks = showAllWeeks
+            ? [...allWeeks].reverse()
+            : [...pageSlice].reverse()
+          return (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ backgroundColor: 'var(--surface-2)' }}>
+                    <th className="px-4 py-2 text-left text-xs font-medium" style={thStyle}>주차</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium" style={thStyle}>수입</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium" style={thStyle}>지출</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium" style={thStyle}>순수익</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium" style={{ color: '#a78bfa' }}><span className="inline-flex items-center gap-1"><img src="/maple-icons/arcane_symbol.png" alt="" width={12} height={12} style={{ imageRendering: 'pixelated' }} /> 조각</span></th>
+                    <th className="px-4 py-2 text-right text-xs font-medium" style={thStyle}>항목</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayedWeeks.map((w, i, arr) => {
+                    const net = w.totalIncome - w.totalExpense
+                    const isCurrent = weekStartStr === w.weekStart
+                    return (
+                      <tr
+                        key={w.weekStart}
+                        onClick={() => jumpToWeek(w.weekStart)}
+                        className="table-row cursor-pointer"
+                        style={{
+                          backgroundColor: isCurrent ? 'var(--primary-dim)' : undefined,
+                          borderBottom: i === arr.length - 1 ? 'none' : '1px solid var(--border)',
+                        }}
+                      >
+                        <td className="px-4 py-2.5">
+                          <span className="text-sm font-medium" style={{ color: isCurrent ? 'var(--primary)' : 'var(--text)' }}>
+                            {w.weekStart.slice(5).replace('-', '/')} 주
+                          </span>
+                          <span className="block text-xs mt-0.5" style={{ color: isCurrent ? 'var(--primary)' : 'var(--text-3)' }}>
+                            {w.weekStart.slice(5).replace('-', '/')} - {weekEndLabel(w.weekStart)}
+                            {isCurrent && (
+                              <span className="ml-1.5" style={{ color: 'var(--primary)' }}>← 현재</span>
+                            )}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          <span className="text-sm" style={{ color: 'var(--green)' }}>+{formatMeso(w.totalIncome)}</span>
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          <span className="text-sm" style={{ color: 'var(--red)' }}>-{formatMeso(w.totalExpense)}</span>
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          <span className="text-sm font-bold" style={{ color: net >= 0 ? 'var(--primary)' : 'var(--red)' }}>
+                            {net >= 0 ? '+' : ''}{formatMeso(net)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          {(w.totalSolErdaFragments ?? 0) > 0
+                            ? <span className="text-xs font-semibold" style={{ color: '#c4b5fd' }}>{w.totalSolErdaFragments ?? 0}개</span>
+                            : <span style={{ color: 'var(--text-3)', fontSize: '10px' }}>—</span>
+                          }
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          <span className="text-xs" style={{ color: 'var(--text-3)' }}>
+                            {w.entryCount != null ? `${w.entryCount}건` : '—'}
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )
+        })()}
+      </div>
+
+      {/* 수익 구성 비율 */}
+      <div className="rounded-xl overflow-hidden" style={panelStyle}>
+        <div style={cardHeaderStyle}>
+          <h3 className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--text-2)' }}>📊 수익 구성 비율 ({catStatsRange})</h3>
+        </div>
+        {statsLoading ? (
+          <p className="text-sm text-center py-6 animate-pulse" style={{ color: 'var(--text-3)' }}>불러오는 중...</p>
+        ) : (() => {
+          const incomeStats = catStats.filter((s) => s.type === 'income')
+          const byCategory = Object.fromEntries(incomeStats.map((s) => [s.category, safeNum(s.total)]))
+          const bossAuction = safeNum(byCategory['boss']) + safeNum(byCategory['auction'])
+          const huntingSolErda = safeNum(byCategory['hunting']) + safeNum(byCategory['sol_erda'])
+          const totalIncome = Object.values(byCategory).reduce((a, b) => a + b, 0)
+          const bossAuctionPct = totalIncome > 0 ? (bossAuction / totalIncome) * 100 : 0
+          const huntingSolErdaPct = totalIncome > 0 ? (huntingSolErda / totalIncome) * 100 : 0
+          if (totalIncome === 0) {
+            return <p className="text-xs text-center py-6" style={{ color: 'var(--text-3)' }}>데이터 없음</p>
+          }
+          return (
+            <div className="p-4 space-y-4">
+              {[
+                { label: '⚔️ 보스 + 경매장', value: bossAuction, pct: bossAuctionPct, color: 'var(--primary)', gradient: 'linear-gradient(90deg, var(--primary) 0%, var(--primary-light) 100%)' },
+                { label: '🌲 사냥 + 솔 에르다', value: huntingSolErda, pct: huntingSolErdaPct, color: 'var(--green)', gradient: 'var(--green)' },
+              ].map((row) => (
+                <div key={row.label}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>{row.label}</span>
+                    <span className="text-xs font-bold" style={{ color: row.color }}>{row.pct.toFixed(1)}%</span>
+                  </div>
+                  <div className="rounded-full h-2 overflow-hidden" style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{ width: `${row.pct}%`, background: row.gradient }}
+                    />
+                  </div>
+                  <p className="text-xs mt-1.5" style={{ color: 'var(--text-3)' }}>{formatMeso(row.value)}</p>
+                </div>
+              ))}
+            </div>
+          )
+        })()}
+      </div>
+
+      {/* 캐릭터 현황 */}
+      {characters.length > 0 && (
+        <div className="rounded-xl overflow-hidden" style={panelStyle}>
+          <div style={cardHeaderStyle}>
+            <h3 className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--text-2)' }}>🧙 캐릭터 현황</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ backgroundColor: 'var(--surface-2)', position: 'sticky', top: 0 }}>
+                  {(['캐릭터', '직업', '레벨', '주간 보스', null] as const).map((h, i) => (
+                    <th key={i} className="px-3 py-2 text-left text-xs font-medium" style={thStyle}>
+                      {h === null ? <span className="inline-flex items-center gap-1"><img src="/maple-icons/arcane_symbol.png" alt="" width={12} height={12} style={{ imageRendering: 'pixelated' }} /> 솔 에르다 조각</span> : h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {characters.map((c, i) => {
+                  const bossCount = charBossCounts.get(c.id) ?? 0
+                  const bossColor = bossCount >= 12 ? 'var(--green)' : bossCount === 0 ? 'var(--text-3)' : '#60a5fa'
+                  return (
+                  <tr
+                    key={c.id}
+                    className="table-row"
+                    style={{ borderBottom: i === characters.length - 1 ? 'none' : '1px solid var(--border)' }}
+                  >
+                    <td className="px-3 py-2.5 font-medium" style={{ color: 'var(--text)' }}>
+                      {c.isMain ? '⭐ ' : ''}{c.name}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--text-3)' }}>{c.jobClass ?? '—'}</td>
+                    <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--text-3)' }}>{c.level > 0 ? `Lv.${c.level}` : '—'}</td>
+                    <td className="px-3 py-2.5">
+                      <span className="text-sm font-semibold" style={{ color: bossColor }}>
+                        {bossCount}/12
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span className="text-sm font-semibold" style={{ color: '#c4b5fd' }}>
+                        {(c.solErdaFragments ?? 0).toLocaleString()}개
+                      </span>
+                    </td>
+                  </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
       </div>
 
       {/* 이번 주 캐릭터별 상세 (duplicate removed — moved above divider) */}
@@ -1626,7 +2051,7 @@ export default function DashboardPage() {
                 return (
                   <div key={char.id} className="rounded-xl p-3" style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)' }}>
                     <p className="text-xs font-semibold mb-2" style={{ color: 'var(--text)' }}>
-                      {char.isMain && <Star size={11} fill="currentColor" strokeWidth={0} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '3px', color: 'var(--primary)' }} />}{char.name}
+                      {char.isMain ? '⭐ ' : ''}{char.name}
                     </p>
                     {incomeEntries.length > 0 && (
                       <div className="flex flex-wrap gap-1 mb-1.5">
@@ -1757,575 +2182,154 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* 이번 주 / 전체 통계 구분선 */}
-      <div className="flex items-center gap-3 my-4">
-        <div className="flex-1 h-px" style={{ backgroundColor: 'var(--border-2)' }} />
-        <span
-          className="text-base font-bold px-4 py-2 rounded-full"
-          style={{ backgroundColor: 'var(--surface-2)', border: '1.5px solid var(--border)', color: 'var(--text)' }}
-        >
-          📊 전체 통계
-        </span>
-        <div className="flex-1 h-px" style={{ backgroundColor: 'var(--border-2)' }} />
-      </div>
-
-      {/* 전체 통계: 차트 + 누적 + 수익 구성 */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="rounded-xl p-4" style={panelStyle}>
-          <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text)' }}>📈 주간 수익 추이 <span className="font-normal text-xs" style={{ color: 'var(--text-3)' }}>(최근 4주)</span></h3>
-          {chartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={120}>
-              <BarChart data={chartData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
-                <XAxis dataKey="week" tick={{ fontSize: 9, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} />
-                <YAxis hide />
-                <Tooltip
-                  formatter={(v) => formatMeso(v as number)}
-                  contentStyle={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: '8px', fontSize: '11px' }}
-                  cursor={{ fill: 'var(--primary-dim)' }}
-                />
-                <CartesianGrid strokeDasharray="2 4" stroke="rgba(240,246,252,0.06)" vertical={false} />
-                <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: '10px', color: 'var(--text-2)' }} />
-                <Bar dataKey="수입" fill="#3fb950" radius={[3, 3, 0, 0]} maxBarSize={18} />
-                <Bar dataKey="지출" fill="#f85149" radius={[3, 3, 0, 0]} maxBarSize={18} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <p className="text-xs text-center py-6" style={{ color: 'var(--text-3)' }}>데이터 없음</p>
-          )}
-        </div>
-        <div className="rounded-xl p-4" style={panelStyle}>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>📋 4주 총계</h3>
-            {fourWeekLabel && (
-              <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-3)', border: '1px solid var(--border)' }}>
-                {fourWeekLabel}
-              </span>
-            )}
-          </div>
-          <div className="space-y-2">
-            {[
-              { label: '총 수입', value: fourWeekIncome, color: 'var(--green)', prefix: '+' },
-              { label: '총 지출', value: fourWeekExpense, color: 'var(--red)', prefix: '-' },
-              { label: '총 순수익', value: fourWeekNet, color: fourWeekNet >= 0 ? 'var(--primary)' : 'var(--red)', prefix: fourWeekNet >= 0 ? '+' : '' },
-            ].map((item) => (
-              <div key={item.label} className="flex items-center justify-between py-2 px-3 rounded-lg" style={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-                <span className="text-xs" style={{ color: 'var(--text-3)' }}>{item.label}</span>
-                <span className="text-sm font-bold" style={{ color: item.color }}>{item.prefix}{formatMeso(item.value)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+      {/* 캐릭터별 수입/지출 */}
+      {charStats.length > 0 && (
         <div className="rounded-xl overflow-hidden" style={panelStyle}>
-          <div className="dark-panel-header">
-            <h3 className="text-sm font-semibold flex items-center gap-1.5" style={{ color: 'var(--text)' }}><BarChart2 size={15} strokeWidth={1.75} />수익 구성 비율 <span className="font-normal text-xs" style={{ color: 'var(--text-3)' }}>(최근 4주 · {catStatsRange})</span></h3>
+          <div style={cardHeaderStyle}>
+            <h3 className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--text-2)' }}>📊 캐릭터별 수입/지출</h3>
           </div>
-          {statsLoading ? (
-            <p className="text-sm text-center py-6 animate-pulse" style={{ color: 'var(--text-3)' }}>불러오는 중...</p>
-          ) : (() => {
-            const incomeStats = catStats.filter((s) => s.type === 'income')
-            const byCategory = Object.fromEntries(incomeStats.map((s) => [s.category, safeNum(s.total)]))
-            const bossAuction = safeNum(byCategory['boss']) + safeNum(byCategory['auction'])
-            const huntingSolErda = safeNum(byCategory['hunting']) + safeNum(byCategory['sol_erda'])
-            const totalIncome = Object.values(byCategory).reduce((a, b) => a + b, 0)
-            const bossAuctionPct = totalIncome > 0 ? (bossAuction / totalIncome) * 100 : 0
-            const huntingSolErdaPct = totalIncome > 0 ? (huntingSolErda / totalIncome) * 100 : 0
-            if (totalIncome === 0) {
-              return <p className="text-xs text-center py-6" style={{ color: 'var(--text-3)' }}>데이터 없음</p>
-            }
-            return (
-              <div className="p-4 space-y-4">
-                {[
-                  { key: 'boss', label: <span className="inline-flex items-center gap-1"><img src="/maple-icons/boss.png" alt="" width={13} height={13} style={{ imageRendering: 'pixelated' }} /> 보스 + 경매장</span>, value: bossAuction, pct: bossAuctionPct, color: 'var(--primary)', gradient: 'linear-gradient(90deg, var(--primary) 0%, var(--primary-light) 100%)' },
-                  { key: 'hunting', label: <span className="inline-flex items-center gap-1"><img src="/maple-icons/emblem.png" alt="" width={13} height={13} style={{ imageRendering: 'pixelated' }} /> 사냥 + 솔 에르다</span>, value: huntingSolErda, pct: huntingSolErdaPct, color: 'var(--green)', gradient: 'var(--green)' },
-                ].map((row) => (
-                  <div key={row.key}>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xs font-medium flex items-center gap-1" style={{ color: 'var(--text-2)' }}>{row.label}</span>
-                      <span className="text-xs font-bold" style={{ color: row.color }}>{row.pct.toFixed(1)}%</span>
-                    </div>
-                    <div className="rounded-full h-3 overflow-hidden" style={{ backgroundColor: 'var(--surface-2)' }}>
-                      <div className="h-full rounded-full transition-all" style={{ width: `${row.pct}%`, background: row.gradient }} />
-                    </div>
-                    <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>{formatMeso(row.value)}</p>
-                  </div>
-                ))}
-              </div>
-            )
-          })()}
-        </div>
-      </div>
 
-      {/* 주별 기록 + 캐릭터 현황 2컬럼 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      {/* 주별 기록 테이블 (솔 에르다 조각 + 항목 수 컬럼 포함) */}
-      <div className="rounded-xl overflow-hidden" style={panelStyle}>
-        <div className="dark-panel-header flex items-center justify-between">
-          {(() => {
-            // allWeeks is newest-first (API ORDER BY week_start DESC)
-            // page 0 = most recent 4 weeks; display each page oldest-first
-            const totalWeekPages = Math.ceil(allWeeks.length / 4)
-            const pageSlice = allWeeks.slice(weekPage * 4, (weekPage + 1) * 4)
-            const displayedWeeks = showAllWeeks
-              ? [...allWeeks].reverse()
-              : [...pageSlice].reverse()
-            const pageStart = displayedWeeks[0]?.weekStart
-            const pageEnd = displayedWeeks[displayedWeeks.length - 1]?.weekStart
-            const pageRangeText = (!showAllWeeks && pageStart && pageEnd)
-              ? `${pageStart.slice(5).replace('-', '/')} ~ ${pageEnd.slice(5).replace('-', '/')}`
-              : '전체'
-            return (
-              <>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>📜 주별 기록</h3>
-                  {!showAllWeeks && allWeeks.length > 0 && (
-                    <span className="text-xs" style={{ color: 'var(--text-3)' }}>{pageRangeText}</span>
-                  )}
+          {/* 차트 */}
+          {charStats.some(s => s.totalIncome > 0) && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4" style={{ borderBottom: '1px solid var(--border)' }}>
+              <div>
+                <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-2)' }}>캐릭터별 수입 분포</p>
+                <ResponsiveContainer width="100%" height={160}>
+                  <PieChart>
+                    <Pie
+                      data={charStats.filter(s => s.totalIncome > 0).map(s => ({ name: s.characterName, value: s.totalIncome }))}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={40}
+                      outerRadius={68}
+                      dataKey="value"
+                      paddingAngle={2}
+                    >
+                      {charStats.filter(s => s.totalIncome > 0).map((_, idx) => (
+                        <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(v) => formatMeso(v as number)}
+                      contentStyle={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: '8px', fontSize: '11px' }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 justify-center mt-1">
+                  {charStats.filter(s => s.totalIncome > 0).map((s, idx) => (
+                    <span key={s.characterId} className="flex items-center gap-1 text-xs" style={{ color: 'var(--text-3)' }}>
+                      <span className="w-2 h-2 rounded-full inline-block shrink-0" style={{ backgroundColor: CHART_COLORS[idx % CHART_COLORS.length] }} />
+                      {s.characterName}
+                    </span>
+                  ))}
                 </div>
-                <div className="flex items-center gap-1">
-                  {!showAllWeeks && (
-                    <>
-                      <button
-                        onClick={() => setWeekPage((p) => Math.min(p + 1, totalWeekPages - 1))}
-                        disabled={weekPage >= totalWeekPages - 1}
-                        className="px-2 py-0.5 text-xs rounded"
-                        style={{
-                          backgroundColor: 'var(--surface-2)',
-                          border: '1px solid var(--border)',
-                          color: weekPage >= totalWeekPages - 1 ? 'var(--text-3)' : 'var(--text-2)',
-                          cursor: weekPage >= totalWeekPages - 1 ? 'not-allowed' : 'pointer',
-                        }}
-                      >◀</button>
-                      <span className="text-xs px-1" style={{ color: 'var(--text-3)' }}>
-                        {totalWeekPages > 0 ? `${totalWeekPages - weekPage}/${totalWeekPages}` : ''}
-                      </span>
-                      <button
-                        onClick={() => setWeekPage((p) => Math.max(p - 1, 0))}
-                        disabled={weekPage === 0}
-                        className="px-2 py-0.5 text-xs rounded"
-                        style={{
-                          backgroundColor: 'var(--surface-2)',
-                          border: '1px solid var(--border)',
-                          color: weekPage === 0 ? 'var(--text-3)' : 'var(--text-2)',
-                          cursor: weekPage === 0 ? 'not-allowed' : 'pointer',
-                        }}
-                      >▶</button>
-                    </>
-                  )}
-                  <button
-                    onClick={() => { setShowAllWeeks((v) => !v); setWeekPage(0) }}
-                    className="ml-1 px-2 py-0.5 text-xs rounded"
-                    style={{
-                      backgroundColor: showAllWeeks ? 'var(--primary-dim)' : 'var(--surface-2)',
-                      border: `1px solid ${showAllWeeks ? 'var(--primary)' : 'var(--border)'}`,
-                      color: showAllWeeks ? 'var(--primary)' : 'var(--text-2)',
-                      cursor: 'pointer',
-                    }}
-                  >전체</button>
-                </div>
-              </>
-            )
-          })()}
-        </div>
-        {allWeeksLoading ? (
-          <p className="text-sm text-center py-6 animate-pulse" style={{ color: 'var(--text-3)' }}>불러오는 중...</p>
-        ) : allWeeks.length === 0 ? (
-          <p className="text-sm text-center py-6" style={{ color: 'var(--text-3)' }}>아직 기록이 없어요</p>
-        ) : (() => {
-          const pageSlice = allWeeks.slice(weekPage * 4, (weekPage + 1) * 4)
-          const displayedWeeks = showAllWeeks
-            ? [...allWeeks].reverse()
-            : [...pageSlice].reverse()
-          return (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ backgroundColor: 'var(--surface-2)' }}>
-                    <th className="px-4 py-2 text-left text-xs font-medium" style={thStyle}>주차</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium" style={thStyle}>수입</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium" style={thStyle}>지출</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium" style={thStyle}>순수익</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium" style={{ color: '#a78bfa' }}><span className="inline-flex items-center gap-1"><img src="/maple-icons/arcane_symbol.png" alt="" width={12} height={12} style={{ imageRendering: 'pixelated' }} /> 조각</span></th>
-                    <th className="px-4 py-2 text-right text-xs font-medium" style={thStyle}>항목</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {displayedWeeks.map((w, i, arr) => {
-                    const net = w.totalIncome - w.totalExpense
-                    const isCurrent = weekStartStr === w.weekStart
-                    return (
-                      <tr
-                        key={w.weekStart}
-                        onClick={() => jumpToWeek(w.weekStart)}
-                        className="table-row cursor-pointer"
-                        style={{
-                          backgroundColor: isCurrent ? 'var(--primary-dim)' : undefined,
-                          borderBottom: i === arr.length - 1 ? 'none' : '1px solid var(--border)',
-                        }}
-                      >
-                        <td className="px-4 py-2.5">
-                          <span className="text-sm font-medium" style={{ color: isCurrent ? 'var(--primary)' : 'var(--text)' }}>
-                            {w.weekStart.slice(5).replace('-', '/')} 주
-                          </span>
-                          <span className="block text-xs mt-0.5" style={{ color: isCurrent ? 'var(--primary)' : 'var(--text-3)' }}>
-                            {w.weekStart.slice(5).replace('-', '/')} - {weekEndLabel(w.weekStart)}
-                            {isCurrent && (
-                              <span className="ml-1.5" style={{ color: 'var(--primary)' }}>← 현재</span>
-                            )}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2.5 text-right">
-                          <span className="text-sm" style={{ color: 'var(--green)' }}>+{formatMeso(w.totalIncome)}</span>
-                        </td>
-                        <td className="px-3 py-2.5 text-right">
-                          <span className="text-sm" style={{ color: 'var(--red)' }}>-{formatMeso(w.totalExpense)}</span>
-                        </td>
-                        <td className="px-3 py-2.5 text-right">
-                          <span className="text-sm font-bold" style={{ color: net >= 0 ? 'var(--primary)' : 'var(--red)' }}>
-                            {net >= 0 ? '+' : ''}{formatMeso(net)}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2.5 text-right">
-                          {(w.totalSolErdaFragments ?? 0) > 0
-                            ? <span className="text-xs font-semibold" style={{ color: '#c4b5fd' }}>{w.totalSolErdaFragments ?? 0}개</span>
-                            : <span style={{ color: 'var(--text-3)', fontSize: '10px' }}>—</span>
-                          }
-                        </td>
-                        <td className="px-4 py-2.5 text-right">
-                          <span className="text-xs" style={{ color: 'var(--text-3)' }}>
-                            {w.entryCount != null ? `${w.entryCount}건` : '—'}
-                          </span>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+              </div>
+              <div>
+                <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-2)' }}>수입 vs 지출 비교</p>
+                <ResponsiveContainer width="100%" height={160}>
+                  <BarChart
+                    data={charStats.map(s => ({ name: s.characterName, 수입: s.totalIncome, 지출: s.totalExpense }))}
+                    margin={{ top: 4, right: 0, left: 0, bottom: 0 }}
+                  >
+                    <XAxis dataKey="name" tick={{ fontSize: 9, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} />
+                    <YAxis hide />
+                    <Tooltip
+                      formatter={(v) => formatMeso(v as number)}
+                      contentStyle={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: '8px', fontSize: '11px' }}
+                      cursor={{ fill: 'var(--primary-dim)' }}
+                    />
+                    <CartesianGrid strokeDasharray="2 4" stroke="rgba(240,246,252,0.06)" vertical={false} />
+                    <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: '10px', color: 'var(--text-2)' }} />
+                    <Bar dataKey="수입" fill="#3fb950" radius={[3, 3, 0, 0]} maxBarSize={20} />
+                    <Bar dataKey="지출" fill="#f85149" radius={[3, 3, 0, 0]} maxBarSize={20} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
-          )
-        })()}
-      </div>
+          )}
 
-      {/* 캐릭터 현황 */}
-      {characters.length > 0 && (
-        <div className="rounded-xl overflow-hidden" style={panelStyle}>
-          <div className="dark-panel-header">
-            <h3 className="text-sm font-semibold flex items-center gap-1.5" style={{ color: 'var(--text)' }}><User size={15} strokeWidth={1.75} />캐릭터 현황</h3>
-          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ backgroundColor: 'var(--surface-2)', position: 'sticky', top: 0 }}>
-                  {(['캐릭터', '직업', '레벨', '주간 보스', null] as const).map((h, i) => (
-                    <th key={i} className="px-3 py-2 text-left text-xs font-medium" style={thStyle}>
-                      {h === null ? <span className="inline-flex items-center gap-1"><img src="/maple-icons/arcane_symbol.png" alt="" width={12} height={12} style={{ imageRendering: 'pixelated' }} /> 솔 에르다 조각</span> : h}
-                    </th>
+                  {['캐릭터', '누적 수입', '누적 지출', '순이익'].map((h) => (
+                    <th key={h} className="px-3 py-2 text-left text-xs font-medium" style={thStyle}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {characters.map((c, i) => {
-                  const bossCount = charBossCounts.get(c.id) ?? 0
-                  const bossColor = bossCount >= 12 ? 'var(--green)' : bossCount === 0 ? 'var(--text-3)' : '#60a5fa'
-                  return (
+                {charStats.map((s, i) => (
                   <tr
-                    key={c.id}
+                    key={s.characterId}
                     className="table-row"
-                    style={{ borderBottom: i === characters.length - 1 ? 'none' : '1px solid var(--border)' }}
+                    style={{ borderBottom: i === charStats.length - 1 ? 'none' : '1px solid var(--border)' }}
                   >
                     <td className="px-3 py-2.5 font-medium" style={{ color: 'var(--text)' }}>
-                      {c.isMain && <Star size={11} fill="currentColor" strokeWidth={0} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '3px', color: 'var(--primary)' }} />}{c.name}
+                      {s.isMain ? '⭐ ' : ''}{s.characterName}
                     </td>
-                    <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--text-3)' }}>{c.jobClass ?? '—'}</td>
-                    <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--text-3)' }}>{c.level > 0 ? `Lv.${c.level}` : '—'}</td>
-                    <td className="px-3 py-2.5">
-                      <span className="text-sm font-semibold" style={{ color: bossColor }}>
-                        {bossCount}/12
-                      </span>
+                    <td className="px-3 py-2.5 font-semibold" style={{ color: 'var(--green)' }}>
+                      {formatMeso(s.totalIncome)}
                     </td>
-                    <td className="px-3 py-2.5">
-                      <span className="text-sm font-semibold" style={{ color: '#c4b5fd' }}>
-                        {(c.solErdaFragments ?? 0).toLocaleString()}개
-                      </span>
+                    <td className="px-3 py-2.5 font-semibold" style={{ color: 'var(--red)' }}>
+                      {formatMeso(s.totalExpense)}
+                    </td>
+                    <td className="px-3 py-2.5 font-bold" style={{ color: s.netProfit >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                      {s.netProfit >= 0 ? '+' : ''}{formatMeso(s.netProfit)}
                     </td>
                   </tr>
-                  )
-                })}
+                ))}
               </tbody>
             </table>
           </div>
         </div>
       )}
-      </div>
 
-      {/* 캐릭터별 수입/지출 */}
-      {charStats.length > 0 && (
-        <div className="rounded-xl overflow-hidden" style={panelStyle}>
-          <div className="dark-panel-header">
-            <h3 className="text-sm font-semibold flex items-center gap-1.5" style={{ color: 'var(--text)' }}><BarChart2 size={15} strokeWidth={1.75} />캐릭터별 수입/지출</h3>
-          </div>
-
-          {/* 전체 / 최근 4주 탭 */}
-          <div>
-            <div className="flex" style={{ borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface-2)' }}>
-              {([['all', '전체 누적'], ['4w', `최근 4주 (${catStatsRange})`]] as const).map(([key, label]) => (
-                <button
-                  key={key}
-                  onClick={() => setCharStatsTab(key)}
-                  className="px-4 py-2 text-xs font-semibold transition-all"
-                  style={charStatsTab === key
-                    ? { color: 'var(--primary)', borderBottom: '2px solid var(--primary)', marginBottom: '-1px', backgroundColor: 'transparent' }
-                    : { color: 'var(--text-3)', borderBottom: '2px solid transparent', marginBottom: '-1px' }
-                  }
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            {(() => {
-              const rows = charStatsTab === 'all' ? charStats : charStats4w
-              return (
-                <>
-                  {rows.some(s => s.totalIncome > 0) && (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4" style={{ borderBottom: '1px solid var(--border)' }}>
-                      <div>
-                        <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-2)' }}>캐릭터별 수입 분포</p>
-                        <ResponsiveContainer width="100%" height={160}>
-                          <PieChart>
-                            <Pie
-                              data={rows.filter(s => s.totalIncome > 0).map(s => ({ name: s.characterName, value: s.totalIncome }))}
-                              cx="50%" cy="50%" innerRadius={40} outerRadius={68} dataKey="value" paddingAngle={2}
-                            >
-                              {rows.filter(s => s.totalIncome > 0).map((_, idx) => (
-                                <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
-                              ))}
-                            </Pie>
-                            <Tooltip formatter={(v) => formatMeso(v as number)} contentStyle={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: '8px', fontSize: '11px' }} />
-                          </PieChart>
-                        </ResponsiveContainer>
-                        <div className="flex flex-wrap gap-x-3 gap-y-1 justify-center mt-1">
-                          {rows.filter(s => s.totalIncome > 0).map((s, idx) => (
-                            <span key={s.characterId} className="flex items-center gap-1 text-xs" style={{ color: 'var(--text-3)' }}>
-                              <span className="w-2 h-2 rounded-full inline-block shrink-0" style={{ backgroundColor: CHART_COLORS[idx % CHART_COLORS.length] }} />
-                              {s.characterName}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-2)' }}>수입 vs 지출 비교</p>
-                        <ResponsiveContainer width="100%" height={160}>
-                          <BarChart data={rows.map(s => ({ name: s.characterName, 수입: s.totalIncome, 지출: s.totalExpense }))} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
-                            <XAxis dataKey="name" tick={{ fontSize: 9, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} />
-                            <YAxis hide />
-                            <Tooltip formatter={(v) => formatMeso(v as number)} contentStyle={{ backgroundColor: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: '8px', fontSize: '11px' }} cursor={{ fill: 'var(--primary-dim)' }} />
-                            <CartesianGrid strokeDasharray="2 4" stroke="rgba(240,246,252,0.06)" vertical={false} />
-                            <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: '10px', color: 'var(--text-2)' }} />
-                            <Bar dataKey="수입" fill="#3fb950" radius={[3, 3, 0, 0]} maxBarSize={20} />
-                            <Bar dataKey="지출" fill="#f85149" radius={[3, 3, 0, 0]} maxBarSize={20} />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-                  )}
-                  {rows.length > 0 ? (
-                    <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
-                      <thead>
-                        <tr style={{ backgroundColor: 'var(--surface-2)' }}>
-                          {['캐릭터', '수입', '지출', '순이익'].map((h) => (
-                            <th key={h} className="px-3 py-2 text-left text-xs font-medium" style={thStyle}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {rows.map((s, i) => {
-                          const isExpanded = expandedCharId === s.characterId
-                          const incomeEntries = Object.entries(s.incomeByCategory ?? {}) as [string, number][]
-                          const expenseEntries = Object.entries(s.expenseByCategory ?? {}) as [string, number][]
-                          const hasBreakdown = incomeEntries.length > 0 || expenseEntries.length > 0
-                          return (
-                            <Fragment key={s.characterId}>
-                              <tr
-                                key={s.characterId}
-                                className={`table-row ${hasBreakdown ? 'cursor-pointer select-none' : ''}`}
-                                onClick={() => hasBreakdown && setExpandedCharId(isExpanded ? null : s.characterId)}
-                                style={{ borderBottom: (!isExpanded && i === rows.length - 1) ? 'none' : '1px solid var(--border)' }}
-                              >
-                                <td className="px-3 py-2.5 font-medium" style={{ color: 'var(--text)' }}>
-                                  <span className="flex items-center gap-1.5">
-                                    {hasBreakdown && (
-                                      <span className="text-xs" style={{ color: 'var(--text-3)' }}>{isExpanded ? '▼' : '▶'}</span>
-                                    )}
-                                    {s.isMain && <Star size={11} fill="currentColor" strokeWidth={0} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '3px', color: 'var(--primary)' }} />}{s.characterName}
-                                  </span>
-                                </td>
-                                <td className="px-3 py-2.5 font-semibold" style={{ color: 'var(--green)' }}>{formatMeso(s.totalIncome)}</td>
-                                <td className="px-3 py-2.5 font-semibold" style={{ color: 'var(--red)' }}>{formatMeso(s.totalExpense)}</td>
-                                <td className="px-3 py-2.5 font-bold" style={{ color: s.netProfit >= 0 ? 'var(--green)' : 'var(--red)' }}>{s.netProfit >= 0 ? '+' : ''}{formatMeso(s.netProfit)}</td>
-                              </tr>
-                              {isExpanded && (
-                                <tr style={{ borderBottom: i === rows.length - 1 ? 'none' : '1px solid var(--border)' }}>
-                                  <td colSpan={4} className="px-4 py-3" style={{ backgroundColor: 'var(--surface-2)' }}>
-                                    <div className="grid grid-cols-2 gap-4">
-                                      <div>
-                                        <p className="text-xs font-semibold mb-2 flex items-center gap-1" style={{ color: 'var(--green)' }}><Coins size={12} strokeWidth={1.75} />수입 내역</p>
-                                        {incomeEntries.length > 0 ? (
-                                          <div className="space-y-1.5">
-                                            {incomeEntries.map(([cat, amt]) => {
-                                              const pct = s.totalIncome > 0 ? Math.round((amt / s.totalIncome) * 100) : 0
-                                              return (
-                                                <div key={cat}>
-                                                  <div className="flex items-center justify-between text-xs mb-0.5">
-                                                    <span style={{ color: 'var(--text-2)' }}><MapleIcon category={cat} size={13} /> {CATEGORY_LABELS[cat as EntryCategory] ?? cat}</span>
-                                                    <span className="font-semibold" style={{ color: 'var(--green)' }}>+{formatMeso(amt)}</span>
-                                                  </div>
-                                                  <div className="h-1 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--border)' }}>
-                                                    <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: 'var(--green)' }} />
-                                                  </div>
-                                                </div>
-                                              )
-                                            })}
-                                          </div>
-                                        ) : <p className="text-xs" style={{ color: 'var(--text-3)' }}>없음</p>}
-                                      </div>
-                                      <div>
-                                        <p className="text-xs font-semibold mb-2" style={{ color: 'var(--red)' }}>💸 지출 내역</p>
-                                        {expenseEntries.length > 0 ? (
-                                          <div className="space-y-1.5">
-                                            {expenseEntries.map(([cat, amt]) => {
-                                              const pct = s.totalExpense > 0 ? Math.round((amt / s.totalExpense) * 100) : 0
-                                              return (
-                                                <div key={cat}>
-                                                  <div className="flex items-center justify-between text-xs mb-0.5">
-                                                    <span style={{ color: 'var(--text-2)' }}><MapleIcon category={cat} size={13} /> {CATEGORY_LABELS[cat as EntryCategory] ?? cat}</span>
-                                                    <span className="font-semibold" style={{ color: 'var(--red)' }}>-{formatMeso(amt)}</span>
-                                                  </div>
-                                                  <div className="h-1 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--border)' }}>
-                                                    <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: 'var(--red)' }} />
-                                                  </div>
-                                                </div>
-                                              )
-                                            })}
-                                          </div>
-                                        ) : <p className="text-xs" style={{ color: 'var(--text-3)' }}>없음</p>}
-                                      </div>
-                                    </div>
-                                  </td>
-                                </tr>
-                              )}
-                            </Fragment>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  ) : (
-                    <p className="text-xs text-center py-6" style={{ color: 'var(--text-3)' }}>기록 없음</p>
-                  )}
-                </>
-              )
-            })()}
-          </div>
-        </div>
-      )}
-
-      {/* 서버별 전체/4주 통계 (서버 2개 이상인 경우만) */}
+      {/* 서버별 이번 주 현황 (서버 2개 이상인 경우만) */}
       {isMultiServer && (
-        <div className="rounded-xl overflow-hidden" style={panelStyle}>
-          <div className="dark-panel-header flex items-center justify-between">
-            <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>🗺️ 서버별 통계</h3>
-            <div className="flex gap-1">
-              {(['all', '4w'] as const).map((key) => (
-                <button
-                  key={key}
-                  onClick={() => setServerStatTab(key)}
-                  className="px-2 py-0.5 text-xs rounded font-semibold transition-all"
-                  style={serverStatTab === key
-                    ? { backgroundColor: 'var(--primary-dim)', color: 'var(--primary)', border: '1px solid var(--primary)' }
-                    : { backgroundColor: 'var(--surface-2)', color: 'var(--text-3)', border: '1px solid var(--border)' }
-                  }
-                >{key === 'all' ? '전체' : '4주'}</button>
-              ))}
-            </div>
-          </div>
-          <div className="p-4 space-y-2">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wider mb-3" style={{ color: 'var(--text-3)' }}>
+            서버별 {isThisWeek ? '이번 주' : '해당 주'} 현황
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {user?.serverProfiles?.map((sp) => {
+              const s = serverSummaries[sp.id]
+              const net = (s?.income ?? 0) - (s?.expense ?? 0)
               const isActive = sp.id === activeServer?.id
-              const isExpandedStat = expandedServerStatId === sp.id
-              const statData = serverStatData[sp.id]
-              const rows = statData ? (serverStatTab === 'all' ? statData.all : statData.w4) : null
               return (
                 <div
                   key={sp.id}
-                  className="rounded-xl overflow-hidden"
-                  style={{ border: `1.5px solid ${isActive ? 'var(--primary-glow)' : 'var(--border)'}` }}
+                  className="rounded-xl px-4 py-4"
+                  style={{
+                    backgroundColor: 'var(--surface)',
+                    border: `1px solid ${isActive ? 'var(--primary)' : 'var(--border)'}`,
+                    boxShadow: isActive ? '0 0 0 2px var(--primary-dim)' : '0 1px 3px rgba(0,0,0,0.04)',
+                  }}
                 >
-                  <button
-                    className="w-full px-4 py-3 flex items-center justify-between text-left"
-                    style={{ backgroundColor: isActive ? 'var(--primary-dim)' : 'var(--surface-2)' }}
-                    onClick={() => handleServerStatExpand(sp.id)}
-                  >
-                    <span className="text-xs font-semibold" style={{ color: isActive ? 'var(--primary)' : 'var(--text-2)' }}>
-                      {isActive ? '✓ ' : ''}{sp.worldDisplayName}
-                    </span>
-                    <span className="text-xs" style={{ color: 'var(--text-3)' }}>{isExpandedStat ? '▼' : '▶'}</span>
-                  </button>
-                  {isExpandedStat && (
-                    <div>
-                      {!statData || statData.loading ? (
-                        <p className="text-xs animate-pulse px-4 py-3" style={{ color: 'var(--text-3)' }}>로딩 중...</p>
-                      ) : !rows || rows.length === 0 ? (
-                        <p className="text-xs px-4 py-3" style={{ color: 'var(--text-3)' }}>기록 없음</p>
-                      ) : (
-                        rows.map((s, i) => {
-                          const incEntries = Object.entries(s.incomeByCategory ?? {}) as [string, number][]
-                          const expEntries = Object.entries(s.expenseByCategory ?? {}) as [string, number][]
-                          const isPos = s.netProfit >= 0
-                          return (
-                            <div
-                              key={s.characterId}
-                              className="px-4 py-3 flex flex-col gap-2"
-                              style={{
-                                borderBottom: i < rows.length - 1 ? '1px solid var(--border)' : 'none',
-                                borderLeft: `3px solid ${isPos ? 'var(--green)' : 'var(--red)'}`,
-                              }}
-                            >
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
-                                  {s.isMain && <Star size={11} fill="currentColor" strokeWidth={0} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '3px', color: 'var(--primary)' }} />}{s.characterName}
-                                </span>
-                                {incEntries.map(([cat, amt]) => {
-                                  const cc = CATEGORY_COLORS[cat] ?? { bg: 'rgba(63,185,80,0.12)', color: 'var(--green)' }
-                                  return (
-                                    <span
-                                      key={cat}
-                                      className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap"
-                                      style={{ backgroundColor: cc.bg, color: cc.color }}
-                                    >
-                                      <MapleIcon category={cat} size={13} /> {CATEGORY_LABELS[cat as EntryCategory] ?? cat}
-                                      <span className="font-bold">+{formatMeso(amt)}</span>
-                                    </span>
-                                  )
-                                })}
-                                {expEntries.map(([cat, amt]) => (
-                                  <span
-                                    key={cat}
-                                    className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap"
-                                    style={{ backgroundColor: 'rgba(248,81,73,0.1)', color: 'var(--red)' }}
-                                  >
-                                    <MapleIcon category={cat} size={13} /> {CATEGORY_LABELS[cat as EntryCategory] ?? cat}
-                                    <span className="font-bold">-{formatMeso(amt)}</span>
-                                  </span>
-                                ))}
-                              </div>
-                              <div className="flex items-center gap-4 text-xs">
-                                <span style={{ color: 'var(--text-3)' }}>수입 <span className="font-semibold" style={{ color: 'var(--green)' }}>+{formatMeso(s.totalIncome)}</span></span>
-                                {s.totalExpense > 0 && <span style={{ color: 'var(--text-3)' }}>지출 <span className="font-semibold" style={{ color: 'var(--red)' }}>-{formatMeso(s.totalExpense)}</span></span>}
-                                <span style={{ color: 'var(--text-3)' }}>순수익 <span className="font-bold text-sm" style={{ color: isPos ? 'var(--green)' : 'var(--red)' }}>{isPos ? '+' : ''}{formatMeso(s.netProfit)}</span></span>
-                              </div>
-                            </div>
-                          )
-                        })
-                      )}
+                  <div className="flex items-center gap-1.5 mb-3">
+                    <p className="text-xs font-semibold" style={{ color: isActive ? 'var(--primary)' : 'var(--text)' }}>
+                      {sp.worldDisplayName}
+                    </p>
+                    {isActive && <span className="text-xs px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: 'var(--primary-dim)', color: 'var(--primary)' }}>현재</span>}
+                  </div>
+                  {s ? (
+                    <div className="space-y-0.5">
+                      <p className="text-xs flex justify-between">
+                        <span style={{ color: 'var(--text-3)' }}>수입</span>
+                        <span style={{ color: 'var(--green)' }}>+{formatMeso(s.income)}</span>
+                      </p>
+                      <p className="text-xs flex justify-between">
+                        <span style={{ color: 'var(--text-3)' }}>지출</span>
+                        <span style={{ color: 'var(--red)' }}>-{formatMeso(s.expense)}</span>
+                      </p>
+                      <p className="text-xs flex justify-between font-semibold pt-1" style={{ borderTop: '1px solid var(--border)' }}>
+                        <span style={{ color: 'var(--text-3)' }}>순수익</span>
+                        <span style={{ color: net >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                          {net >= 0 ? '+' : ''}{formatMeso(net)}
+                        </span>
+                      </p>
                     </div>
+                  ) : (
+                    <p className="text-xs animate-pulse" style={{ color: 'var(--text-3)' }}>로딩 중...</p>
                   )}
                 </div>
               )
