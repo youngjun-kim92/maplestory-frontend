@@ -1,5 +1,45 @@
 import client from './client'
-import type { BossDrop, BossDropItem, BossDropSellRequest, BossKill, BossKillRequest, BossMaster, BossStats, DopingItem, ResetType } from '../types'
+import type { BossDrop, BossDropItem, BossDropSellRequest, BossKill, BossKillRequest, BossMaster, BossStats, DopingItem, MapleCharacter, ResetType } from '../types'
+import type { FavoriteItem } from './favorites'
+
+export interface BossPageInit {
+  bossList: BossMaster[]
+  dopingList: DopingItem[]
+  characters: MapleCharacter[]
+  allKills: BossKill[]
+  allFavorites: FavoriteItem[]
+}
+
+// 서버별 init 캐시 (stale-while-revalidate용)
+let _bossInitCache: { data: BossPageInit; serverId: number | null } | null = null
+let _prefetchInFlight = false
+
+export const bossInitCache = {
+  get: (serverId: number | null): BossPageInit | null =>
+    _bossInitCache?.serverId === serverId ? _bossInitCache.data : null,
+  set: (data: BossPageInit, serverId: number | null) => {
+    _bossInitCache = { data, serverId }
+  },
+  patchKills: (kills: BossKill[]) => {
+    if (_bossInitCache) _bossInitCache = { ..._bossInitCache, data: { ..._bossInitCache.data, allKills: kills } }
+  },
+  patchFavorites: (favs: FavoriteItem[]) => {
+    if (_bossInitCache) _bossInitCache = { ..._bossInitCache, data: { ..._bossInitCache.data, allFavorites: favs } }
+  },
+}
+
+export function prefetchBossPage(serverId: number | null): void {
+  if (_bossInitCache?.serverId === serverId) return
+  if (_prefetchInFlight) return
+  _prefetchInFlight = true
+  client.get<BossPageInit>('/boss/init')
+    .then((res) => {
+      res.data.bossList = applyResetTypeOverrides(res.data.bossList)
+      _bossInitCache = { data: res.data, serverId }
+    })
+    .catch(() => {})
+    .finally(() => { _prefetchInFlight = false })
+}
 
 let _dopingCache: DopingItem[] | null = null
 let _bossListCache: BossMaster[] | null = null
@@ -26,6 +66,12 @@ function applyResetTypeOverrides(list: BossMaster[]): BossMaster[] {
 }
 
 export const bossApi = {
+  getPageInit: async (): Promise<{ data: BossPageInit }> => {
+    const res = await client.get<BossPageInit>('/boss/init')
+    res.data.bossList = applyResetTypeOverrides(res.data.bossList)
+    return res
+  },
+
   getBossList: async (): Promise<{ data: BossMaster[] }> => {
     if (_bossListCache) return { data: _bossListCache }
     const res = await client.get<BossMaster[]>('/boss/list')
@@ -103,9 +149,4 @@ export const bossApi = {
   // sold/distributed/listed → holding 롤백 (가계부 원상복구)
   rollbackDrop: (dropId: number) =>
     client.patch<BossDrop>(`/boss/drops/${dropId}/rollback`),
-}
-
-export function prefetchBossPage(_serverId: number | null): void {
-  bossApi.getBossList().catch(() => {})
-  bossApi.getDopingList().catch(() => {})
 }

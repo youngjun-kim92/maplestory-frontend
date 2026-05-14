@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Coins } from 'lucide-react'
 import { huntingApi } from '../api/hunting'
 import { charactersApi, bustCharacterCache } from '../api/characters'
 import { useAuth } from '../contexts/AuthContext'
@@ -160,7 +159,10 @@ export default function HuntingPage() {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>🌲 사냥 기록</h1>
+          <h1 className="text-2xl font-bold flex items-center gap-2" style={{ color: 'var(--text)' }}>
+            <img src="/maple-icons/emblem.png" alt="" width={24} height={24} style={{ imageRendering: 'pixelated' }} />
+            사냥 기록
+          </h1>
           <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>📅 {toDateString(getWeekStart())} 주 (목요일 기준)</p>
         </div>
         {characters.length > 0 ? (
@@ -195,7 +197,10 @@ export default function HuntingPage() {
         {avgFragmentsPerRound !== null && (
           <div className="text-center">
             <p className="text-sm" style={{ color: 'var(--text-2)' }}>소재당 평균 조각</p>
-            <p className="font-bold text-2xl mt-0.5" style={{ color: '#a78bfa' }}>🔮 {avgFragmentsPerRound}개</p>
+            <p className="font-bold text-2xl mt-0.5 flex items-center justify-center gap-1" style={{ color: '#a78bfa' }}>
+              <img src="/maple-icons/arcane_symbol.png" alt="" width={22} height={22} style={{ imageRendering: 'pixelated' }} />
+              {avgFragmentsPerRound}개
+            </p>
           </div>
         )}
         <div className="text-right">
@@ -207,7 +212,7 @@ export default function HuntingPage() {
       {/* ── 50/50: 사냥 기록 폼 + 이번 주 사냥 기록 ── */}
       <div className="grid grid-cols-2 gap-4 items-start">
         {/* Left: 사냥 기록 폼 */}
-        <Card title="사냥 기록" icon="🌲">
+        <Card title="사냥 기록" icon={<img src="/maple-icons/emblem.png" alt="" width={20} height={20} style={{ imageRendering: 'pixelated' }} />}>
           <form onSubmit={handleSubmit} className="space-y-3">
             {/* 입력 모드 토글 */}
             <div className="flex gap-0.5 p-0.5 rounded-xl" style={{ backgroundColor: 'var(--surface-2)', width: 'fit-content' }}>
@@ -274,8 +279,9 @@ export default function HuntingPage() {
                     ))}
                   </div>
                   {selectedChar !== undefined && (
-                    <p className="text-xs mt-1 pl-0.5" style={{ color: '#a78bfa' }}>
-                      🔮 현재 보유: {selectedChar.solErdaFragments.toLocaleString()}개
+                    <p className="text-xs mt-1 pl-0.5 flex items-center gap-1" style={{ color: '#a78bfa' }}>
+                      <img src="/maple-icons/arcane_symbol.png" alt="" width={13} height={13} style={{ imageRendering: 'pixelated' }} />
+                      현재 보유: {selectedChar.solErdaFragments.toLocaleString()}개
                     </p>
                   )}
                 </div>
@@ -283,7 +289,7 @@ export default function HuntingPage() {
             ) : (
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <p className="text-xs font-medium flex items-center gap-1" style={{ color: 'var(--text-3)' }}><Coins size={12} strokeWidth={1.75} />메소</p>
+                  <p className="text-xs font-medium" style={{ color: 'var(--text-3)' }}>💰 메소</p>
                   <Input
                     label="사냥 전 메소"
                     type="number"
@@ -310,7 +316,10 @@ export default function HuntingPage() {
                   })()}
                 </div>
                 <div className="space-y-2">
-                  <p className="text-xs font-medium" style={{ color: 'var(--text-3)' }}>🔮 솔 에르다 조각</p>
+                  <p className="text-xs font-medium flex items-center gap-1" style={{ color: 'var(--text-3)' }}>
+                    <img src="/maple-icons/arcane_symbol.png" alt="" width={13} height={13} style={{ imageRendering: 'pixelated' }} />
+                    솔 에르다 조각
+                  </p>
                   <Input
                     label="사냥 전 조각"
                     type="number"
@@ -341,7 +350,7 @@ export default function HuntingPage() {
 
             {inputMode === 'direct' && form.solErdaFragments && Number(form.solErdaFragments) > 0 && erdaPrice > 0 && (
               <p className="text-xs pl-1" style={{ color: 'var(--text-2)' }}>
-                🔮 {form.solErdaFragments}개 × {erdaPrice.toLocaleString()}메소 = {formatMeso(Number(form.solErdaFragments) * erdaPrice)} 메소
+                <img src="/maple-icons/arcane_symbol.png" alt="" width={13} height={13} style={{ imageRendering: 'pixelated', verticalAlign: 'middle' }} /> {form.solErdaFragments}개 × {erdaPrice.toLocaleString()}메소 = {formatMeso(Number(form.solErdaFragments) * erdaPrice)} 메소
               </p>
             )}
             <div className="grid grid-cols-2 gap-3">
@@ -395,7 +404,7 @@ export default function HuntingPage() {
         {/* Right: 이번 주 사냥 기록 */}
         <div
           className="rounded-2xl overflow-hidden flex flex-col"
-          style={{ backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', boxShadow: 'var(--shadow)' }}
+          style={{ backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', boxShadow: 'var(--shadow)', maxHeight: 'calc(100vh - 264px)' }}
         >
           <div
             className="flex items-center gap-2 px-3 py-2.5 shrink-0"
@@ -404,7 +413,7 @@ export default function HuntingPage() {
             <span className="text-lg">📋</span>
             <h2 className="font-semibold text-base" style={{ color: 'var(--text)' }}>이번 주 사냥 기록</h2>
           </div>
-          <div className="overflow-y-auto" style={{ maxHeight: '460px' }}>
+          <div className="overflow-y-auto flex-1 min-h-0">
             {sessions.length === 0 ? (
               <div className="px-4 py-8 flex flex-col items-center gap-2">
                 <img src="/maple-icons/emblem.png" alt="" width={36} height={36} className="opacity-30" style={{ imageRendering: 'pixelated' }} />

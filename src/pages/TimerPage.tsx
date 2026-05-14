@@ -16,14 +16,29 @@ function formatTime(seconds: number) {
 function playAlarm(volume: number) {
   try {
     const ctx = new AudioContext()
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.connect(gain)
-    gain.connect(ctx.destination)
-    gain.gain.value = volume / 100
-    osc.frequency.value = 880
-    osc.start()
-    setTimeout(() => { osc.stop(); ctx.close() }, 1000)
+    const master = ctx.createGain()
+    master.gain.value = volume / 100
+    master.connect(ctx.destination)
+
+    // 부드러운 2음 차임벨 (C6 → G5)
+    const notes = [1047, 784]
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator()
+      const env = ctx.createGain()
+      osc.connect(env)
+      env.connect(master)
+      osc.type = 'sine'
+      osc.frequency.value = freq
+
+      const t = ctx.currentTime + i * 0.28
+      env.gain.setValueAtTime(0, t)
+      env.gain.linearRampToValueAtTime(0.55, t + 0.015)
+      env.gain.exponentialRampToValueAtTime(0.001, t + 1.1)
+      osc.start(t)
+      osc.stop(t + 1.15)
+    })
+
+    setTimeout(() => ctx.close(), 2000)
   } catch { /* ignore */ }
 }
 
@@ -56,8 +71,7 @@ export default function TimerPage() {
     if (timeLeft === 0 && timerPreset !== null && !isRunning && !alarmFiredRef.current) {
       alarmFiredRef.current = true
       playAlarm(volume)
-      setTimeout(() => playAlarm(volume), 1000)
-      setTimeout(() => playAlarm(volume), 2000)
+      setTimeout(() => playAlarm(volume), 1500)
     }
     if (timeLeft > 0) alarmFiredRef.current = false
   }, [timeLeft, timerPreset, isRunning, volume])

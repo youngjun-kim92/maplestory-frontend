@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { ShoppingBag, Coins, Calendar, TrendingDown } from 'lucide-react'
 import { ledgerApi } from '../api/ledger'
 import { charactersApi } from '../api/characters'
 import { bossApi } from '../api/boss'
@@ -269,8 +268,8 @@ export default function ShopPage() {
       {/* 헤더 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2" style={{ color: 'var(--text)' }}><ShoppingBag size={24} strokeWidth={1.75} />상점</h1>
-          <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: 'var(--text-2)' }}><Calendar size={11} strokeWidth={1.75} />{toDateString(getWeekStart())} 주 (목요일 기준)</p>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>🛒 상점</h1>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>📅 {toDateString(getWeekStart())} 주 (목요일 기준)</p>
         </div>
         {characters.length > 0 ? (
           <select
@@ -320,8 +319,8 @@ export default function ShopPage() {
       {/* 탭 */}
       <div className="flex gap-2">
         {([
-          { key: 'income',  label: <span className="flex items-center gap-1"><Coins size={14} strokeWidth={1.75} />판매 수입</span> },
-          { key: 'expense', label: <span className="flex items-center gap-1"><ShoppingBag size={14} strokeWidth={1.75} />아이템 구매</span> },
+          { key: 'income', label: '💰 판매 수입' },
+          { key: 'expense', label: '🛍️ 아이템 구매' },
         ] as const).map((t) => (
           <button
             key={t.key}
@@ -339,7 +338,7 @@ export default function ShopPage() {
       <div className="rounded-xl p-4 space-y-3" style={panelStyle}>
         {tab === 'income' ? (
           <>
-            <h3 className="text-base font-semibold flex items-center gap-1.5" style={{ color: 'var(--text)' }}><Coins size={16} strokeWidth={1.75} />판매 수입 기록</h3>
+            <h3 className="text-base font-semibold" style={{ color: 'var(--text)' }}>💰 판매 수입 기록</h3>
             <form onSubmit={handleIncomeSubmit} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <AutocompleteInput

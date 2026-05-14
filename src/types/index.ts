@@ -219,6 +219,14 @@ export interface DopingItem {
   effect: string
 }
 
+// ====== 도핑 타입 ======
+export interface DopingItem {
+  id: number
+  name: string
+  price: number
+  effect: string
+}
+
 // ====== 사냥 타입 ======
 export interface HuntingSession {
   id: number
@@ -341,6 +349,6 @@ export interface CharacterStatsResponse {
   totalExpense: number
   netProfit: number
   entryCount: number
-  incomeByCategory?: Record<string, number>
-  expenseByCategory?: Record<string, number>
+  incomeByCategory: Partial<Record<EntryCategory, number>>
+  expenseByCategory: Partial<Record<EntryCategory, number>>
 }

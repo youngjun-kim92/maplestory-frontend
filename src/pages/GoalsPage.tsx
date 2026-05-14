@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Target } from 'lucide-react'
 import { goalsApi } from '../api/goals'
 import type { Goal, GoalEstimate } from '../types'
 import { formatMeso } from '../utils/format'
@@ -93,7 +92,7 @@ export default function GoalsPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold font-heading flex items-center gap-2" style={{ color: 'var(--text)' }}><Target size={22} strokeWidth={1.75} />목표 아이템</h1>
+        <h1 className="text-xl font-bold font-heading" style={{ color: 'var(--text)' }}>🎯 목표 아이템</h1>
         <Button
           onClick={() => {
             setShowForm((v) => !v)
@@ -108,7 +107,7 @@ export default function GoalsPage() {
 
       {/* 목표 추가/수정 폼 */}
       {showForm && (
-        <Card title={editingId ? '목표 수정' : '새 목표 추가'} icon={<Target size={18} strokeWidth={1.75} />}>
+        <Card title={editingId ? '목표 수정' : '새 목표 추가'} icon="🎯">
           <form onSubmit={handleSubmit} className="space-y-3">
             <Input
               label="아이템 이름"

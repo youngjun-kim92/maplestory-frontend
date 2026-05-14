@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Coins, TrendingDown, Package } from 'lucide-react'
 import { ledgerApi } from '../api/ledger'
 import { authApi } from '../api/auth'
 import { charactersApi } from '../api/characters'
@@ -263,7 +262,7 @@ export default function AuctionPage() {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>🏪 경매장</h1>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>경매장</h1>
           <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>📅 {toDateString(getWeekStart())} 주 (목요일 기준)</p>
         </div>
         {characters.length > 0 && (
@@ -312,8 +311,8 @@ export default function AuctionPage() {
           {/* 탭 */}
           <div className="col-start-1 row-start-1 flex gap-2">
             {([
-              { key: 'income',  label: <span className="flex items-center gap-1"><Coins size={14} strokeWidth={1.75} />경매장 수입</span> },
-              { key: 'expense', label: <span className="flex items-center gap-1"><TrendingDown size={14} strokeWidth={1.75} />경매장 지출</span> },
+              { key: 'income', label: '💰 경매장 수입' },
+              { key: 'expense', label: '💸 경매장 지출' },
             ] as const).map((t) => (
               <button
                 key={t.key}
@@ -327,11 +326,11 @@ export default function AuctionPage() {
           </div>
           <div className="col-start-1 row-start-2">
           {tab === 'income' ? (
-        <Card title="경매장 판매 수입" icon={<Coins size={18} strokeWidth={1.75} />}>
+        <Card title="경매장 판매 수입" icon="💰">
           <form onSubmit={handleIncomeSubmit} className="space-y-3">
             {/* 판매 유형 탭 */}
             <div className="flex gap-2">
-              {([['item', <span key="item" className="flex items-center gap-1"><Package size={13} strokeWidth={1.75} />아이템</span>], ['sol_erda', <span key="sol_erda" className="flex items-center gap-1"><img src="/maple-icons/arcane_symbol.png" alt="" width={14} height={14} style={{ imageRendering: 'pixelated' }} />솔 에르다 조각</span>]] as const).map(([mode, label]) => (
+              {([['item', <span key="item" className="flex items-center gap-1">🎁 아이템</span>], ['sol_erda', <span key="sol_erda" className="flex items-center gap-1"><img src="/maple-icons/arcane_symbol.png" alt="" width={14} height={14} style={{ imageRendering: 'pixelated' }} /> 솔 에르다 조각</span>]] as const).map(([mode, label]) => (
                 <button
                   key={mode}
                   type="button"
@@ -391,7 +390,7 @@ export default function AuctionPage() {
                   </div>
                 )}
                 <div className="space-y-1.5">
-                  <p className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>🔮 조각 단가 설정</p>
+                  <p className="text-xs font-semibold flex items-center gap-1" style={{ color: 'var(--text-2)' }}><img src="/maple-icons/arcane_symbol.png" alt="" width={14} height={14} style={{ imageRendering: 'pixelated' }} /> 조각 단가 설정</p>
                   <div className="flex gap-2 items-center">
                     <input
                       type="number"
@@ -668,19 +667,19 @@ export default function AuctionPage() {
         {/* 이번 주 경매장 내역 */}
         <div
           className="col-start-2 row-start-2 rounded-2xl overflow-hidden flex flex-col"
-          style={{ backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', boxShadow: 'var(--shadow)', maxHeight: 'calc(100vh - 264px)' }}
+          style={{ backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', boxShadow: 'var(--shadow)', maxHeight: 'calc(100vh - 316px)' }}
         >
           <div className="flex items-center gap-2 px-3 py-2.5 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
             <span className="text-lg">📋</span>
             <h2 className="font-semibold text-base" style={{ color: 'var(--text)' }}>이번 주 경매장 내역</h2>
             <span className="text-xs ml-auto" style={{ color: 'var(--text-3)' }}>{auctionEntries.length}건</span>
           </div>
-          <div className="overflow-y-auto flex-1 min-h-0 p-3">
+          <div className="overflow-y-auto flex-1 min-h-0">
         {auctionEntries.length === 0 ? (
           <p className="text-sm text-center py-6" style={{ color: 'var(--text-3)' }}>이번 주 경매장 기록이 없습니다.</p>
         ) : (
-          <div className="space-y-1.5">
-            {[...auctionEntries].sort((a, b) => b.entryDate.localeCompare(a.entryDate)).map((entry: LedgerEntry) => (
+          <div className="space-y-1.5 p-3">
+            {[...incomeEntries, ...expenseEntries].map((entry: LedgerEntry) => (
               <div key={entry.id} className="rounded-lg overflow-hidden" style={{ border: editingId === entry.id ? '1px solid var(--primary-glow)' : '1px solid transparent' }}>
                 <div className="list-row">
                   <div className="flex items-center gap-3 min-w-0">

@@ -90,7 +90,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
   hunting: '사냥',
   trade: '거래',
   auction: '경매장',
-  sol_erda: '솔에르다',
+  sol_erda: '솔 에르다 조각',
   cube: '큐브',
   starforce: '스타포스',
   spell_trace: '주문서',
@@ -107,21 +107,17 @@ export const DIFFICULTY_LABELS: Record<string, string> = {
   extreme: '익스트림',
 }
 
+const DIFFICULTY_ORDER = ['easy', 'normal', 'hard', 'chaos', 'extreme']
+
+export function sortDifficulties(diffs: string[]): string[] {
+  return [...diffs].sort(
+    (a, b) => DIFFICULTY_ORDER.indexOf(a.toLowerCase()) - DIFFICULTY_ORDER.indexOf(b.toLowerCase())
+  )
+}
+
 export function difficultyLabel(difficulty: string): string {
   return DIFFICULTY_LABELS[difficulty.toLowerCase()] ?? difficulty
 }
-
-const DIFFICULTY_ORDER = ['easy', 'normal', 'hard', 'chaos', 'extreme']
-
-export function sortDifficulties(difficulties: string[]): string[] {
-  return [...difficulties].sort((a, b) => {
-    const ai = DIFFICULTY_ORDER.indexOf(a.toLowerCase())
-    const bi = DIFFICULTY_ORDER.indexOf(b.toLowerCase())
-    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi)
-  })
-}
-
-export const CATEGORY_ICON_IMGS: Record<string, string> = {}
 
 export const CATEGORY_ICONS: Record<string, string> = {
   boss: '⚔️',
@@ -135,4 +131,14 @@ export const CATEGORY_ICONS: Record<string, string> = {
   additional_option: '🪄',
   doping: '💊',
   other: '💫',
+}
+
+export const CATEGORY_ICON_IMGS: Record<string, string> = {
+  boss: '/maple-icons/boss.png',
+  cube: '/maple-icons/cube.png',
+  sol_erda: '/maple-icons/arcane_symbol.png',
+  spell_trace: '/maple-icons/tome.png',
+  additional_option: '/maple-icons/heart.png',
+  starforce: '/maple-icons/secondary.png',
+  hunting: '/maple-icons/emblem.png',
 }

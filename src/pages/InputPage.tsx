@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { PenLine, Calculator } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { bossApi } from '../api/boss'
 import { ledgerApi } from '../api/ledger'
@@ -534,7 +533,7 @@ function GeneralSection({ characters }: { characters: MapleCharacter[] }) {
           {/* 인벤 계산 토글 — 지출이고 솔에르다가 아닐 때 */}
           {type === 'expense' && !isSolErda && (
             <div className="flex gap-2">
-              {([['direct', <span key="d" className="flex items-center gap-1"><PenLine size={13} strokeWidth={1.75} />직접 입력</span>], ['calc', <span key="c" className="flex items-center gap-1"><Calculator size={13} strokeWidth={1.75} />인벤 계산</span>]] as const).map(([mode, label]) => (
+              {([['direct', '✏️ 직접 입력'], ['calc', '🧮 인벤 계산']] as const).map(([mode, label]) => (
                 <button
                   key={mode}
                   type="button"

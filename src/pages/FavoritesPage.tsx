@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Star, Pill } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { favoritesApi, type FavoriteItem, type FavoriteType } from '../api/favorites'
 import { bossApi } from '../api/boss'
@@ -66,7 +65,7 @@ export default function FavoritesPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold font-heading flex items-center gap-2" style={{ color: 'var(--text)' }}><Star size={20} strokeWidth={1.75} />즐겨찾기</h1>
+        <h1 className="text-xl font-bold font-heading" style={{ color: 'var(--text)' }}>⭐ 즐겨찾기</h1>
         <Button size="sm" onClick={() => setShowAddModal(true)}>+ 추가</Button>
       </div>
 
@@ -221,7 +220,7 @@ function AddFavoriteModal({
           <h2 className="font-bold text-base" style={{ color: 'var(--text)' }}>
             {tab === 'BOSS'
               ? <span className="flex items-center gap-1.5"><img src="/maple-icons/boss.png" alt="" width={18} height={18} style={{ imageRendering: 'pixelated' }} /> 보스 템플릿 추가</span>
-              : <span className="flex items-center gap-1.5"><Pill size={16} strokeWidth={1.75} />도핑 템플릿 추가</span>
+              : '💊 도핑 템플릿 추가'
             }
           </h2>
           <button

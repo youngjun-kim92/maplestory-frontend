@@ -17,8 +17,10 @@ const ENHANCE_CATEGORIES: { value: EntryCategory; label: string }[] = [
   { value: 'additional_option', label: '추가옵션' },
 ]
 
+const ENHANCE_ENTRY_CATEGORIES = new Set(['cube', 'starforce', 'additional_option', 'spell_trace'])
+
 export default function LedgerPage() {
-  const { user, refreshUser, activeServer, activeServerId } = useAuth()
+  const { refreshUser, activeServer, activeServerId } = useAuth()
   const [ledger, setLedger] = useState<WeeklyLedger | null>(null)
   const [characters, setCharacters] = useState<MapleCharacter[]>([])
   const [loading, setLoading] = useState(true)
@@ -86,6 +88,7 @@ export default function LedgerPage() {
       })
       if (form.description.trim()) saveToHistory('ledger_memo', form.description.trim())
       setForm((p) => ({ ...p, amount: '', description: '' }))
+      setCalcBefore({ meso: '' })
       setCalcAfter({ meso: '' })
       await fetchLedger(selectedCharId)
       await refreshUser()
@@ -132,9 +135,8 @@ export default function LedgerPage() {
     }
   }
 
-  const EXCLUDED_CATEGORIES = new Set(['doping', 'boss', 'hunting', 'auction'])
   const expenseEntries = ledger?.entries.filter(
-    (e) => e.type === 'expense' && !EXCLUDED_CATEGORIES.has(e.category)
+    (e) => e.type === 'expense' && ENHANCE_ENTRY_CATEGORIES.has(e.category)
   ) ?? []
 
   const effectiveAmount = inputMode === 'calc' ? calcAmount : Number(form.amount)
@@ -152,7 +154,7 @@ export default function LedgerPage() {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2" style={{ color: 'var(--text)' }}><img src="/maple-icons/cube.png" alt="" width={26} height={26} style={{ imageRendering: 'pixelated' }} />메소 강화</h1>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>🔩 메소 강화</h1>
           {ledger && (
             <p className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>
               📅 {ledger.weekStart} 주 (목요일 기준)
@@ -176,22 +178,15 @@ export default function LedgerPage() {
 
       {/* 주간 요약 */}
       {ledger && (
-        <div className="grid grid-cols-2 gap-3">
-          <div className="stat-card stat-card-expense">
-            <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-2)' }}>이번 주 지출</p>
-            <p className="font-bold text-lg" style={{ color: 'var(--red)' }}>{formatMeso(ledger.summary.totalExpense)}</p>
-          </div>
-          <div className={`stat-card ${ledger.summary.netProfit >= 0 ? 'stat-card-net-pos' : 'stat-card-net-neg'}`}>
-            <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-2)' }}>순수익</p>
-            <p className="font-bold text-lg" style={{ color: ledger.summary.netProfit >= 0 ? 'var(--orange-light)' : 'var(--red)' }}>
-              {ledger.summary.netProfit >= 0 ? '+' : ''}{formatMeso(ledger.summary.netProfit)}
-            </p>
-          </div>
+        <div className="stat-card stat-card-expense">
+          <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-2)' }}>이번 주 메소 강화 지출</p>
+          <p className="font-bold text-lg" style={{ color: 'var(--red)' }}>{formatMeso(ledger.summary.totalExpense)}</p>
         </div>
       )}
 
+      <div className="grid grid-cols-2 gap-4 items-start">
       {/* 메소 강화 입력 폼 */}
-      <Card title="메소 강화 지출" icon={<img src="/maple-icons/cube.png" alt="" width={20} height={20} style={{ imageRendering: 'pixelated' }} />}>
+      <Card title="메소 강화 지출" icon="🔩">
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-2)' }}>카테고리</p>
@@ -429,6 +424,7 @@ export default function LedgerPage() {
           </div>
         )}
         </div>
+      </div>
       </div>
     </div>
   )

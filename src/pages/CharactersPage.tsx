@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react'
-import { User } from 'lucide-react'
 import { charactersApi } from '../api/characters'
 import { useAuth } from '../contexts/AuthContext'
 import type { CharacterROI, MapleCharacter } from '../types'
@@ -49,13 +48,13 @@ export default function CharactersPage() {
 
   // 일괄 등록 상태
   const [showBulkModal, setShowBulkModal] = useState(false)
-  const [bulkRows, setBulkRows] = useState<{ name: string; jobClass: string; level: string; isMain: boolean }[]>(
-    [{ name: '', jobClass: '', level: '', isMain: false }]
+  const [bulkRows, setBulkRows] = useState<{ name: string; jobClass: string; level: string; solErdaFragments: string; isMain: boolean }[]>(
+    [{ name: '', jobClass: '', level: '', solErdaFragments: '', isMain: false }]
   )
   const [bulkSubmitting, setBulkSubmitting] = useState(false)
 
   const addBulkRow = () =>
-    setBulkRows((p) => [...p, { name: '', jobClass: '', level: '', isMain: false }])
+    setBulkRows((p) => [...p, { name: '', jobClass: '', level: '', solErdaFragments: '', isMain: false }])
 
   const removeBulkRow = (i: number) =>
     setBulkRows((p) => p.filter((_, idx) => idx !== i))
@@ -80,10 +79,11 @@ export default function CharactersPage() {
           jobClass: r.jobClass || undefined,
           level: r.level ? Number(r.level) : undefined,
           isMain: r.isMain,
+          solErdaFragments: r.solErdaFragments ? Number(r.solErdaFragments) : undefined,
         }))
       )
       setShowBulkModal(false)
-      setBulkRows([{ name: '', jobClass: '', level: '', isMain: false }])
+      setBulkRows([{ name: '', jobClass: '', level: '', solErdaFragments: '', isMain: false }])
       await Promise.all([fetchCharacters(), refreshUser()])
     } finally {
       setBulkSubmitting(false)
@@ -201,7 +201,17 @@ export default function CharactersPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold font-heading flex items-center gap-2" style={{ color: 'var(--text)' }}><User size={24} strokeWidth={1.75} />캐릭터 관리</h1>
+            <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold font-heading" style={{ color: 'var(--text)' }}>🧙 캐릭터 관리</h1>
+            {activeServer && (
+              <span
+                className="px-2 py-0.5 rounded-full text-xs font-semibold"
+                style={{ backgroundColor: 'var(--primary-dim)', color: 'var(--primary)', border: '1px solid var(--primary-glow)' }}
+              >
+                🗺️ {activeServer.worldDisplayName}
+              </span>
+            )}
+          </div>
             {activeServer && (
               <span
                 className="px-2 py-0.5 rounded-full text-xs font-semibold"
@@ -252,16 +262,16 @@ export default function CharactersPage() {
             <form onSubmit={handleBulkSubmit} className="flex flex-col flex-1 overflow-hidden">
               <div className="overflow-y-auto flex-1 p-4 space-y-2">
                 {/* 테이블 헤더 */}
-                <div className="grid gap-2 px-1 mb-1" style={{ gridTemplateColumns: '1fr 1.2fr 70px 50px 32px' }}>
-                  {['캐릭터명 *', '직업', '레벨', '메인', ''].map((h) => (
-                    <span key={h} className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>
-                      {h}
+                <div className="grid gap-2 px-1 mb-1" style={{ gridTemplateColumns: '1fr 1.2fr 70px 70px 50px 32px' }}>
+                  {(['캐릭터명 *', '직업', '레벨', null, '메인', ''] as const).map((h, i) => (
+                    <span key={i} className="text-xs font-semibold uppercase tracking-wide flex items-center gap-1" style={{ color: 'var(--text-3)' }}>
+                      {h === null ? <><img src="/maple-icons/arcane_symbol.png" alt="" width={12} height={12} style={{ imageRendering: 'pixelated' }} /> 조각</> : h}
                     </span>
                   ))}
                 </div>
 
                 {bulkRows.map((row, i) => (
-                  <div key={i} className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr 1.2fr 70px 50px 32px' }}>
+                  <div key={i} className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr 1.2fr 70px 70px 50px 32px' }}>
                     <input
                       className="form-field text-sm"
                       placeholder="닉네임"
@@ -290,6 +300,14 @@ export default function CharactersPage() {
                       max={300}
                       value={row.level}
                       onChange={(e) => updateBulkRow(i, 'level', e.target.value)}
+                    />
+                    <input
+                      className="form-field text-sm"
+                      type="number"
+                      placeholder="0"
+                      min={0}
+                      value={row.solErdaFragments}
+                      onChange={(e) => updateBulkRow(i, 'solErdaFragments', e.target.value)}
                     />
                     <div className="flex justify-center">
                       <input
@@ -351,7 +369,7 @@ export default function CharactersPage() {
 
       {/* Add/Edit form */}
       {showForm && (
-        <Card title={editingId ? '캐릭터 수정' : '캐릭터 추가'} icon={<User size={18} strokeWidth={1.75} />}>
+        <Card title={editingId ? '캐릭터 수정' : '캐릭터 추가'} icon="🧙">
           {!editingId && characters.length === 0 && (
             <div
               className="mb-3 p-3 rounded-xl text-sm"
@@ -422,6 +440,21 @@ export default function CharactersPage() {
                 </p>
               )}
             </div>
+            <div>
+              <Input
+                label="솔 에르다 조각 보유량"
+                type="number"
+                placeholder="0"
+                value={form.solErdaFragments}
+                onChange={(e) => setForm((p) => ({ ...p, solErdaFragments: e.target.value }))}
+                min={0}
+              />
+              {editingId && (
+                <p className="text-xs mt-1 pl-1" style={{ color: 'var(--text-3)' }}>
+                  사냥 기록 시 자동 누적됩니다. 맞지 않을 때만 수정하세요.
+                </p>
+              )}
+            </div>
             {form.initialInvestment && (
               <p className="text-xs pl-1" style={{ color: 'var(--text-2)' }}>
                 = {formatMeso(Number(form.initialInvestment))}
@@ -450,8 +483,24 @@ export default function CharactersPage() {
       {characters.length === 0 && (
         <Card>
           <div className="text-center py-8">
-            <div className="mb-2 flex justify-center opacity-30"><User size={36} strokeWidth={1.5} /></div>
+            <p className="text-3xl mb-2">🧙</p>
             <p className="text-sm" style={{ color: 'var(--text-3)' }}>캐릭터를 추가해보세요!</p>
+          </div>
+        </Card>
+      )}
+
+      {/* 솔 에르다 조각 합계 */}
+      {characters.length > 0 && (
+        <Card icon={<img src="/maple-icons/arcane_symbol.png" alt="" width={20} height={20} style={{ imageRendering: 'pixelated' }} />} title="솔 에르다 조각 보유 현황">
+          <p className="text-xs mb-2" style={{ color: 'var(--text-2)' }}>
+            캐릭터별로 보유한 조각 수를 입력하면 합계를 확인할 수 있습니다.
+          </p>
+          <div
+            className="flex items-center justify-between px-3 py-2 rounded-xl"
+            style={{ backgroundColor: 'var(--primary-dim)', border: '1px solid var(--primary-glow)' }}
+          >
+            <span className="text-sm font-semibold" style={{ color: 'var(--text-2)' }}>전체 합계</span>
+            <span className="font-bold" style={{ color: 'var(--primary)' }}>{totalFragments.toLocaleString()}개</span>
           </div>
         </Card>
       )}
@@ -483,6 +532,7 @@ export default function CharactersPage() {
               key={c.id}
               char={c}
               roi={rois[c.id]}
+
               onEdit={() => handleEdit(c)}
               onDelete={() => setDeleteConfirmId(c.id)}
             />
@@ -501,6 +551,7 @@ export default function CharactersPage() {
               key={c.id}
               char={c}
               roi={rois[c.id]}
+
               onEdit={() => handleEdit(c)}
               onDelete={() => setDeleteConfirmId(c.id)}
             />
@@ -587,6 +638,14 @@ function CharacterCard({
       {/* 솔 에르다 조각 */}
       <div className="flex items-center gap-2 pt-2" style={{ borderTop: '1px solid var(--border)' }}>
         <span className="text-xs flex items-center gap-1" style={{ color: 'var(--text-2)' }}><img src="/maple-icons/arcane_symbol.png" alt="" width={13} height={13} style={{ imageRendering: 'pixelated' }} /> 솔 에르다 조각</span>
+        <span className="font-semibold text-xs" style={{ color: 'var(--primary)' }}>
+          {(char.solErdaFragments ?? 0).toLocaleString()}개
+        </span>
+      </div>
+
+      {/* 솔 에르다 조각 */}
+      <div className="flex items-center gap-2 pt-2" style={{ borderTop: '1px solid var(--border)' }}>
+        <span className="text-xs" style={{ color: 'var(--text-2)' }}>🔮 솔 에르다 조각</span>
         <span className="font-semibold text-xs" style={{ color: 'var(--primary)' }}>
           {(char.solErdaFragments ?? 0).toLocaleString()}개
         </span>

@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Target } from 'lucide-react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell, // Cell used inside Pie
@@ -175,7 +174,7 @@ export default function StatsPage() {
 
       {/* Goals section */}
       <div className="flex items-center justify-between">
-        <h2 className="font-bold font-diary flex items-center gap-1.5" style={{ color: 'var(--text)' }}><Target size={18} strokeWidth={1.75} />목표 아이템</h2>
+        <h2 className="font-bold font-diary" style={{ color: 'var(--text)' }}>🎯 목표 아이템</h2>
         <Button size="sm" onClick={() => setShowGoalForm((v) => !v)}>
           {showGoalForm ? '취소' : '+ 목표 추가'}
         </Button>
@@ -215,7 +214,7 @@ export default function StatsPage() {
       {activeGoals.length === 0 && !showGoalForm && (
         <Card>
           <div className="text-center py-6">
-            <div className="mb-2 flex justify-center opacity-30"><Target size={32} strokeWidth={1.5} /></div>
+            <p className="text-2xl mb-2">🎯</p>
             <p className="text-sm" style={{ color: 'var(--text-3)' }}>목표 아이템을 추가해보세요!</p>
           </div>
         </Card>
