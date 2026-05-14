@@ -394,7 +394,7 @@ export default function HuntingPage() {
 
         {/* Right: 이번 주 사냥 기록 */}
         <div
-          className="rounded-2xl overflow-hidden"
+          className="rounded-2xl overflow-hidden flex flex-col"
           style={{ backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', boxShadow: 'var(--shadow)' }}
         >
           <div

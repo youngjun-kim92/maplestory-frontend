@@ -666,7 +666,16 @@ export default function AuctionPage() {
           </div>
 
         {/* 이번 주 경매장 내역 */}
-        <Card className="col-start-2 row-start-2" title="이번 주 경매장 내역" icon="📋">
+        <div
+          className="col-start-2 row-start-2 rounded-2xl overflow-hidden flex flex-col"
+          style={{ backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', boxShadow: 'var(--shadow)', maxHeight: 'calc(100vh - 264px)' }}
+        >
+          <div className="flex items-center gap-2 px-3 py-2.5 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
+            <span className="text-lg">📋</span>
+            <h2 className="font-semibold text-base" style={{ color: 'var(--text)' }}>이번 주 경매장 내역</h2>
+            <span className="text-xs ml-auto" style={{ color: 'var(--text-3)' }}>{auctionEntries.length}건</span>
+          </div>
+          <div className="overflow-y-auto flex-1 min-h-0 p-3">
         {auctionEntries.length === 0 ? (
           <p className="text-sm text-center py-6" style={{ color: 'var(--text-3)' }}>이번 주 경매장 기록이 없습니다.</p>
         ) : (
@@ -768,7 +777,8 @@ export default function AuctionPage() {
             ))}
           </div>
         )}
-        </Card>
+          </div>
+        </div>
       </div>
     </div>
   )

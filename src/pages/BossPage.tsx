@@ -718,8 +718,8 @@ export default function BossPage() {
 
         {/* Right: 이번 주 처치 목록 */}
         <div
-          className="rounded-2xl overflow-hidden"
-          style={{ backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', boxShadow: 'var(--shadow)' }}
+          className="rounded-2xl overflow-hidden flex flex-col"
+          style={{ backgroundColor: 'var(--surface)', border: '1.5px solid var(--border)', boxShadow: 'var(--shadow)', maxHeight: 'calc(100vh - 264px)' }}
         >
           <div
             className="flex items-center justify-between px-3 py-2.5 shrink-0"
@@ -746,7 +746,7 @@ export default function BossPage() {
               </div>
             )}
           </div>
-          <div>
+          <div className="overflow-y-auto flex-1 min-h-0">
             {killsLoading ? (
               <div className="px-4 py-8 flex items-center justify-center">
                 <p className="text-sm animate-pulse" style={{ color: 'var(--text-3)' }}>불러오는 중...</p>
@@ -761,14 +761,14 @@ export default function BossPage() {
                 </p>
               </div>
             ) : (
-              <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+              <div className="space-y-1.5 p-3">
                 {weeklyKills.map((kill) => {
                   const income = kill.income ?? kill.crystalPrice
                   const expense = kill.totalExpense ?? 0
                   const net = income - expense
                   const isEditing = editingKillId === kill.id
                   return (
-                    <div key={kill.id} className="px-3 py-2">
+                    <div key={kill.id} className="px-3 py-2 rounded-xl" style={{ backgroundColor: 'var(--surface-2)' }}>
                       <div className="flex items-center gap-3">
                         {/* 보스 정보 */}
                         <div className="flex-1 min-w-0">
